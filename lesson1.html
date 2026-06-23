@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTC School — Lesson 1: The Terminal</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    color: #1a1a1a;
+    line-height: 1.6;
+  }
+
+  /* Header */
+  .header {
+    background: #0f172a;
+    color: white;
+    padding: 28px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 4px; }
+  .header-school {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+  }
+  .header-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+  .header-badge {
+    background: #1e40af;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Nav pills */
+  .nav {
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 40px;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  .nav a {
+    display: block;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748b;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .nav a:hover { color: #1e40af; border-bottom-color: #1e40af; }
+
+  /* Main layout */
+  .main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 36px 24px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  /* Section card */
+  .section {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 18px 24px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .section-body { padding: 20px 24px; }
+
+  /* Key idea highlight */
+  .key-idea {
+    background: #eff6ff;
+    border-left: 3px solid #1e40af;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #1e3a8a;
+  }
+  .key-idea strong { font-weight: 700; }
+
+  /* Warning box */
+  .warning {
+    background: #fff5f5;
+    border-left: 3px solid #dc2626;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 13.5px;
+    color: #7f1d1d;
+  }
+  .warning strong { font-weight: 700; color: #dc2626; }
+
+  /* Success box */
+  .tip {
+    background: #f0fdf4;
+    border-left: 3px solid #16a34a;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 13.5px;
+    color: #14532d;
+  }
+
+  /* Command table */
+  .cmd-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin-top: 8px;
+  }
+  .cmd-table thead tr {
+    background: #f8fafc;
+  }
+  .cmd-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .cmd-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+  }
+  .cmd-table tr:last-child td { border-bottom: none; }
+  .cmd-table tr:hover td { background: #f8fafc; }
+
+  code, .cmd {
+    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
+    background: #f1f5f9;
+    color: #1e40af;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .cmd-table td:first-child code {
+    background: transparent;
+    padding: 0;
+    font-size: 13.5px;
+    color: #1e40af;
+    font-weight: 600;
+  }
+  .mnemonic {
+    color: #64748b;
+    font-style: italic;
+  }
+
+  /* Terminal block */
+  .terminal {
+    background: #1e293b;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 12px;
+  }
+  .terminal-bar {
+    background: #334155;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot-red { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; }
+  .dot-green { background: #22c55e; }
+  .terminal-label {
+    margin-left: 8px;
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: monospace;
+  }
+  .terminal-body {
+    padding: 18px 20px;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #e2e8f0;
+  }
+  .terminal-body .prompt { color: #22c55e; }
+  .terminal-body .cmd-text { color: #38bdf8; }
+  .terminal-body .comment { color: #64748b; font-style: italic; }
+  .terminal-body .output { color: #94a3b8; }
+  .terminal-body .highlight { color: #f59e0b; font-weight: bold; }
+
+  /* Two col */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Info card */
+  .info-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+  }
+  .info-card-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #1e40af;
+    margin-bottom: 8px;
+  }
+
+  /* VI keys */
+  .key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .key {
+    background: #1e293b;
+    color: #f1f5f9;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 2px solid #0f172a;
+  }
+  .key.blue { background: #1e40af; border-bottom-color: #1e3a8a; }
+  .key-arrow { color: #94a3b8; font-size: 16px; }
+  .key-label { font-size: 12px; color: #64748b; margin-left: 4px; }
+
+  /* Steps */
+  .steps { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .step { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; }
+  .step-num {
+    width: 24px; height: 24px; min-width: 24px;
+    background: #1e40af; color: white;
+    border-radius: 50%; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Analogy cards */
+  .analogy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  @media (max-width: 600px) { .analogy-grid { grid-template-columns: 1fr; } }
+  .analogy-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    font-size: 13.5px;
+  }
+  .analogy-card.terminal-card { background: #eff6ff; border: 1px solid #bfdbfe; }
+  .analogy-card.browser-card { background: #fefce8; border: 1px solid #fde68a; }
+  .analogy-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+  .analogy-card.terminal-card .analogy-title { color: #1e40af; }
+  .analogy-card.browser-card .analogy-title { color: #92400e; }
+  .analogy-card ul { padding-left: 16px; color: #374151; }
+  .analogy-card ul li { margin-bottom: 4px; }
+
+  /* Sandbox link */
+  .sandbox-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1e40af;
+    color: white;
+    text-decoration: none;
+    padding: 11px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 14px;
+    transition: background 0.15s;
+  }
+  .sandbox-link:hover { background: #1d4ed8; }
+
+  p { font-size: 14px; color: #374151; margin-bottom: 10px; }
+  p:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="header-school">DTC School</span>
+    <span class="header-title">Lesson 1 — The Terminal</span>
+  </div>
+  <span class="header-badge">✓ Completed</span>
+</div>
+
+<nav class="nav">
+  <a href="#why">Why the Terminal</a>
+  <a href="#open">Opening It</a>
+  <a href="#navigate">Navigation</a>
+  <a href="#create">Create</a>
+  <a href="#edit">Edit (vi)</a>
+  <a href="#read">Read Files</a>
+  <a href="#move">Move / Copy / Remove</a>
+  <a href="#stuck">When vi Traps You</a>
+  <a href="#practice">Practice</a>
+</nav>
+
+<div class="main">
+
+  <!-- WHY THE TERMINAL -->
+  <div class="section" id="why">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">The Browser, and Then the Terminal</div>
+        <div class="section-title">Engineers live in the terminal.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="analogy-grid">
+        <div class="analogy-card terminal-card">
+          <div class="analogy-title">🏎 Terminal (Sports Car)</div>
+          <ul>
+            <li>Direct control</li>
+            <li>Less weight / overhead</li>
+            <li>10 browser clicks = 1 terminal line</li>
+            <li>What companies pay you to drive</li>
+          </ul>
+        </div>
+        <div class="analogy-card browser-card">
+          <div class="analogy-title">🚐 Browser (Minivan)</div>
+          <ul>
+            <li>Comfortable</li>
+            <li>Easy to use</li>
+            <li>Good for everyday browsing</li>
+            <li>Talks to the computer through a translator</li>
+          </ul>
+        </div>
+      </div>
+      <div class="key-idea" style="margin-top: 16px;">
+        <strong>Both work.</strong> The terminal is what companies pay you to drive. Today is your first lap.<br><br>
+        Real servers — the ones companies run — don't have buttons or a mouse. <strong>Only the terminal.</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPENING THE TERMINAL -->
+  <div class="section" id="open">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Your First Terminal Window</div>
+        <div class="section-title">Open the Terminal app — three keys on a Mac.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div>Press <code>⌘ + space</code> — Spotlight opens.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div>Type <code>Terminal</code></div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div>Press <code>Enter</code> — A black window opens with text. <strong>No mouse. Only keyboard.</strong></div>
+        </div>
+      </div>
+      <div class="tip" style="margin-top: 16px;">
+        <strong>Windows users:</strong> Install <strong>WSL</strong> (Windows Subsystem for Linux) and open the WSL terminal. Same Linux commands run inside it.
+      </div>
+    </div>
+  </div>
+
+  <!-- NAVIGATION -->
+  <div class="section" id="navigate">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Navigation</div>
+        <div class="section-title">Three commands. With these you can get anywhere.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>What it does</th>
+            <th>Think of it as</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>pwd</code></td><td>Print working directory</td><td class="mnemonic">"Where am I standing right now?"</td></tr>
+          <tr><td><code>ls</code></td><td>List files in this folder</td><td class="mnemonic">"Look around the room"</td></tr>
+          <tr><td><code>ls -a</code></td><td>List files including hidden</td><td class="mnemonic">"Look behind the curtains too"</td></tr>
+          <tr><td><code>cd &lt;folder&gt;</code></td><td>Change directory</td><td class="mnemonic">"Walk into a room"</td></tr>
+          <tr><td><code>cd ~</code></td><td>Go to your home folder</td><td class="mnemonic">"Go home"</td></tr>
+          <tr><td><code>cd ..</code></td><td>Go up one folder</td><td class="mnemonic">"Step back into the hallway"</td></tr>
+        </tbody>
+      </table>
+
+      <div class="two-col" style="margin-top: 16px;">
+        <div class="info-card">
+          <div class="info-card-title">A Path is an Address</div>
+          Read <code>~/Downloads</code> from the right: a folder called <code>Downloads</code>, inside your home folder <code>~</code>.
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Two Habits From Day One</div>
+          <strong>Tab autocompletes.</strong> Start typing, press Tab — the terminal finishes it.<br><br>
+          <strong>Case matters.</strong> <code>Desktop</code> ≠ <code>desktop</code>. The terminal is not the AI — typos are not forgiven.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE -->
+  <div class="section" id="create">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Create</div>
+        <div class="section-title">Make a folder. Make a file.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead>
+          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>mkdir &lt;name&gt;</code></td><td>Make a new folder</td><td class="mnemonic">"Build a new room"</td></tr>
+          <tr><td><code>touch &lt;file&gt;</code></td><td>Make an empty file</td><td class="mnemonic">"Put a blank notebook on the shelf"</td></tr>
+        </tbody>
+      </table>
+
+      <div class="two-col" style="margin-top: 16px;">
+        <div class="info-card">
+          <div class="info-card-title">Chain with &&</div>
+          <code>mkdir code && cd code</code><br><br>
+          Make the folder, then walk into it. If the first fails, the second doesn't run.
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Filename Starts with Dot = Hidden</div>
+          <code>touch .secrets.txt</code> creates a hidden file.<br>
+          <code>ls</code> won't show it. <code>ls -a</code> will.
+        </div>
+      </div>
+
+      <div class="tip" style="margin-top: 16px;">
+        <strong>No error = success.</strong> If you don't see an error message, the command worked. Empty output is good news. Check with <code>ls</code> or <code>pwd</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT WITH VI -->
+  <div class="section" id="edit">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Edit a File · The VI Round-Trip</div>
+        <div class="section-title">Four keys, in order, every time.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead>
+          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>vi &lt;file&gt;</code></td><td>Open to edit (creates it if missing)</td><td class="mnemonic">"Sit down with the notebook and a pen"</td></tr>
+          <tr><td><code>i</code></td><td>Enter INSERT mode</td><td class="mnemonic">"Pick up the pen"</td></tr>
+          <tr><td><code>Esc</code></td><td>Leave INSERT mode</td><td class="mnemonic">"Put the pen down"</td></tr>
+          <tr><td><code>:wq</code></td><td>Save and quit</td><td class="mnemonic">"Close the notebook and walk away"</td></tr>
+        </tbody>
+      </table>
+
+      <div class="key-idea" style="margin-top: 16px;">
+        <strong>The round-trip:</strong>
+        <div class="key-row" style="margin-top: 10px;">
+          <span class="key blue">i</span>
+          <span class="key-label">pick up pen</span>
+          <span class="key-arrow">→</span>
+          <span class="key">type</span>
+          <span class="key-label">your text</span>
+          <span class="key-arrow">→</span>
+          <span class="key blue">Esc</span>
+          <span class="key-label">put pen down</span>
+          <span class="key-arrow">→</span>
+          <span class="key">:wq</span>
+          <span class="key-label">save &amp; quit</span>
+          <span class="key-arrow">→</span>
+          <span class="key">Enter</span>
+        </div>
+      </div>
+
+      <div class="terminal" style="margin-top: 16px;">
+        <div class="terminal-bar">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+          <span class="terminal-label">~/code — bash</span>
+        </div>
+        <div class="terminal-body">
+          <div><span class="prompt">$</span> <span class="cmd-text">cd ~</span> <span class="comment"># home folder</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">mkdir code && cd code</span> <span class="comment"># make folder, walk in</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">mkdir class1 && cd class1</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">touch notes.txt</span> <span class="comment"># create an empty file</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">vi notes.txt</span> <span class="comment"># open in vi</span></div>
+          <div class="output">&nbsp;&nbsp;press i &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment"># enter INSERT mode</span></div>
+          <div class="output">&nbsp;&nbsp;type your text</div>
+          <div class="output">&nbsp;&nbsp;press Esc &nbsp;&nbsp;&nbsp;&nbsp;<span class="comment"># leave INSERT mode</span></div>
+          <div class="output">&nbsp;&nbsp;type :wq then Enter <span class="comment"># write and quit</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">cat notes.txt</span> <span class="comment"># your notes print to the terminal</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- READ FILES -->
+  <div class="section" id="read">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Look Inside a File</div>
+        <div class="section-title">Three ways to look. Pick the smallest one.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead>
+          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>cat &lt;file&gt;</code></td><td>Show the whole file</td><td class="mnemonic">"Read the whole page out loud"</td></tr>
+          <tr><td><code>head -n 1 &lt;file&gt;</code></td><td>Show the first N lines</td><td class="mnemonic">"Peek at the top"</td></tr>
+          <tr><td><code>tail -n 1 &lt;file&gt;</code></td><td>Show the last N lines</td><td class="mnemonic">"Peek at the bottom"</td></tr>
+        </tbody>
+      </table>
+      <div class="info-card" style="margin-top: 16px;">
+        <div class="info-card-title">Think of a Horse</div>
+        <code>head</code> shows the head of the file. <code>tail</code> shows the tail. A log file can be a <strong>million lines</strong> — <code>cat</code> floods the screen. <code>head</code> and <code>tail</code> are the polite versions.
+      </div>
+    </div>
+  </div>
+
+  <!-- MOVE COPY REMOVE -->
+  <div class="section" id="move">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Move, Copy, Remove</div>
+        <div class="section-title">Two friendly, one sharp.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead>
+          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>cp &lt;from&gt; &lt;to&gt;</code></td>
+            <td>Copy a file. The original stays.</td>
+            <td class="mnemonic">"Photocopy a notebook."</td>
+          </tr>
+          <tr>
+            <td><code>mv &lt;from&gt; &lt;to&gt;</code></td>
+            <td>Move or rename. Original is gone from old address. <code>mv iPhone Android</code> just renames.</td>
+            <td class="mnemonic">"Carry it · or relabel it."</td>
+          </tr>
+          <tr>
+            <td><code>rm &lt;file&gt;</code></td>
+            <td>Remove. No confirmation. No Trash.</td>
+            <td class="mnemonic">"Gone is gone."</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="warning">
+        <strong>⚠ READ THIS CAREFULLY</strong><br><br>
+        <code style="background: #fee2e2; color: #dc2626;">rm</code> does not ask. <code style="background: #fee2e2; color: #dc2626;">rm</code> does not go to the Trash. <strong>Gone is gone.</strong><br><br>
+        — Always <strong>check <code style="background: #fee2e2; color: #dc2626;">pwd</code> before every <code style="background: #fee2e2; color: #dc2626;">rm</code></strong>.<br>
+        — Run the command, then double-check with <code style="background: #fee2e2; color: #dc2626;">ls</code> or <code style="background: #fee2e2; color: #dc2626;">pwd</code>. Linux won't ask "are you sure?"<br>
+        — <strong>Never type <code style="background: #fee2e2; color: #dc2626;">rm -rf</code> right now.</strong> We get to flags later — not now.
+      </div>
+
+      <div class="terminal" style="margin-top: 16px;">
+        <div class="terminal-bar">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+          <span class="terminal-label">~/code/class1 — bash</span>
+        </div>
+        <div class="terminal-body">
+          <div class="comment"># --- copy ---</div>
+          <div><span class="prompt">$</span> <span class="cmd-text">cp notes.txt notes-backup.txt</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">ls</span> <span class="comment"># both files appear</span></div>
+          <div>&nbsp;</div>
+          <div class="comment"># --- rename (mv in same folder) ---</div>
+          <div><span class="prompt">$</span> <span class="cmd-text">mv notes-backup.txt class1-notes.txt</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">ls</span> <span class="comment"># old name gone</span></div>
+          <div>&nbsp;</div>
+          <div class="comment"># --- remove ---</div>
+          <div><span class="prompt">$</span> <span class="cmd-text">pwd</span> <span class="highlight"># READ THIS — in class1?</span></div>
+          <div><span class="prompt">$</span> <span class="cmd-text">rm class1-notes.txt</span> <span class="comment"># gone — no Trash</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHEN VI TRAPS YOU -->
+  <div class="section" id="stuck">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">When VI Traps You</div>
+        <div class="section-title">Bail out, clean up, try again.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <div style="font-size: 14px; color: #374151; display: flex; flex-direction: column; gap: 10px;">
+        <div>
+          <strong>First fix — abandon and quit:</strong> press <code>Esc</code>, then type <code>:q!</code> and Enter. Drops all unsaved changes, drops you back to the terminal. Most "stuck in vi" moments end here.
+        </div>
+        <div>
+          <strong>Computers don't forgive small mistakes</strong> — an extra space, a semicolon instead of a colon, a wrong key.
+        </div>
+        <div>
+          <strong>If <code>:wq</code> didn't save and quit</strong> — you probably forgot <code>Esc</code>, or you forgot <code>i</code> and never entered INSERT mode in the first place.
+        </div>
+        <div>
+          <strong>Swap file showing up?</strong> vi leaves a hidden helper file when it crashes. Run <code>ls -a</code>. If you see <code>.notes.txt.swp</code>, delete it with <code>rm .notes.txt.swp</code> <em>before</em> running vi on that file again.
+        </div>
+      </div>
+
+      <div class="info-card" style="margin-top: 16px;">
+        <div class="info-card-title">Last Resort · Still Stuck</div>
+        <div class="steps" style="margin-top: 4px;">
+          <div class="step"><div class="step-num">1</div><div>⌘ + Q — quit Terminal</div></div>
+          <div class="step"><div class="step-num">2</div><div>Reopen Terminal</div></div>
+          <div class="step"><div class="step-num">3</div><div><code>cd ~/code/class1</code></div></div>
+          <div class="step"><div class="step-num">4</div><div><code>ls -a</code> — see a <code>.swp</code>?</div></div>
+          <div class="step"><div class="step-num">5</div><div>If yes: <code>rm .notes.txt.swp</code></div></div>
+          <div class="step"><div class="step-num">6</div><div>Try the round-trip again</div></div>
+        </div>
+      </div>
+
+      <div class="key-idea" style="margin-top: 16px;">
+        <strong>You will probably mess this up the first time.</strong> That is fine. Repeat until it works.
+      </div>
+    </div>
+  </div>
+
+  <!-- PRACTICE -->
+  <div class="section" id="practice">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Practice on Your Own</div>
+        <div class="section-title">A sandbox in your browser — same commands, nothing to break.</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <p>Three exercises ready to play: <strong>continent tour</strong> · <strong>build-your-own-world-map</strong> · <strong>clean-up-an-empire</strong>.</p>
+      <p>Tree on the left follows your <code>cd</code>; cheat sheet on the right reminds you. <em>No way to break your real computer.</em></p>
+      <a class="sandbox-link" href="https://26a.312school.com/filesystem-playground" target="_blank">
+        → 26a.312school.com/filesystem-playground
+      </a>
+    </div>
+  </div>
+
+  <!-- QUICK REFERENCE -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-tag">Quick Reference</div>
+        <div class="section-title">All commands from Lesson 1</div>
+      </div>
+    </div>
+    <div class="section-body">
+      <table class="cmd-table">
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>pwd</code></td><td>Where am I?</td></tr>
+          <tr><td><code>ls</code> / <code>ls -a</code></td><td>List files / including hidden</td></tr>
+          <tr><td><code>cd &lt;folder&gt;</code> / <code>cd ~</code> / <code>cd ..</code></td><td>Navigate folders</td></tr>
+          <tr><td><code>mkdir &lt;name&gt;</code></td><td>Make a folder</td></tr>
+          <tr><td><code>touch &lt;file&gt;</code></td><td>Make an empty file</td></tr>
+          <tr><td><code>vi &lt;file&gt;</code> → <code>i</code> → type → <code>Esc</code> → <code>:wq</code></td><td>Edit and save a file</td></tr>
+          <tr><td><code>cat</code> / <code>head -n N</code> / <code>tail -n N</code></td><td>Read a file (all / top / bottom)</td></tr>
+          <tr><td><code>cp &lt;from&gt; &lt;to&gt;</code></td><td>Copy (original stays)</td></tr>
+          <tr><td><code>mv &lt;from&gt; &lt;to&gt;</code></td><td>Move or rename</td></tr>
+          <tr><td><code>rm &lt;file&gt;</code></td><td>Delete permanently — no Trash!</td></tr>
+          <tr><td><code>cmd1 && cmd2</code></td><td>Run two commands in sequence</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
