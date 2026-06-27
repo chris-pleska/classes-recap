@@ -3,739 +3,1176 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DTC School — Lesson 1: The Terminal</title>
+<title>DTC/312 Study Notes — Lessons 1–15</title>
 <style>
-  :root { color-scheme: light; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #7c6af7;
+    --green: #4ade80;
+    --code-bg: #12141e;
+    --code-text: #a5f3fc;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #f5f5f5;
-    color: #1a1a1a;
-    line-height: 1.6;
-  }
-
-  /* Header */
-  .header {
-    background: #0f172a;
-    color: white;
-    padding: 28px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    min-height: 100vh;
   }
-  .header-left { display: flex; flex-direction: column; gap: 4px; }
-  .header-school {
+  nav {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  nav h2 {
     font-size: 11px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 600;
-  }
-  .header-title {
-    font-size: 22px;
     font-weight: 700;
-    color: #f1f5f9;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 20px 12px;
   }
-  .header-badge {
-    background: #1e40af;
-    color: white;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 14px;
-    border-radius: 20px;
-    letter-spacing: 0.5px;
-  }
-
-  /* Nav pills */
-  .nav {
-    background: white;
-    border-bottom: 1px solid #e2e8f0;
-    padding: 0 40px;
-    display: flex;
-    gap: 0;
-    overflow-x: auto;
-  }
-  .nav a {
+  nav a {
     display: block;
-    padding: 14px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #64748b;
+    padding: 6px 20px;
+    color: var(--muted);
     text-decoration: none;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-    transition: all 0.15s;
+    font-size: 13px;
+    border-left: 2px solid transparent;
+    transition: all .15s;
   }
-  .nav a:hover { color: #1e40af; border-bottom-color: #1e40af; }
-
-  /* Main layout */
-  .main {
-    max-width: 900px;
+  nav a:hover {
+    color: var(--text);
+    border-left-color: var(--accent);
+    background: rgba(124,106,247,.08);
+  }
+  main {
+    flex: 1;
+    max-width: 860px;
+    padding: 48px 64px 80px;
     margin: 0 auto;
-    padding: 36px 24px 60px;
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
   }
-
-  /* Section card */
-  .section {
-    background: white;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    overflow: hidden;
-  }
-  .section-header {
-    padding: 18px 24px 16px;
-    border-bottom: 1px solid #f1f5f9;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .section-tag {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #94a3b8;
-  }
-  .section-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-  }
-  .section-body { padding: 20px 24px; }
-
-  /* Key idea highlight */
-  .key-idea {
-    background: #eff6ff;
-    border-left: 3px solid #1e40af;
-    border-radius: 0 8px 8px 0;
-    padding: 14px 18px;
-    margin-bottom: 16px;
-    font-size: 14px;
-    color: #1e3a8a;
-  }
-  .key-idea strong { font-weight: 700; }
-
-  /* Warning box */
-  .warning {
-    background: #fff5f5;
-    border-left: 3px solid #dc2626;
-    border-radius: 0 8px 8px 0;
-    padding: 14px 18px;
-    margin-top: 16px;
-    font-size: 13.5px;
-    color: #7f1d1d;
-  }
-  .warning strong { font-weight: 700; color: #dc2626; }
-
-  /* Success box */
-  .tip {
-    background: #f0fdf4;
-    border-left: 3px solid #16a34a;
-    border-radius: 0 8px 8px 0;
-    padding: 14px 18px;
-    margin-top: 16px;
-    font-size: 13.5px;
-    color: #14532d;
-  }
-
-  /* Command table */
-  .cmd-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13.5px;
-    margin-top: 8px;
-  }
-  .cmd-table thead tr {
-    background: #f8fafc;
-  }
-  .cmd-table th {
-    text-align: left;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: #94a3b8;
-    padding: 10px 14px;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .cmd-table td {
-    padding: 11px 14px;
-    border-bottom: 1px solid #f1f5f9;
-    vertical-align: top;
-  }
-  .cmd-table tr:last-child td { border-bottom: none; }
-  .cmd-table tr:hover td { background: #f8fafc; }
-
-  code, .cmd {
-    font-family: 'SF Mono', 'Monaco', 'Menlo', 'Courier New', monospace;
-    background: #f1f5f9;
-    color: #1e40af;
-    padding: 2px 7px;
+  h1 { font-size: 1.7rem; color: #fff; margin: 2.5rem 0 .6rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h1:first-child { border-top: none; margin-top: 0; }
+  h2 { font-size: 1.15rem; color: var(--accent); margin: 1.8rem 0 .5rem; }
+  h3 { font-size: 1rem; color: #c4b5fd; margin: 1.3rem 0 .4rem; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .5rem 1.4rem; }
+  li { margin: .2rem 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: .88em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: .15em .4em;
     border-radius: 4px;
-    font-size: 13px;
-    font-weight: 500;
+    border: 1px solid var(--border);
   }
-  .cmd-table td:first-child code {
-    background: transparent;
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: .8rem 0;
+  }
+  pre code {
+    background: none;
+    border: none;
     padding: 0;
-    font-size: 13.5px;
-    color: #1e40af;
-    font-weight: 600;
-  }
-  .mnemonic {
-    color: #64748b;
-    font-style: italic;
-  }
-
-  /* Terminal block */
-  .terminal {
-    background: #1e293b;
-    border-radius: 10px;
-    overflow: hidden;
-    margin-top: 12px;
-  }
-  .terminal-bar {
-    background: #334155;
-    padding: 9px 14px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .dot { width: 11px; height: 11px; border-radius: 50%; }
-  .dot-red { background: #ef4444; }
-  .dot-yellow { background: #f59e0b; }
-  .dot-green { background: #22c55e; }
-  .terminal-label {
-    margin-left: 8px;
-    font-size: 11px;
-    color: #94a3b8;
-    font-family: monospace;
-  }
-  .terminal-body {
-    padding: 18px 20px;
-    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
-    font-size: 13px;
-    line-height: 1.8;
+    font-size: .85rem;
     color: #e2e8f0;
   }
-  .terminal-body .prompt { color: #22c55e; }
-  .terminal-body .cmd-text { color: #38bdf8; }
-  .terminal-body .comment { color: #64748b; font-style: italic; }
-  .terminal-body .output { color: #94a3b8; }
-  .terminal-body .highlight { color: #f59e0b; font-weight: bold; }
-
-  /* Two col */
-  .two-col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-top: 12px;
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: .8rem 0;
+    font-size: .9rem;
   }
-  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
-
-  /* Info card */
-  .info-card {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 14px 16px;
-    font-size: 13.5px;
+  th {
+    background: var(--surface);
+    color: var(--accent);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
   }
-  .info-card-title {
-    font-size: 10px;
+  td {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  strong { color: #fff; }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 1rem;
+    color: var(--muted);
+    margin: .8rem 0;
+  }
+  .header-banner {
+    background: linear-gradient(135deg, #1a1d27 0%, #12141e 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 40px;
+  }
+  .header-banner h1 {
+    border: none;
+    margin: 0 0 6px;
+    font-size: 1.9rem;
+  }
+  .header-banner p { color: var(--muted); margin: 0; }
+  .lesson-badge {
+    display: inline-block;
+    background: rgba(124,106,247,.15);
+    color: var(--accent);
+    border: 1px solid rgba(124,106,247,.3);
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: .06em;
     text-transform: uppercase;
-    color: #1e40af;
-    margin-bottom: 8px;
+    padding: 2px 8px;
+    margin-bottom: 6px;
   }
-
-  /* VI keys */
-  .key-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 12px;
-    flex-wrap: wrap;
-  }
-  .key {
-    background: #1e293b;
-    color: #f1f5f9;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-family: monospace;
-    font-size: 14px;
-    font-weight: 600;
-    border-bottom: 2px solid #0f172a;
-  }
-  .key.blue { background: #1e40af; border-bottom-color: #1e3a8a; }
-  .key-arrow { color: #94a3b8; font-size: 16px; }
-  .key-label { font-size: 12px; color: #64748b; margin-left: 4px; }
-
-  /* Steps */
-  .steps { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-  .step { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; }
-  .step-num {
-    width: 24px; height: 24px; min-width: 24px;
-    background: #1e40af; color: white;
-    border-radius: 50%; font-size: 12px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-  }
-
-  /* Analogy cards */
-  .analogy-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-top: 12px;
-  }
-  @media (max-width: 600px) { .analogy-grid { grid-template-columns: 1fr; } }
-  .analogy-card {
-    border-radius: 10px;
-    padding: 16px 18px;
-    font-size: 13.5px;
-  }
-  .analogy-card.terminal-card { background: #eff6ff; border: 1px solid #bfdbfe; }
-  .analogy-card.browser-card { background: #fefce8; border: 1px solid #fde68a; }
-  .analogy-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
-  .analogy-card.terminal-card .analogy-title { color: #1e40af; }
-  .analogy-card.browser-card .analogy-title { color: #92400e; }
-  .analogy-card ul { padding-left: 16px; color: #374151; }
-  .analogy-card ul li { margin-bottom: 4px; }
-
-  /* Sandbox link */
-  .sandbox-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #1e40af;
-    color: white;
-    text-decoration: none;
-    padding: 11px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    margin-top: 14px;
-    transition: background 0.15s;
-  }
-  .sandbox-link:hover { background: #1d4ed8; }
-
-  p { font-size: 14px; color: #374151; margin-bottom: 10px; }
-  p:last-child { margin-bottom: 0; }
 </style>
 </head>
 <body>
-
-<div class="header">
-  <div class="header-left">
-    <span class="header-school">DTC School</span>
-    <span class="header-title">Lesson 1 — The Terminal</span>
-  </div>
-  <span class="header-badge">✓ Completed</span>
-</div>
-
-<nav class="nav">
-  <a href="#why">Why the Terminal</a>
-  <a href="#open">Opening It</a>
-  <a href="#navigate">Navigation</a>
-  <a href="#create">Create</a>
-  <a href="#edit">Edit (vi)</a>
-  <a href="#read">Read Files</a>
-  <a href="#move">Move / Copy / Remove</a>
-  <a href="#stuck">When vi Traps You</a>
-  <a href="#practice">Practice</a>
+<nav>
+  <h2>Lessons</h2>
+  <a href="#lesson-1-the-terminal">1 · Terminal</a>
+  <a href="#lesson-2-compose-commands-work-together">2 · Compose</a>
+  <a href="#lesson-3-session-04-pipes-search-and-the-path-drill">3 · Pipes & PATH</a>
+  <a href="#lesson-4-file-permissions-users-groups">4 · Permissions</a>
+  <a href="#lesson-5-git-github-never-losing-your-files">5 · Git & GitHub</a>
+  <a href="#lesson-6-servers-aws-ec2-linux">6 · Servers / EC2</a>
+  <a href="#lesson-7-ssh-networking-firewalls-find-it-log-in-guard-it">7 · SSH & Firewalls</a>
+  <a href="#lesson-8-dns-nginx-deploying-your-website-name-it-build-it-serve-it">8 · DNS & nginx</a>
+  <a href="#lesson-9-curl-http-https-tls-certificates-talk-to-it-lock-it-check-it">9 · curl & HTTPS</a>
+  <a href="#lesson-10-when-it-breaks-logs-the-triage-ladder-your-first-bot-look-check-build">10 · Logs & Triage</a>
+  <a href="#lesson-11-scripts-cron-secrets-manager-run-it-schedule-it-lock-it">11 · Scripts & cron</a>
+  <a href="#lesson-12-iam-give-your-server-an-identity">12 · IAM</a>
+  <a href="#lesson-13-the-quiz-bot-variables-ifelse-exit-codes-failing-loudly">13 · Quiz Bot (bash)</a>
+  <a href="#lesson-14-python-programs-variables-types-lists-loops">14 · Python basics</a>
+  <a href="#lesson-15-write-the-real-quizzes-list-loop-skip-run">15 · Quiz Bot (Python)</a>
 </nav>
-
-<div class="main">
-
-  <!-- WHY THE TERMINAL -->
-  <div class="section" id="why">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">The Browser, and Then the Terminal</div>
-        <div class="section-title">Engineers live in the terminal.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <div class="analogy-grid">
-        <div class="analogy-card terminal-card">
-          <div class="analogy-title">🏎 Terminal (Sports Car)</div>
-          <ul>
-            <li>Direct control</li>
-            <li>Less weight / overhead</li>
-            <li>10 browser clicks = 1 terminal line</li>
-            <li>What companies pay you to drive</li>
-          </ul>
-        </div>
-        <div class="analogy-card browser-card">
-          <div class="analogy-title">🚐 Browser (Minivan)</div>
-          <ul>
-            <li>Comfortable</li>
-            <li>Easy to use</li>
-            <li>Good for everyday browsing</li>
-            <li>Talks to the computer through a translator</li>
-          </ul>
-        </div>
-      </div>
-      <div class="key-idea" style="margin-top: 16px;">
-        <strong>Both work.</strong> The terminal is what companies pay you to drive. Today is your first lap.<br><br>
-        Real servers — the ones companies run — don't have buttons or a mouse. <strong>Only the terminal.</strong>
-      </div>
-    </div>
+<main>
+  <div class="header-banner">
+    <h1>DTC/312 Study Notes</h1>
+    <p>Lessons 1–15 &nbsp;·&nbsp; Terminal → Python → Quiz Bot</p>
   </div>
+  <h1 id="lesson-1-the-terminal">Lesson 1: The Terminal</h1>
+<h2 id="what-is-the-terminal">What is the terminal?</h2>
+<p>The terminal is a text interface to your computer. Instead of clicking icons, you type commands. The computer does exactly what you type — no more, no less.</p>
+<p>The <strong>shell</strong> (bash) is the program that reads your commands and runs them.</p>
+<h2 id="the-prompt">The prompt</h2>
+<pre><code>[ec2-user@ip ~]$
+</code></pre>
+<ul>
+<li><code>~</code> = your home directory (<code>/home/ec2-user</code> on EC2, <code>/Users/yourname</code> on Mac)</li>
+<li><code>$</code> = ready for a command</li>
+</ul>
+<h2 id="essential-commands">Essential commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pwd</code></td>
+<td>print working directory — where am I?</td>
+<td><code>pwd</code></td>
+</tr>
+<tr>
+<td><code>ls</code></td>
+<td>list files in current folder</td>
+<td><code>ls</code></td>
+</tr>
+<tr>
+<td><code>ls -la</code></td>
+<td>list all files including hidden, with details</td>
+<td><code>ls -la</code></td>
+</tr>
+<tr>
+<td><code>cd folder</code></td>
+<td>change into folder</td>
+<td><code>cd code</code></td>
+</tr>
+<tr>
+<td><code>cd ..</code></td>
+<td>go up one level</td>
+<td><code>cd ..</code></td>
+</tr>
+<tr>
+<td><code>cd ~</code></td>
+<td>go home</td>
+<td><code>cd ~</code></td>
+</tr>
+<tr>
+<td><code>mkdir name</code></td>
+<td>make a new folder</td>
+<td><code>mkdir code</code></td>
+</tr>
+<tr>
+<td><code>touch file</code></td>
+<td>create an empty file</td>
+<td><code>touch notes.txt</code></td>
+</tr>
+<tr>
+<td><code>cat file</code></td>
+<td>show contents of a file</td>
+<td><code>cat notes.txt</code></td>
+</tr>
+<tr>
+<td><code>rm file</code></td>
+<td>delete a file (no undo!)</td>
+<td><code>rm old.txt</code></td>
+</tr>
+<tr>
+<td><code>rm -r folder</code></td>
+<td>delete a folder and everything in it</td>
+<td><code>rm -r tmp/</code></td>
+</tr>
+<tr>
+<td><code>cp src dst</code></td>
+<td>copy a file</td>
+<td><code>cp a.txt b.txt</code></td>
+</tr>
+<tr>
+<td><code>mv src dst</code></td>
+<td>move or rename a file</td>
+<td><code>mv old.txt new.txt</code></td>
+</tr>
+<tr>
+<td><code>echo "text"</code></td>
+<td>print text to screen</td>
+<td><code>echo "hello"</code></td>
+</tr>
+<tr>
+<td><code>clear</code></td>
+<td>clear the screen</td>
+<td><code>clear</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="paths">Paths</h2>
+<ul>
+<li><strong>Absolute path</strong>: starts from root <code>/</code> — e.g. <code>/home/ec2-user/code</code></li>
+<li><strong>Relative path</strong>: starts from where you are — e.g. <code>code/project</code></li>
+<li><code>./</code> = this folder; <code>../</code> = parent folder</li>
+</ul>
+<h2 id="tips">Tips</h2>
+<ul>
+<li>Tab key = autocomplete (use it constantly)</li>
+<li>Up arrow = previous command</li>
+<li><code>Ctrl+C</code> = cancel a running command</li>
+<li><code>Ctrl+L</code> = clear screen</li>
+</ul>
+<hr />
+<h1 id="lesson-2-compose-commands-work-together">Lesson 2: Compose — Commands Work Together</h1>
+<h2 id="the-core-idea">The core idea</h2>
+<p>Commands are building blocks. You can chain them so the output of one becomes the input of another.</p>
+<h2 id="redirection">Redirection</h2>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt;</code></td>
+<td>send output to a file (overwrites)</td>
+</tr>
+<tr>
+<td><code>&gt;&gt;</code></td>
+<td>append output to a file</td>
+</tr>
+<tr>
+<td><code>&lt;</code></td>
+<td>read input from a file</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">echo &quot;hello&quot; &gt; greeting.txt      # write to file
+echo &quot;world&quot; &gt;&gt; greeting.txt     # append to file
+cat greeting.txt                 # shows: hello\nworld
+</code></pre>
+<h2 id="pipes">Pipes <code>|</code></h2>
+<p>The pipe <code>|</code> takes the output of the left command and feeds it as input to the right command.</p>
+<pre><code class="language-bash">ls | grep &quot;.txt&quot;        # list files, then filter for .txt
+cat file.txt | wc -l   # count lines in a file
+</code></pre>
+<p>Read <code>|</code> as "and then send that to…"</p>
+<h2 id="useful-composing-commands">Useful composing commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>grep pattern</code></td>
+<td>filter lines matching a pattern</td>
+</tr>
+<tr>
+<td><code>wc -l</code></td>
+<td>count lines</td>
+</tr>
+<tr>
+<td><code>sort</code></td>
+<td>sort lines alphabetically</td>
+</tr>
+<tr>
+<td><code>uniq</code></td>
+<td>remove duplicate lines</td>
+</tr>
+<tr>
+<td><code>head -n 5</code></td>
+<td>show first 5 lines</td>
+</tr>
+<tr>
+<td><code>tail -n 5</code></td>
+<td>show last 5 lines</td>
+</tr>
+<tr>
+<td><code>less</code></td>
+<td>scroll through output page by page</td>
+</tr>
+</tbody>
+</table>
+<h2 id="examples">Examples</h2>
+<pre><code class="language-bash">cat /etc/passwd | grep ec2-user     # find ec2-user in passwd file
+ls -la | sort -k5 -n                # list files sorted by size
+history | grep git                  # find git commands you've run
+</code></pre>
+<hr />
+<h1 id="lesson-3-session-04-pipes-search-and-the-path-drill">Lesson 3 (Session 04): Pipes, Search, and the Path Drill</h1>
+<h2 id="grep-search-inside-files">grep — search inside files</h2>
+<pre><code class="language-bash">grep &quot;word&quot; file.txt              # search in one file
+grep -r &quot;word&quot; folder/            # search recursively in folder
+grep -i &quot;word&quot; file.txt           # case-insensitive
+grep -n &quot;word&quot; file.txt           # show line numbers
+grep -v &quot;word&quot; file.txt           # lines that do NOT match
+</code></pre>
+<h2 id="find-search-for-files-by-nametype">find — search for files by name/type</h2>
+<pre><code class="language-bash">find . -name &quot;*.txt&quot;              # find all .txt files from here
+find . -name &quot;*.py&quot; -type f       # only files (not folders)
+find /var/log -name &quot;*.log&quot;       # search in /var/log
+</code></pre>
+<h2 id="the-path-variable">The PATH variable</h2>
+<p>When you type a command, the shell looks for it in the folders listed in <code>$PATH</code>:</p>
+<pre><code class="language-bash">echo $PATH
+# /usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+</code></pre>
+<p>The shell tries each folder in order until it finds the command.</p>
+<pre><code class="language-bash">which python3      # shows where python3 lives
+which git          # shows where git lives
+</code></pre>
+<h2 id="wildcards">Wildcards</h2>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Matches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>*</code></td>
+<td>anything (zero or more characters)</td>
+</tr>
+<tr>
+<td><code>?</code></td>
+<td>exactly one character</td>
+</tr>
+<tr>
+<td><code>*.txt</code></td>
+<td>all .txt files</td>
+</tr>
+<tr>
+<td><code>file?.txt</code></td>
+<td>file1.txt, filea.txt, etc.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">ls *.log           # all log files
+rm tmp*            # delete everything starting with tmp
+</code></pre>
+<h2 id="command-history-tricks">Command history tricks</h2>
+<pre><code class="language-bash">history            # show all past commands
+history | grep ssh # find ssh commands
+!!                 # run the last command again
+!git               # run the last git command
+Ctrl+R             # reverse search through history
+</code></pre>
+<hr />
+<h1 id="lesson-4-file-permissions-users-groups">Lesson 4: File Permissions, Users &amp; Groups</h1>
+<h2 id="every-file-has-three-permission-sets">Every file has three permission sets</h2>
+<pre><code>-rwxr-xr--  1  ec2-user  ec2-user  1234  Jun 1  script.sh
+</code></pre>
+<ul>
+<li><code>-</code> = file type (<code>-</code> file, <code>d</code> directory, <code>l</code> symlink)</li>
+<li><code>rwx</code> = owner permissions (read/write/execute)</li>
+<li><code>r-x</code> = group permissions</li>
+<li><code>r--</code> = everyone else (world)</li>
+</ul>
+<h2 id="permission-letters">Permission letters</h2>
+<table>
+<thead>
+<tr>
+<th>Letter</th>
+<th>Meaning</th>
+<th>On file</th>
+<th>On folder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r</code></td>
+<td>read</td>
+<td>view contents</td>
+<td>list files</td>
+</tr>
+<tr>
+<td><code>w</code></td>
+<td>write</td>
+<td>edit/delete</td>
+<td>create/delete files</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>execute</td>
+<td>run as program</td>
+<td>enter with cd</td>
+</tr>
+</tbody>
+</table>
+<h2 id="chmod-change-permissions">chmod — change permissions</h2>
+<pre><code class="language-bash">chmod +x script.sh          # add execute for everyone
+chmod 755 script.sh         # rwxr-xr-x
+chmod 644 file.txt          # rw-r--r--
+chmod 400 key.pem           # r-------- (SSH key protection)
+</code></pre>
+<p><strong>Numeric shorthand:</strong> r=4, w=2, x=1. Add them up per group (owner/group/world):
+- <code>755</code> = rwxr-xr-x (owner can do all; others can read+execute)
+- <code>644</code> = rw-r--r-- (owner can read+write; others read only)
+- <code>400</code> = r-------- (owner read only)</p>
+<h2 id="chown-change-owner">chown — change owner</h2>
+<pre><code class="language-bash">chown ec2-user file.txt              # change owner
+chown ec2-user:ec2-user file.txt     # change owner and group
+sudo chown root:root /etc/nginx.conf
+</code></pre>
+<h2 id="sudo-run-as-root">sudo — run as root</h2>
+<pre><code class="language-bash">sudo command          # run one command as root
+sudo -i               # become root (be careful)
+</code></pre>
+<p>Root can do anything. Use it only when needed.</p>
+<h2 id="users-and-groups">Users and groups</h2>
+<pre><code class="language-bash">whoami                # current user
+id                    # show user ID and group memberships
+cat /etc/passwd       # list all users
+cat /etc/group        # list all groups
+</code></pre>
+<hr />
+<h1 id="lesson-5-git-github-never-losing-your-files">Lesson 5: Git &amp; GitHub — Never Losing Your Files</h1>
+<h2 id="what-is-git">What is Git?</h2>
+<p>Git is a version control system — it takes snapshots of your code so you can go back to any point in history. GitHub hosts those snapshots online.</p>
+<h2 id="the-three-stages">The three stages</h2>
+<ol>
+<li><strong>Working directory</strong> — files on your disk</li>
+<li><strong>Staging area</strong> — files you've said "include this in the next snapshot"</li>
+<li><strong>Repository</strong> — the saved snapshots (commits)</li>
+</ol>
+<h2 id="core-workflow">Core workflow</h2>
+<pre><code class="language-bash">git init                        # start tracking this folder
+git clone url                   # download a repo from GitHub
+git status                      # what's changed?
+git add file.txt                # stage one file
+git add .                       # stage everything
+git commit -m &quot;message&quot;         # save a snapshot
+git push                        # send commits to GitHub
+git pull                        # get latest commits from GitHub
+git log                         # see history
+git log --oneline               # compact history
+</code></pre>
+<h2 id="branches">Branches</h2>
+<pre><code class="language-bash">git branch                      # list branches
+git branch feature-x            # create a branch
+git checkout feature-x          # switch to it
+git checkout -b feature-x       # create and switch in one step
+git merge feature-x             # merge into current branch
+</code></pre>
+<h2 id="ssh-keys-for-github">SSH keys for GitHub</h2>
+<p>GitHub uses SSH keys so you don't type a password every push.</p>
+<pre><code class="language-bash">ssh-keygen -t ed25519 -C &quot;you@email.com&quot;   # generate a key pair
+cat ~/.ssh/id_ed25519.pub                  # copy this to GitHub Settings
+ssh -T git@github.com                      # test the connection
+</code></pre>
+<h2 id="gitignore">.gitignore</h2>
+<p>A file named <code>.gitignore</code> lists patterns Git should never track:</p>
+<pre><code>*.log
+.env
+node_modules/
+__pycache__/
+</code></pre>
+<hr />
+<h1 id="lesson-6-servers-aws-ec2-linux">Lesson 6: Servers, AWS, EC2 &amp; Linux</h1>
+<h2 id="what-is-a-server">What is a server?</h2>
+<p>A server is a computer that runs 24/7, waiting for requests. It has no screen — you connect to it over the network.</p>
+<h2 id="aws-amazon-web-services">AWS (Amazon Web Services)</h2>
+<p>AWS rents compute, storage, and networking in data centers worldwide. You pay for what you use. Key concepts:
+- <strong>Region</strong>: geographic location (e.g. us-east-1, eu-west-1)
+- <strong>Availability Zone</strong>: data center within a region
+- <strong>Console</strong>: the AWS web UI at console.aws.amazon.com</p>
+<h2 id="ec2-elastic-compute-cloud">EC2 (Elastic Compute Cloud)</h2>
+<p>EC2 = a virtual machine (server) in AWS.</p>
+<p><strong>Launching an EC2 instance:</strong>
+1. EC2 → Launch Instance
+2. Choose AMI (Amazon Machine Image) — pick Amazon Linux 2023
+3. Choose instance type — <code>t2.micro</code> (free tier)
+4. Create or select a key pair (.pem file — download and keep it safe!)
+5. Configure security group (firewall rules)
+6. Launch</p>
+<h2 id="amazon-linux-2023">Amazon Linux 2023</h2>
+<p>The OS that runs on your EC2. Uses <code>dnf</code> as its package manager:</p>
+<pre><code class="language-bash">sudo dnf install -y nginx          # install nginx
+sudo dnf update -y                 # update all packages
+sudo dnf search package-name       # search for a package
+</code></pre>
+<h2 id="connecting-to-your-ec2">Connecting to your EC2</h2>
+<pre><code class="language-bash">chmod 400 ~/Downloads/my-key.pem
+ssh -i ~/Downloads/my-key.pem ec2-user@YOUR-PUBLIC-IP
+</code></pre>
+<hr />
+<h1 id="lesson-7-ssh-networking-firewalls-find-it-log-in-guard-it">Lesson 7: SSH, Networking &amp; Firewalls — Find It, Log In, Guard It</h1>
+<h2 id="ssh-secure-shell">SSH (Secure Shell)</h2>
+<p>SSH creates an encrypted tunnel to another computer. Everything you type is encrypted in transit.</p>
+<pre><code class="language-bash">ssh -i key.pem ec2-user@1.2.3.4          # connect with a key file
+ssh ec2-user@1.2.3.4                      # connect (if key is in ~/.ssh/)
+exit                                       # disconnect
+</code></pre>
+<p><strong>Key file rules:</strong>
+- Keep the <code>.pem</code> file private — never commit it to Git
+- Must have permission <code>400</code> (<code>chmod 400 key.pem</code>) or SSH refuses to use it
+- The public key lives on the server in <code>~/.ssh/authorized_keys</code></p>
+<h2 id="how-ssh-authentication-works">How SSH authentication works</h2>
+<ol>
+<li>You have the <strong>private key</strong> (<code>.pem</code> file on your laptop)</li>
+<li>Server has the <strong>public key</strong> (in <code>~/.ssh/authorized_keys</code>)</li>
+<li>They do a handshake — if the keys match, you're in; no password needed</li>
+</ol>
+<h2 id="ports">Ports</h2>
+<p>Every network service listens on a numbered port:
+| Port | Service |
+|------|---------|
+| 22 | SSH |
+| 80 | HTTP |
+| 443 | HTTPS |
+| 3306 | MySQL |
+| 5432 | PostgreSQL |</p>
+<h2 id="security-groups-aws-firewall">Security Groups (AWS firewall)</h2>
+<p>A security group is a list of rules: which ports are open to which IP addresses.</p>
+<p><strong>Inbound rules examples:</strong>
+- Port 22, Source: My IP → lets you SSH in
+- Port 80, Source: 0.0.0.0/0 → public web traffic
+- Port 443, Source: 0.0.0.0/0 → public HTTPS</p>
+<p>If a port isn't open in the security group, traffic is blocked — even if the service is running.</p>
+<h2 id="ip-addresses">IP addresses</h2>
+<ul>
+<li><strong>Public IP</strong>: reachable from the internet (changes on EC2 stop/start unless Elastic IP)</li>
+<li><strong>Private IP</strong>: only reachable inside AWS (stays the same)</li>
+<li><code>0.0.0.0/0</code> = anywhere on the internet</li>
+<li><code>1.2.3.4/32</code> = exactly that one IP address</li>
+</ul>
+<hr />
+<h1 id="lesson-8-dns-nginx-deploying-your-website-name-it-build-it-serve-it">Lesson 8: DNS, nginx &amp; Deploying Your Website — Name It, Build It, Serve It</h1>
+<h2 id="dns-domain-name-system">DNS (Domain Name System)</h2>
+<p>DNS translates human-readable names to IP addresses. Like a phone book for the internet.</p>
+<pre><code>www.example.com  →  DNS lookup  →  1.2.3.4
+</code></pre>
+<p><strong>Record types:</strong>
+| Type | Purpose | Example |
+|------|---------|---------|
+| A | name → IPv4 address | example.com → 1.2.3.4 |
+| AAAA | name → IPv6 address | |
+| CNAME | name → another name | www → example.com |
+| MX | email servers | |</p>
+<p>Changes to DNS can take minutes to hours to propagate worldwide.</p>
+<h2 id="nginx-web-server">nginx (web server)</h2>
+<p>nginx listens on port 80/443 and serves web files (HTML, CSS, images) to browsers.</p>
+<pre><code class="language-bash">sudo dnf install -y nginx                  # install
+sudo systemctl start nginx                 # start
+sudo systemctl enable nginx                # start on boot
+sudo systemctl status nginx                # check status
+sudo systemctl restart nginx               # restart after config change
+</code></pre>
+<p><strong>Where files live:</strong>
+- Config: <code>/etc/nginx/nginx.conf</code>
+- Default web root: <code>/usr/share/nginx/html/</code></p>
+<p><strong>Basic nginx server block:</strong></p>
+<pre><code class="language-nginx">server {
+    listen 80;
+    server_name example.com;
+    root /usr/share/nginx/html;
+    index index.html;
+}
+</code></pre>
+<h2 id="deploying-a-static-site">Deploying a static site</h2>
+<pre><code class="language-bash"># On your laptop — copy files to server
+scp -i key.pem index.html ec2-user@IP:/usr/share/nginx/html/
 
-  <!-- OPENING THE TERMINAL -->
-  <div class="section" id="open">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Your First Terminal Window</div>
-        <div class="section-title">Open the Terminal app — three keys on a Mac.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div>Press <code>⌘ + space</code> — Spotlight opens.</div>
-        </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <div>Type <code>Terminal</code></div>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <div>Press <code>Enter</code> — A black window opens with text. <strong>No mouse. Only keyboard.</strong></div>
-        </div>
-      </div>
-      <div class="tip" style="margin-top: 16px;">
-        <strong>Windows users:</strong> Install <strong>WSL</strong> (Windows Subsystem for Linux) and open the WSL terminal. Same Linux commands run inside it.
-      </div>
-    </div>
-  </div>
+# Or on the server
+sudo nano /usr/share/nginx/html/index.html
+sudo systemctl restart nginx
+</code></pre>
+<hr />
+<h1 id="lesson-9-curl-http-https-tls-certificates-talk-to-it-lock-it-check-it">Lesson 9: curl, HTTP, HTTPS &amp; TLS Certificates — Talk to It, Lock It, Check It</h1>
+<h2 id="curl-command-line-http-client">curl — command line HTTP client</h2>
+<p><code>curl</code> makes HTTP requests from the terminal. Good for testing APIs and checking servers.</p>
+<pre><code class="language-bash">curl https://example.com                    # GET request, show body
+curl -I https://example.com                 # headers only
+curl -s https://example.com                 # silent (no progress bar)
+curl -o file.html https://example.com       # save to file
+curl -X POST -d '{&quot;key&quot;:&quot;val&quot;}' url         # POST with JSON body
+curl -H &quot;Authorization: Bearer TOKEN&quot; url   # add a header
+</code></pre>
+<h2 id="http-status-codes">HTTP status codes</h2>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>OK — success</td>
+</tr>
+<tr>
+<td>201</td>
+<td>Created</td>
+</tr>
+<tr>
+<td>301/302</td>
+<td>Redirect</td>
+</tr>
+<tr>
+<td>400</td>
+<td>Bad Request</td>
+</tr>
+<tr>
+<td>401</td>
+<td>Unauthorized</td>
+</tr>
+<tr>
+<td>403</td>
+<td>Forbidden</td>
+</tr>
+<tr>
+<td>404</td>
+<td>Not Found</td>
+</tr>
+<tr>
+<td>500</td>
+<td>Internal Server Error</td>
+</tr>
+</tbody>
+</table>
+<h2 id="http-vs-https">HTTP vs HTTPS</h2>
+<ul>
+<li><strong>HTTP</strong>: plain text — anyone on the network can read it</li>
+<li><strong>HTTPS</strong>: HTTP + TLS encryption — traffic is encrypted end-to-end</li>
+<li>Browsers show a padlock for HTTPS; warn or block HTTP sites</li>
+</ul>
+<h2 id="tls-certificates">TLS certificates</h2>
+<p>A TLS certificate proves the server is who it says it is, and enables encryption.</p>
+<p><strong>Let's Encrypt</strong> gives free certificates via <code>certbot</code>:</p>
+<pre><code class="language-bash">sudo dnf install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d example.com
+# follow prompts — it edits nginx.conf automatically
+sudo certbot renew --dry-run     # test auto-renewal
+</code></pre>
+<p>Certificates expire every 90 days; certbot sets up auto-renewal.</p>
+<hr />
+<h1 id="lesson-10-when-it-breaks-logs-the-triage-ladder-your-first-bot-look-check-build">Lesson 10: When It Breaks, Logs, the Triage Ladder &amp; Your First Bot — Look, Check, Build</h1>
+<h2 id="when-something-breaks-the-triage-ladder">When something breaks: the triage ladder</h2>
+<ol>
+<li><strong>Is it running?</strong> → <code>sudo systemctl status nginx</code></li>
+<li><strong>What do the logs say?</strong> → <code>journalctl -u nginx -n 50</code></li>
+<li><strong>Is the config valid?</strong> → <code>sudo nginx -t</code></li>
+<li><strong>Is the port open?</strong> → check security group in AWS console</li>
+<li><strong>Can you reach it?</strong> → <code>curl http://localhost</code></li>
+</ol>
+<h2 id="systemctl-managing-services">systemctl — managing services</h2>
+<pre><code class="language-bash">sudo systemctl status service      # is it running? last logs?
+sudo systemctl start service       # start it
+sudo systemctl stop service        # stop it
+sudo systemctl restart service     # restart (picks up new config)
+sudo systemctl enable service      # start on boot
+sudo systemctl disable service     # don't start on boot
+</code></pre>
+<h2 id="logs">Logs</h2>
+<pre><code class="language-bash">journalctl -u nginx                 # all logs for nginx
+journalctl -u nginx -n 50           # last 50 lines
+journalctl -u nginx -f              # follow (live stream)
+journalctl -u nginx --since &quot;1 hour ago&quot;
+tail -f /var/log/nginx/access.log   # nginx access log live
+tail -f /var/log/nginx/error.log    # nginx error log live
+</code></pre>
+<p>Log locations:
+- <code>/var/log/nginx/</code> — nginx logs
+- <code>/var/log/messages</code> — system messages
+- <code>journalctl</code> — systemd journal (catches everything)</p>
+<h2 id="your-first-bot-newssh">Your first bot: news.sh</h2>
+<p>A bash script that fetches news from an API and sends it to Telegram.</p>
+<pre><code class="language-bash">#!/bin/bash
+NEWS=$(curl -s &quot;https://newsapi.org/v2/top-headlines?country=us&amp;apiKey=KEY&quot;)
+curl -s -X POST &quot;https://api.telegram.org/botTOKEN/sendMessage&quot; \
+  -d chat_id=&quot;@channel&quot; \
+  -d text=&quot;$NEWS&quot;
+</code></pre>
+<hr />
+<h1 id="lesson-11-scripts-cron-secrets-manager-run-it-schedule-it-lock-it">Lesson 11: Scripts, cron &amp; Secrets Manager — Run It, Schedule It, Lock It</h1>
+<h2 id="what-is-a-script">What is a script?</h2>
+<p>A script is a text file containing commands the computer runs in order — instead of you typing them one by one.</p>
+<pre><code class="language-bash">#!/bin/bash          # shebang: tells the OS to run this with bash
+echo &quot;hello&quot;
+ls -la
+</code></pre>
+<p><strong>Make it executable and run it:</strong></p>
+<pre><code class="language-bash">chmod +x script.sh      # add execute permission
+./script.sh             # run it (./ = from this folder)
+</code></pre>
+<p><code>./</code> = relative path, meaning "look in this folder." Without it, the shell looks in $PATH and won't find your script.</p>
+<h2 id="cron-scheduled-tasks">cron — scheduled tasks</h2>
+<p>cron runs commands automatically on a schedule.</p>
+<pre><code class="language-bash">crontab -e          # edit your cron jobs
+crontab -l          # list your cron jobs
+</code></pre>
+<p><strong>Cron schedule format:</strong></p>
+<pre><code>* * * * * command
+│ │ │ │ │
+│ │ │ │ └── day of week (0-7, 0/7=Sunday)
+│ │ │ └──── month (1-12)
+│ │ └────── day of month (1-31)
+│ └──────── hour (0-23)
+└────────── minute (0-59)
+</code></pre>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash">0 9 * * * /home/ec2-user/news.sh          # every day at 9am
+*/5 * * * * /home/ec2-user/check.sh       # every 5 minutes
+0 9 * * 1 /home/ec2-user/weekly.sh        # every Monday at 9am
+</code></pre>
+<p><strong>Install and enable cron on Amazon Linux 2023:</strong></p>
+<pre><code class="language-bash">sudo dnf install -y cronie
+sudo systemctl enable --now crond
+</code></pre>
+<h2 id="aws-secrets-manager-storing-secrets-safely">AWS Secrets Manager — storing secrets safely</h2>
+<p>Never put API keys directly in your script. Secrets Manager stores them securely.</p>
+<p><strong>Store a secret:</strong>
+AWS Console → Secrets Manager → Store a new secret → Other type of secret → key/value pairs</p>
+<p><strong>Fetch a secret in your script:</strong></p>
+<pre><code class="language-bash">SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id news-bot/anthropic-key \
+  --query SecretString \
+  --output text)
+</code></pre>
+<h2 id="json-key-value-pairs">JSON: key-value pairs</h2>
+<p>Secrets are stored as JSON:</p>
+<pre><code class="language-json">{
+  &quot;api_key&quot;: &quot;abc123&quot;,
+  &quot;token&quot;: &quot;xyz789&quot;
+}
+</code></pre>
+<p>JSON = key:value pairs inside <code>{ }</code> braces.</p>
+<h2 id="command-substitution"><code>$()</code> — command substitution</h2>
+<p><code>$()</code> runs the command inside and pastes the result in place:</p>
+<pre><code class="language-bash">TODAY=$(date)
+echo &quot;Today is $TODAY&quot;
 
-  <!-- NAVIGATION -->
-  <div class="section" id="navigate">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Navigation</div>
-        <div class="section-title">Three commands. With these you can get anywhere.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead>
-          <tr>
-            <th>Command</th>
-            <th>What it does</th>
-            <th>Think of it as</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td><code>pwd</code></td><td>Print working directory</td><td class="mnemonic">"Where am I standing right now?"</td></tr>
-          <tr><td><code>ls</code></td><td>List files in this folder</td><td class="mnemonic">"Look around the room"</td></tr>
-          <tr><td><code>ls -a</code></td><td>List files including hidden</td><td class="mnemonic">"Look behind the curtains too"</td></tr>
-          <tr><td><code>cd &lt;folder&gt;</code></td><td>Change directory</td><td class="mnemonic">"Walk into a room"</td></tr>
-          <tr><td><code>cd ~</code></td><td>Go to your home folder</td><td class="mnemonic">"Go home"</td></tr>
-          <tr><td><code>cd ..</code></td><td>Go up one folder</td><td class="mnemonic">"Step back into the hallway"</td></tr>
-        </tbody>
-      </table>
+SECRET=$(aws secretsmanager get-secret-value --secret-id mykey --query SecretString --output text)
+</code></pre>
+<h2 id="newssh-version-2-secrets-from-secrets-manager">news.sh version 2 (secrets from Secrets Manager)</h2>
+<pre><code class="language-bash">#!/bin/bash
+ANTHROPIC_KEY=$(aws secretsmanager get-secret-value \
+  --secret-id news-bot/anthropic-key --query SecretString --output text)
+TELEGRAM_TOKEN=$(aws secretsmanager get-secret-value \
+  --secret-id news-bot/telegram-token --query SecretString --output text)
+# no secrets in the file itself
+</code></pre>
+<p><code>AccessDeniedException</code> when fetching secrets = EC2 has no identity yet → IAM is the fix.</p>
+<hr />
+<h1 id="lesson-12-iam-give-your-server-an-identity">Lesson 12: IAM — Give Your Server an Identity</h1>
+<h2 id="what-is-iam">What is IAM?</h2>
+<p>IAM (Identity and Access Management) is the badge system for your AWS account. Every request to AWS must pass the badge check — who are you, and what are you allowed to do?</p>
+<h2 id="policies-what-an-identity-is-allowed-to-do">Policies — what an identity is allowed to do</h2>
+<p>A policy is a JSON document that lists permissions:</p>
+<pre><code class="language-json">{
+  &quot;Effect&quot;: &quot;Allow&quot;,
+  &quot;Action&quot;: &quot;secretsmanager:GetSecretValue&quot;,
+  &quot;Resource&quot;: [
+    &quot;arn:aws:secretsmanager:region:account:secret:news-bot/anthropic-*&quot;,
+    &quot;arn:aws:secretsmanager:region:account:secret:news-bot/telegram-*&quot;
+  ]
+}
+</code></pre>
+<p><strong>Three policy types:</strong>
+| Type | Can edit/delete? | Scope |
+|------|-----------------|-------|
+| AWS-managed | No | Attached to any identity |
+| Customer-managed | Yes | Reusable across identities |
+| Inline | Yes | Tied to one identity; deleted with it |</p>
+<p><code>AdministratorAccess</code> = full access to everything = training wheels. Goal: <strong>least privilege</strong> (only what's needed, nothing more).</p>
+<h2 id="iam-users-for-humans-at-a-laptop">IAM users — for humans at a laptop</h2>
+<p>An IAM user is a named identity with an access key ID + secret access key (like a username and password for the API).</p>
+<pre><code class="language-bash">aws configure          # stores credentials in ~/.aws/credentials
+</code></pre>
+<p>This saves keys to <code>~/.aws/credentials</code> on the server — same problem as keys-in-the-script, just one layer down.</p>
+<h2 id="iam-roles-for-machines-inside-aws">IAM roles — for machines inside AWS</h2>
+<p>A role is attached to the machine itself. No keys stored anywhere. AWS automatically hands the EC2 short-lived credentials that rotate constantly.</p>
+<p><strong>Attach a role to EC2:</strong>
+1. IAM → Roles → Create role → AWS service → EC2
+2. Attach policy: <code>AdministratorAccess</code> (then narrow to least privilege)
+3. Name: <code>news-bot-role</code> → Create
+4. EC2 Console → select instance → Actions → Security → Modify IAM role → select <code>news-bot-role</code></p>
+<p><strong>Then remove the stored keys:</strong></p>
+<pre><code class="language-bash">rm ~/.aws/credentials        # on the server
+# Also: delete the access key in IAM console
+</code></pre>
+<p>Bot still works — it now uses the role automatically.</p>
+<h2 id="least-privilege-inline-policy-final-form">Least privilege inline policy (final form)</h2>
+<pre><code class="language-json">{
+  &quot;Effect&quot;: &quot;Allow&quot;,
+  &quot;Action&quot;: &quot;secretsmanager:GetSecretValue&quot;,
+  &quot;Resource&quot;: [
+    &quot;arn:aws:secretsmanager:...:secret:news-bot/anthropic-*&quot;,
+    &quot;arn:aws:secretsmanager:...:secret:news-bot/telegram-*&quot;
+  ]
+}
+</code></pre>
+<h2 id="which-identity-where">Which identity where?</h2>
+<table>
+<thead>
+<tr>
+<th>Who</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Person at a laptop</td>
+<td>IAM user (with MFA)</td>
+</tr>
+<tr>
+<td>Machine inside AWS</td>
+<td>IAM role</td>
+</tr>
+</tbody>
+</table>
+<h2 id="root-account">Root account</h2>
+<p>Root = owner's master key. Has access to everything including billing. Keep it in a drawer — use your own admin IAM user for daily work.</p>
+<h2 id="mfa-multi-factor-authentication">MFA (Multi-Factor Authentication)</h2>
+<p>6-digit code from a phone app that changes every 30 seconds.
+IAM → Users → your-user → Security credentials → Assign MFA device</p>
+<hr />
+<h1 id="lesson-13-the-quiz-bot-variables-ifelse-exit-codes-failing-loudly">Lesson 13: The Quiz Bot — Variables, if/else, Exit Codes &amp; Failing Loudly</h1>
+<h2 id="quiz-botsh-a-new-file">quiz-bot.sh — a new file</h2>
+<p>This is a new product, not an edit to <code>news.sh</code>. Built on Mac first.</p>
+<h2 id="bash-variables">Bash variables</h2>
+<pre><code class="language-bash">NAME=value          # set: no spaces around =, no $ sign
+echo $NAME          # read: dollar sign to read
+</code></pre>
+<p>Variables live in this terminal session only — they disappear when you close it.</p>
+<p><strong>Use <code>$HOME</code> not <code>~</code> inside variables:</strong></p>
+<pre><code class="language-bash">REPO_DIR=$HOME/code/quiz-bot/decks    # correct
+REPO_DIR=~/code/quiz-bot/decks        # ~ doesn't always expand inside variables
+</code></pre>
+<h2 id="the-decks-repo">The decks repo</h2>
+<p><code>git@github.com:312school/26a.312school.com.git</code>
+Structure: <code>session-N/deck.html</code> — session-14 is newest.</p>
+<h2 id="clone-vs-pull">Clone vs pull</h2>
+<pre><code class="language-bash">git clone URL folder    # first time: download the repo
+git pull                # already have it: get updates
+</code></pre>
+<p>Running <code>git clone</code> a second time to the same folder → <code>fatal: destination path already exists</code></p>
+<h2 id="ifelse-the-four-words">if/else — the four words</h2>
+<pre><code class="language-bash">if [ -d &quot;$REPO_DIR&quot; ]; then
+    git pull
+else
+    git clone $URL $REPO_DIR
+fi
+</code></pre>
+<p>Four keywords: <code>if</code> · <code>then</code> · <code>else</code> · <code>fi</code>
+<strong>Spaces inside <code>[ ]</code> are required.</strong> <code>[-d "$REPO_DIR"]</code> fails; <code>[ -d "$REPO_DIR" ]</code> works.</p>
+<p><code>-d</code> = "is this a folder?"</p>
+<h2 id="exit-codes">Exit codes</h2>
+<p>Every command finishes with an exit code:
+- <code>0</code> = success
+- Anything else = failure</p>
+<pre><code class="language-bash">ls /real/path       # exit code 0
+ls /fake/path       # exit code 2
+echo $?             # read the last command's exit code
+</code></pre>
+<p>A failed <code>git clone</code> returns exit code <code>128</code>.</p>
+<h2 id="silent-failure-the-problem">Silent failure — the problem</h2>
+<p>Without a check, a broken <code>git clone</code> → script marches on with no warning.</p>
+<h2 id="failing-loudly-the-fix">Failing loudly — the fix</h2>
+<pre><code class="language-bash">git clone $URL $REPO_DIR
+if [ $? -ne 0 ]; then       # -ne = &quot;not equal&quot;
+    echo &quot;ERROR: git clone failed&quot;
+    exit 1                  # stop the script, leave exit code 1
+fi
+</code></pre>
+<p><code>exit 1</code> = stop here and report failure. Now the script is: loud-and-stopped when it fails; quiet-and-onward when it works.</p>
+<h2 id="telegram-claude-call-flags">Telegram + Claude call flags</h2>
+<pre><code class="language-bash">TELEGRAM_BOT_TOKEN=&quot;...&quot;
+TELEGRAM_CHAT_ID=&quot;@channel_name&quot;    # bot must be channel admin
 
-      <div class="two-col" style="margin-top: 16px;">
-        <div class="info-card">
-          <div class="info-card-title">A Path is an Address</div>
-          Read <code>~/Downloads</code> from the right: a folder called <code>Downloads</code>, inside your home folder <code>~</code>.
-        </div>
-        <div class="info-card">
-          <div class="info-card-title">Two Habits From Day One</div>
-          <strong>Tab autocompletes.</strong> Start typing, press Tab — the terminal finishes it.<br><br>
-          <strong>Case matters.</strong> <code>Desktop</code> ≠ <code>desktop</code>. The terminal is not the AI — typos are not forgiven.
-        </div>
-      </div>
-    </div>
-  </div>
+claude --model sonnet \
+  -p &quot;your prompt here&quot; \
+  --allowedTools &quot;WebSearch&quot; &quot;Bash&quot; \
+  --verbose
+</code></pre>
+<p>Use <code>"Bash"</code> NOT <code>"Bash(curl:*)"</code> — the narrow form silently skips the Telegram send step.</p>
+<h2 id="why-not-cron-yet">Why not cron yet?</h2>
+<p>Laptop sleeps and goes offline → cron jobs miss. Needs an always-on server (the EC2 from Lesson 6).</p>
+<hr />
+<h1 id="lesson-14-python-programs-variables-types-lists-loops">Lesson 14: Python — Programs, Variables, Types, Lists &amp; Loops</h1>
+<h2 id="what-is-software">What is software?</h2>
+<p>Software is just instructions. Every app — Telegram, a website, Maps — is a list of instructions a computer follows, in order. The computer does <strong>exactly</strong> what it's told, step by step. No magic underneath.</p>
+<h2 id="what-is-a-program">What is a program?</h2>
+<p>So far you've typed commands by hand, one at a time. A program is those same instructions <strong>written down once</strong> in a file — the computer runs all of them, in order, by itself.</p>
+<h2 id="the-language-python">The language: Python</h2>
+<p>Programs are written in a language the computer understands. The language here is <strong>Python</strong>:</p>
+<pre><code class="language-python">print(&quot;hello&quot;)    # read it: &quot;print hello&quot; — says hello on screen
+</code></pre>
+<p>You'll be able to read a lot of Python before you can write it.</p>
+<h2 id="the-editor-vscode">The editor: VSCode</h2>
+<p>Writing code in the bare terminal is painful. VSCode shows your whole file, colors it, and keeps the terminal you already know right inside it.</p>
+<p>Setup:</p>
+<pre><code>1. open VSCode
+2. File → Open Folder → ~/code/quiz-bot
+3. Terminal → New Terminal
+python3 --version  →  Python 3.x     # ✓ Python is here
+</code></pre>
+<p>Don't have the folder? <code>mkdir -p ~/code/quiz-bot</code> first.</p>
+<h2 id="your-first-program">Your first program</h2>
+<p>New file → save as <code>hello.py</code>:</p>
+<pre><code class="language-python">print(&quot;Hello from my first program&quot;)
+</code></pre>
+<p>Run it:</p>
+<pre><code>python3 hello.py
+Hello from my first program
+</code></pre>
+<p><code>python3</code> is the thing that runs your file. The <code>.py</code> extension tells the computer it's Python.</p>
+<p><strong>No output?</strong> File not saved — a white dot by the filename means unsaved. Press ⌘S or turn on Auto Save. <code>cat hello.py</code> only <em>shows</em> text; <code>python3 hello.py</code> <em>runs</em> it.</p>
+<h2 id="variables">Variables</h2>
+<p>A variable is a name that holds a value. The program remembers it:</p>
+<pre><code class="language-python">topic = &quot;git&quot;
+print(topic)    →   git
+topic = &quot;linux&quot;
+print(topic)    →   linux
+</code></pre>
+<p><code>=</code> <strong>sets</strong> a value. <code>==</code> <strong>asks</strong> a question (true or false). Easy to mix up — this is the one to remember.</p>
+<h2 id="text-numbers-does-two-different-things">Text &amp; numbers: + does two different things</h2>
+<pre><code class="language-python">&quot;cat&quot; + &quot;dog&quot;   →   &quot;catdog&quot;    # text: + glues (concatenation)
+2 + 2           →   4           # numbers: + adds
+&quot;2&quot; + &quot;2&quot;       →   &quot;22&quot;        # still text — glues, doesn't add
+</code></pre>
+<h2 id="three-kinds-of-values-types">Three kinds of values (types)</h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>What it is</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>string</td>
+<td>text — always in quotes</td>
+<td><code>"git"</code>, <code>"hello"</code></td>
+</tr>
+<tr>
+<td>integer</td>
+<td>whole number, no decimal</td>
+<td><code>42</code>, <code>0</code>, <code>-3</code></td>
+</tr>
+<tr>
+<td>float</td>
+<td>number with decimal point</td>
+<td><code>3.14</code>, <code>0.5</code></td>
+</tr>
+</tbody>
+</table>
+<p>The quotes make it a string; a decimal makes it a float; a plain whole number is an integer.</p>
+<h2 id="lists">Lists</h2>
+<p>A list holds things in order, using square brackets <code>[ ]</code>:</p>
+<pre><code class="language-python">classes = [&quot;git&quot;, &quot;linux&quot;, &quot;networking&quot;]
+</code></pre>
+<p>Reach in by position — Python counts from <strong>0</strong>:</p>
+<pre><code class="language-python">classes[0]   →   &quot;git&quot;        # first item is [0] — trips everyone once
+classes[1]   →   &quot;linux&quot;
+</code></pre>
+<h2 id="the-for-loop">The for loop</h2>
+<p>Say it once — the computer repeats for every item:</p>
+<pre><code class="language-python">for c in classes:
+    print(c)
+# prints: git, linux, networking
+</code></pre>
+<p><code>c</code> becomes each item in turn. Three items → three passes.</p>
+<p><strong>Bash vs Python for loops:</strong></p>
+<pre><code class="language-bash"># Bash
+for c in git linux networking; do
+  echo &quot;$c&quot;
+done
+</code></pre>
+<pre><code class="language-python"># Python — reads like the English sentence
+for c in classes:
+    print(c)
+</code></pre>
+<h2 id="the-one-trap-indentation">The one trap: indentation</h2>
+<p>Python cares about spaces at the start of lines — they're <strong>invisible</strong>:</p>
+<pre><code class="language-python">for c in classes:
+    print(c)       # ✓ indented — works
 
-  <!-- CREATE -->
-  <div class="section" id="create">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Create</div>
-        <div class="section-title">Make a folder. Make a file.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead>
-          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>mkdir &lt;name&gt;</code></td><td>Make a new folder</td><td class="mnemonic">"Build a new room"</td></tr>
-          <tr><td><code>touch &lt;file&gt;</code></td><td>Make an empty file</td><td class="mnemonic">"Put a blank notebook on the shelf"</td></tr>
-        </tbody>
-      </table>
+for c in classes:
+print(c)           # IndentationError — not indented
+</code></pre>
+<p>Fix: line them up.</p>
+<h2 id="if-a-program-that-chooses">if — a program that chooses</h2>
+<pre><code class="language-python">if c == &quot;git&quot;:
+    print(&quot;← let's review git&quot;)
+# if false: skip it
+</code></pre>
+<p>Until now every line ran no matter what. <code>if</code> lets the program <strong>choose</strong>.</p>
+<h2 id="putting-it-all-together">Putting it all together</h2>
+<pre><code class="language-python">classes = [&quot;git&quot;, &quot;linux&quot;, &quot;networking&quot;]
+for c in classes:
+    if c == &quot;networking&quot;:
+        print(c, &quot;— the tricky one!&quot;)
+    else:
+        print(c)
+# Output: git / linux / networking — the tricky one!
+</code></pre>
+<h2 id="summary-what-you-can-now-do">Summary: what you can now do</h2>
+<pre><code class="language-python">print(&quot;hi&quot;)                      # say something
+topic = &quot;git&quot;                    # a name holds a value
+classes = [&quot;git&quot;, &quot;linux&quot;]       # a list, in order
+for c in classes:                # do it for every item
+    if c == &quot;git&quot;: print(c)      # ...only when true
+</code></pre>
+<hr />
+<h1 id="lesson-15-write-the-real-quizzes-list-loop-skip-run">Lesson 15: Write the Real Quizzes — List, Loop, Skip, Run</h1>
+<p><strong>Goal:</strong> Python lists your classes, skips the ones already done, and runs the command that buzzes your phone.</p>
+<h2 id="the-finished-bot">The finished bot</h2>
+<pre><code>python3 quiz_bot.py
+decks/session-1: writing and sending…   # 📱 buzz
+decks/session-2: writing and sending…   # 📱 buzz
 
-      <div class="two-col" style="margin-top: 16px;">
-        <div class="info-card">
-          <div class="info-card-title">Chain with &&</div>
-          <code>mkdir code && cd code</code><br><br>
-          Make the folder, then walk into it. If the first fails, the second doesn't run.
-        </div>
-        <div class="info-card">
-          <div class="info-card-title">Filename Starts with Dot = Hidden</div>
-          <code>touch .secrets.txt</code> creates a hidden file.<br>
-          <code>ls</code> won't show it. <code>ls -a</code> will.
-        </div>
-      </div>
+python3 quiz_bot.py                      # run again
+decks/session-1: already done, skipping
+decks/session-2: already done, skipping
+</code></pre>
+<p>First run: every class buzzes. Second run: nothing sends.</p>
+<h2 id="pre-flight-three-checks">Pre-flight: three checks</h2>
+<pre><code class="language-bash">cd ~/code/quiz-bot
+ls decks              # → session-1 session-2 … (your real classes)
+claude -p &quot;say hi&quot;    # → a reply
+</code></pre>
+<p>Telegram token goes in the environment: <code>export TELEGRAM_BOT_TOKEN=…</code> in your shell — not hard-coded in the script.</p>
+<h2 id="one-class-one-command-the-starting-point">One class, one command (the starting point)</h2>
+<pre><code class="language-bash">claude --model sonnet -p &quot;Read decks/session-1/deck.html, write one
+  multiple-choice quiz question, save it to decks/session-1/quiz.md,
+  and post it to my Telegram channel.&quot; \
+  --allowedTools &quot;Bash&quot; --dangerously-skip-permissions
+</code></pre>
+<ul>
+<li><code>--allowedTools "Bash"</code> = Claude may run commands (open deck, save, post)</li>
+<li><code>--dangerously-skip-permissions</code> = don't pause before each step</li>
+<li><code>--model sonnet</code> = model for these demos</li>
+</ul>
+<p><strong>Problem:</strong> run it twice → same quiz sends twice. Need: every class, once. That's Python's job.</p>
+<h2 id="four-verbs-list-loop-skip-run">Four verbs: List · Loop · Skip · Run</h2>
+<h3 id="verb-1-list-real-folders-off-disk">Verb 1: List — real folders off disk</h3>
+<pre><code class="language-python">import glob
+glob.glob(&quot;decks/session-*&quot;)
+# → ['decks/session-1', 'decks/session-2', 'decks/session-3']
+</code></pre>
+<p><code>import glob</code> = "load this toolkit." <code>glob.glob(...)</code> finds folders by a <code>*</code> pattern — same idea as <code>ls *.pdf</code>.</p>
+<h3 id="verb-4-run-python-cant-run-claude-directly-asks-the-terminal">Verb 4: Run — Python can't run <code>claude</code> directly, asks the terminal</h3>
+<pre><code class="language-python">import subprocess
+subprocess.run([&quot;echo&quot;, &quot;hi&quot;])    # → hi
+subprocess.run([&quot;sleep&quot;, &quot;2&quot;])    # waits 2 seconds (subprocess WAITS)
+</code></pre>
+<p>Each piece of the command is its own list item. Quiet on screen = it's working, not broken.</p>
+<p><strong>The real Claude call:</strong></p>
+<pre><code class="language-python">prompt = &quot;Read decks/session-1/deck.html, write one quiz question, \
+    save it to decks/session-1/quiz.md, and post it to my channel.&quot;
+subprocess.run([&quot;claude&quot;, &quot;--model&quot;, &quot;sonnet&quot;, &quot;-p&quot;, prompt,
+                &quot;--allowedTools&quot;, &quot;Bash&quot;, &quot;--dangerously-skip-permissions&quot;])
+</code></pre>
+<p>Your phone buzzes. Bot works on one class.</p>
+<p><strong>Building a path with <code>+</code>:</strong></p>
+<pre><code class="language-python">print(&quot;decks/session-1&quot; + &quot;/quiz.md&quot;)   # → decks/session-1/quiz.md
+</code></pre>
+<h3 id="verb-2-loop-cover-all-classes">Verb 2: Loop — cover all classes</h3>
+<pre><code class="language-python">for folder in sorted(glob.glob(&quot;decks/session-*&quot;)):    # once per class
+    # …same claude command, with folder instead of &quot;session-1&quot;
+</code></pre>
+<p><code>sorted(...)</code> = same order every time. <strong>Backfill</strong> = going back and quizzing every class not done yet. Rate-limit message at home = expected, not a bug — stop, wait, re-run; the skip means it picks up where it left off.</p>
+<h3 id="verb-3-skip-dont-re-send-if-done">Verb 3: Skip — don't re-send if done</h3>
+<pre><code class="language-python">import os
+os.path.exists(&quot;decks&quot;)    →   True
+os.path.exists(&quot;nope&quot;)     →   False
 
-      <div class="tip" style="margin-top: 16px;">
-        <strong>No error = success.</strong> If you don't see an error message, the command worked. Empty output is good news. Check with <code>ls</code> or <code>pwd</code>.
-      </div>
-    </div>
-  </div>
+not os.path.exists(&quot;decks&quot;)   →   False   # not flips the answer
+not os.path.exists(&quot;nope&quot;)    →   True    # nope is missing → not = True
+</code></pre>
+<p><code>if not os.path.exists(folder + "/quiz.md"):</code> = do the thing only when the file is <strong>NOT</strong> there yet.</p>
+<p>When the command works (exit code <code>0</code>), Python saves a tiny <code>quiz.md</code> next to the deck. <code>ls</code> before and after — "done" is a file you can see. Run again → "skipping," no buzz.</p>
+<h2 id="the-whole-bot-about-ten-lines">The whole bot — about ten lines</h2>
+<pre><code class="language-python">import glob, os, subprocess
 
-  <!-- EDIT WITH VI -->
-  <div class="section" id="edit">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Edit a File · The VI Round-Trip</div>
-        <div class="section-title">Four keys, in order, every time.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead>
-          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>vi &lt;file&gt;</code></td><td>Open to edit (creates it if missing)</td><td class="mnemonic">"Sit down with the notebook and a pen"</td></tr>
-          <tr><td><code>i</code></td><td>Enter INSERT mode</td><td class="mnemonic">"Pick up the pen"</td></tr>
-          <tr><td><code>Esc</code></td><td>Leave INSERT mode</td><td class="mnemonic">"Put the pen down"</td></tr>
-          <tr><td><code>:wq</code></td><td>Save and quit</td><td class="mnemonic">"Close the notebook and walk away"</td></tr>
-        </tbody>
-      </table>
-
-      <div class="key-idea" style="margin-top: 16px;">
-        <strong>The round-trip:</strong>
-        <div class="key-row" style="margin-top: 10px;">
-          <span class="key blue">i</span>
-          <span class="key-label">pick up pen</span>
-          <span class="key-arrow">→</span>
-          <span class="key">type</span>
-          <span class="key-label">your text</span>
-          <span class="key-arrow">→</span>
-          <span class="key blue">Esc</span>
-          <span class="key-label">put pen down</span>
-          <span class="key-arrow">→</span>
-          <span class="key">:wq</span>
-          <span class="key-label">save &amp; quit</span>
-          <span class="key-arrow">→</span>
-          <span class="key">Enter</span>
-        </div>
-      </div>
-
-      <div class="terminal" style="margin-top: 16px;">
-        <div class="terminal-bar">
-          <div class="dot dot-red"></div>
-          <div class="dot dot-yellow"></div>
-          <div class="dot dot-green"></div>
-          <span class="terminal-label">~/code — bash</span>
-        </div>
-        <div class="terminal-body">
-          <div><span class="prompt">$</span> <span class="cmd-text">cd ~</span> <span class="comment"># home folder</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">mkdir code && cd code</span> <span class="comment"># make folder, walk in</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">mkdir class1 && cd class1</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">touch notes.txt</span> <span class="comment"># create an empty file</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">vi notes.txt</span> <span class="comment"># open in vi</span></div>
-          <div class="output">&nbsp;&nbsp;press i &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment"># enter INSERT mode</span></div>
-          <div class="output">&nbsp;&nbsp;type your text</div>
-          <div class="output">&nbsp;&nbsp;press Esc &nbsp;&nbsp;&nbsp;&nbsp;<span class="comment"># leave INSERT mode</span></div>
-          <div class="output">&nbsp;&nbsp;type :wq then Enter <span class="comment"># write and quit</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">cat notes.txt</span> <span class="comment"># your notes print to the terminal</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- READ FILES -->
-  <div class="section" id="read">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Look Inside a File</div>
-        <div class="section-title">Three ways to look. Pick the smallest one.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead>
-          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>cat &lt;file&gt;</code></td><td>Show the whole file</td><td class="mnemonic">"Read the whole page out loud"</td></tr>
-          <tr><td><code>head -n 1 &lt;file&gt;</code></td><td>Show the first N lines</td><td class="mnemonic">"Peek at the top"</td></tr>
-          <tr><td><code>tail -n 1 &lt;file&gt;</code></td><td>Show the last N lines</td><td class="mnemonic">"Peek at the bottom"</td></tr>
-        </tbody>
-      </table>
-      <div class="info-card" style="margin-top: 16px;">
-        <div class="info-card-title">Think of a Horse</div>
-        <code>head</code> shows the head of the file. <code>tail</code> shows the tail. A log file can be a <strong>million lines</strong> — <code>cat</code> floods the screen. <code>head</code> and <code>tail</code> are the polite versions.
-      </div>
-    </div>
-  </div>
-
-  <!-- MOVE COPY REMOVE -->
-  <div class="section" id="move">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Move, Copy, Remove</div>
-        <div class="section-title">Two friendly, one sharp.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead>
-          <tr><th>Command</th><th>What it does</th><th>Think of it as</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>cp &lt;from&gt; &lt;to&gt;</code></td>
-            <td>Copy a file. The original stays.</td>
-            <td class="mnemonic">"Photocopy a notebook."</td>
-          </tr>
-          <tr>
-            <td><code>mv &lt;from&gt; &lt;to&gt;</code></td>
-            <td>Move or rename. Original is gone from old address. <code>mv iPhone Android</code> just renames.</td>
-            <td class="mnemonic">"Carry it · or relabel it."</td>
-          </tr>
-          <tr>
-            <td><code>rm &lt;file&gt;</code></td>
-            <td>Remove. No confirmation. No Trash.</td>
-            <td class="mnemonic">"Gone is gone."</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="warning">
-        <strong>⚠ READ THIS CAREFULLY</strong><br><br>
-        <code style="background: #fee2e2; color: #dc2626;">rm</code> does not ask. <code style="background: #fee2e2; color: #dc2626;">rm</code> does not go to the Trash. <strong>Gone is gone.</strong><br><br>
-        — Always <strong>check <code style="background: #fee2e2; color: #dc2626;">pwd</code> before every <code style="background: #fee2e2; color: #dc2626;">rm</code></strong>.<br>
-        — Run the command, then double-check with <code style="background: #fee2e2; color: #dc2626;">ls</code> or <code style="background: #fee2e2; color: #dc2626;">pwd</code>. Linux won't ask "are you sure?"<br>
-        — <strong>Never type <code style="background: #fee2e2; color: #dc2626;">rm -rf</code> right now.</strong> We get to flags later — not now.
-      </div>
-
-      <div class="terminal" style="margin-top: 16px;">
-        <div class="terminal-bar">
-          <div class="dot dot-red"></div>
-          <div class="dot dot-yellow"></div>
-          <div class="dot dot-green"></div>
-          <span class="terminal-label">~/code/class1 — bash</span>
-        </div>
-        <div class="terminal-body">
-          <div class="comment"># --- copy ---</div>
-          <div><span class="prompt">$</span> <span class="cmd-text">cp notes.txt notes-backup.txt</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">ls</span> <span class="comment"># both files appear</span></div>
-          <div>&nbsp;</div>
-          <div class="comment"># --- rename (mv in same folder) ---</div>
-          <div><span class="prompt">$</span> <span class="cmd-text">mv notes-backup.txt class1-notes.txt</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">ls</span> <span class="comment"># old name gone</span></div>
-          <div>&nbsp;</div>
-          <div class="comment"># --- remove ---</div>
-          <div><span class="prompt">$</span> <span class="cmd-text">pwd</span> <span class="highlight"># READ THIS — in class1?</span></div>
-          <div><span class="prompt">$</span> <span class="cmd-text">rm class1-notes.txt</span> <span class="comment"># gone — no Trash</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- WHEN VI TRAPS YOU -->
-  <div class="section" id="stuck">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">When VI Traps You</div>
-        <div class="section-title">Bail out, clean up, try again.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <div style="font-size: 14px; color: #374151; display: flex; flex-direction: column; gap: 10px;">
-        <div>
-          <strong>First fix — abandon and quit:</strong> press <code>Esc</code>, then type <code>:q!</code> and Enter. Drops all unsaved changes, drops you back to the terminal. Most "stuck in vi" moments end here.
-        </div>
-        <div>
-          <strong>Computers don't forgive small mistakes</strong> — an extra space, a semicolon instead of a colon, a wrong key.
-        </div>
-        <div>
-          <strong>If <code>:wq</code> didn't save and quit</strong> — you probably forgot <code>Esc</code>, or you forgot <code>i</code> and never entered INSERT mode in the first place.
-        </div>
-        <div>
-          <strong>Swap file showing up?</strong> vi leaves a hidden helper file when it crashes. Run <code>ls -a</code>. If you see <code>.notes.txt.swp</code>, delete it with <code>rm .notes.txt.swp</code> <em>before</em> running vi on that file again.
-        </div>
-      </div>
-
-      <div class="info-card" style="margin-top: 16px;">
-        <div class="info-card-title">Last Resort · Still Stuck</div>
-        <div class="steps" style="margin-top: 4px;">
-          <div class="step"><div class="step-num">1</div><div>⌘ + Q — quit Terminal</div></div>
-          <div class="step"><div class="step-num">2</div><div>Reopen Terminal</div></div>
-          <div class="step"><div class="step-num">3</div><div><code>cd ~/code/class1</code></div></div>
-          <div class="step"><div class="step-num">4</div><div><code>ls -a</code> — see a <code>.swp</code>?</div></div>
-          <div class="step"><div class="step-num">5</div><div>If yes: <code>rm .notes.txt.swp</code></div></div>
-          <div class="step"><div class="step-num">6</div><div>Try the round-trip again</div></div>
-        </div>
-      </div>
-
-      <div class="key-idea" style="margin-top: 16px;">
-        <strong>You will probably mess this up the first time.</strong> That is fine. Repeat until it works.
-      </div>
-    </div>
-  </div>
-
-  <!-- PRACTICE -->
-  <div class="section" id="practice">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Practice on Your Own</div>
-        <div class="section-title">A sandbox in your browser — same commands, nothing to break.</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <p>Three exercises ready to play: <strong>continent tour</strong> · <strong>build-your-own-world-map</strong> · <strong>clean-up-an-empire</strong>.</p>
-      <p>Tree on the left follows your <code>cd</code>; cheat sheet on the right reminds you. <em>No way to break your real computer.</em></p>
-      <a class="sandbox-link" href="https://26a.312school.com/filesystem-playground" target="_blank">
-        → 26a.312school.com/filesystem-playground
-      </a>
-    </div>
-  </div>
-
-  <!-- QUICK REFERENCE -->
-  <div class="section">
-    <div class="section-header">
-      <div>
-        <div class="section-tag">Quick Reference</div>
-        <div class="section-title">All commands from Lesson 1</div>
-      </div>
-    </div>
-    <div class="section-body">
-      <table class="cmd-table">
-        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
-        <tbody>
-          <tr><td><code>pwd</code></td><td>Where am I?</td></tr>
-          <tr><td><code>ls</code> / <code>ls -a</code></td><td>List files / including hidden</td></tr>
-          <tr><td><code>cd &lt;folder&gt;</code> / <code>cd ~</code> / <code>cd ..</code></td><td>Navigate folders</td></tr>
-          <tr><td><code>mkdir &lt;name&gt;</code></td><td>Make a folder</td></tr>
-          <tr><td><code>touch &lt;file&gt;</code></td><td>Make an empty file</td></tr>
-          <tr><td><code>vi &lt;file&gt;</code> → <code>i</code> → type → <code>Esc</code> → <code>:wq</code></td><td>Edit and save a file</td></tr>
-          <tr><td><code>cat</code> / <code>head -n N</code> / <code>tail -n N</code></td><td>Read a file (all / top / bottom)</td></tr>
-          <tr><td><code>cp &lt;from&gt; &lt;to&gt;</code></td><td>Copy (original stays)</td></tr>
-          <tr><td><code>mv &lt;from&gt; &lt;to&gt;</code></td><td>Move or rename</td></tr>
-          <tr><td><code>rm &lt;file&gt;</code></td><td>Delete permanently — no Trash!</td></tr>
-          <tr><td><code>cmd1 && cmd2</code></td><td>Run two commands in sequence</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
+for folder in sorted(glob.glob(&quot;decks/session-*&quot;)):     # LIST + LOOP
+    if not os.path.exists(folder + &quot;/quiz.md&quot;):         # SKIP if done
+        prompt = &quot;Read &quot; + folder + &quot;/deck.html, write one quiz question, &quot; \
+                 &quot;save it to &quot; + folder + &quot;/quiz.md, and post it to my channel.&quot;
+        result = subprocess.run([&quot;claude&quot;, &quot;--model&quot;, &quot;sonnet&quot;, &quot;-p&quot;, prompt,
+                                 &quot;--allowedTools&quot;, &quot;Bash&quot;,
+                                 &quot;--dangerously-skip-permissions&quot;])    # RUN
+        if result.returncode == 0:
+            open(folder + &quot;/quiz.md&quot;, &quot;a&quot;).close()    # it worked → mark done
+    else:
+        print(folder, &quot;already done, skipping&quot;)
+</code></pre>
+<p>Every line is one of the four verbs: <strong>List</strong> (glob), <strong>Loop</strong> (for), <strong>Skip</strong> (if not exists), <strong>Run</strong> (subprocess).</p>
+<p>Claude could've done this whole loop from one prompt — you wrote the loop yourself, and that's the skill that carries into the app and the database.</p>
+</main>
 </body>
 </html>
