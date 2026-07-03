@@ -3,67 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DTC/312 Study Notes — Lessons 1–15</title>
+<title>DTC/312 Study Notes — Lessons 1–17</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --border: #2a2d3a;
-    --text: #e2e8f0;
-    --muted: #8892a4;
-    --accent: #7c6af7;
-    --green: #4ade80;
-    --code-bg: #12141e;
-    --code-text: #a5f3fc;
+    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+    --text: #e2e8f0; --muted: #8892a4; --accent: #7c6af7;
+    --code-bg: #12141e; --code-text: #a5f3fc;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
-    display: flex;
-    min-height: 100vh;
-  }
-  nav {
-    width: 240px;
-    flex-shrink: 0;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: 24px 0;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-  }
-  nav h2 {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    padding: 0 20px 12px;
-  }
-  nav a {
-    display: block;
-    padding: 6px 20px;
-    color: var(--muted);
-    text-decoration: none;
-    font-size: 13px;
-    border-left: 2px solid transparent;
-    transition: all .15s;
-  }
-  nav a:hover {
-    color: var(--text);
-    border-left-color: var(--accent);
-    background: rgba(124,106,247,.08);
-  }
-  main {
-    flex: 1;
-    max-width: 860px;
-    padding: 48px 64px 80px;
-    margin: 0 auto;
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; min-height: 100vh; }
+  nav { width: 240px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  nav h2 { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 20px 12px; }
+  nav a { display: block; padding: 6px 20px; color: var(--muted); text-decoration: none; font-size: 13px; border-left: 2px solid transparent; transition: all .15s; }
+  nav a:hover { color: var(--text); border-left-color: var(--accent); background: rgba(124,106,247,.08); }
+  main { flex: 1; max-width: 860px; padding: 48px 64px 80px; margin: 0 auto; }
   h1 { font-size: 1.7rem; color: #fff; margin: 2.5rem 0 .6rem; padding-top: .5rem; border-top: 1px solid var(--border); }
   h1:first-child { border-top: none; margin-top: 0; }
   h2 { font-size: 1.15rem; color: var(--accent); margin: 1.8rem 0 .5rem; }
@@ -72,84 +25,18 @@
   ul, ol { margin: .5rem 0 .5rem 1.4rem; }
   li { margin: .2rem 0; }
   a { color: var(--accent); }
-  code {
-    font-family: "JetBrains Mono", "Fira Code", monospace;
-    font-size: .88em;
-    background: var(--code-bg);
-    color: var(--code-text);
-    padding: .15em .4em;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-  }
-  pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 20px;
-    overflow-x: auto;
-    margin: .8rem 0;
-  }
-  pre code {
-    background: none;
-    border: none;
-    padding: 0;
-    font-size: .85rem;
-    color: #e2e8f0;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: .8rem 0;
-    font-size: .9rem;
-  }
-  th {
-    background: var(--surface);
-    color: var(--accent);
-    font-weight: 600;
-    text-align: left;
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-  }
-  td {
-    padding: 7px 12px;
-    border: 1px solid var(--border);
-    vertical-align: top;
-  }
+  code { font-family: "JetBrains Mono","Fira Code",monospace; font-size: .88em; background: var(--code-bg); color: var(--code-text); padding: .15em .4em; border-radius: 4px; border: 1px solid var(--border); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin: .8rem 0; }
+  pre code { background: none; border: none; padding: 0; font-size: .85rem; color: #e2e8f0; }
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0; font-size: .9rem; }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+  td { padding: 7px 12px; border: 1px solid var(--border); vertical-align: top; }
   tr:nth-child(even) td { background: rgba(255,255,255,.02); }
   hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
   strong { color: #fff; }
-  blockquote {
-    border-left: 3px solid var(--accent);
-    padding-left: 1rem;
-    color: var(--muted);
-    margin: .8rem 0;
-  }
-  .header-banner {
-    background: linear-gradient(135deg, #1a1d27 0%, #12141e 100%);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 28px 32px;
-    margin-bottom: 40px;
-  }
-  .header-banner h1 {
-    border: none;
-    margin: 0 0 6px;
-    font-size: 1.9rem;
-  }
+  .header-banner { background: linear-gradient(135deg,#1a1d27 0%,#12141e 100%); border: 1px solid var(--border); border-radius: 12px; padding: 28px 32px; margin-bottom: 40px; }
+  .header-banner h1 { border: none; margin: 0 0 6px; font-size: 1.9rem; }
   .header-banner p { color: var(--muted); margin: 0; }
-  .lesson-badge {
-    display: inline-block;
-    background: rgba(124,106,247,.15);
-    color: var(--accent);
-    border: 1px solid rgba(124,106,247,.3);
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    padding: 2px 8px;
-    margin-bottom: 6px;
-  }
 </style>
 </head>
 <body>
@@ -170,11 +57,13 @@
   <a href="#lesson-13-the-quiz-bot-variables-ifelse-exit-codes-failing-loudly">13 · Quiz Bot (bash)</a>
   <a href="#lesson-14-python-programs-variables-types-lists-loops">14 · Python basics</a>
   <a href="#lesson-15-write-the-real-quizzes-list-loop-skip-run">15 · Quiz Bot (Python)</a>
+  <a href="#lesson-16-inside-the-machine-inside-the-app">16 · Inside the Machine</a>
+  <a href="#lesson-17-direct-an-ai-to-build-your-live-app">17 · Direct an AI</a>
 </nav>
 <main>
   <div class="header-banner">
     <h1>DTC/312 Study Notes</h1>
-    <p>Lessons 1–15 &nbsp;·&nbsp; Terminal → Python → Quiz Bot</p>
+    <p>Lessons 1–17 &nbsp;·&nbsp; Terminal → Python → Quiz Bot → The Investment App</p>
   </div>
   <h1 id="lesson-1-the-terminal">Lesson 1: The Terminal</h1>
 <h2 id="what-is-the-terminal">What is the terminal?</h2>
@@ -1173,6 +1062,328 @@ for folder in sorted(glob.glob(&quot;decks/session-*&quot;)):     # LIST + LOOP
 </code></pre>
 <p>Every line is one of the four verbs: <strong>List</strong> (glob), <strong>Loop</strong> (for), <strong>Skip</strong> (if not exists), <strong>Run</strong> (subprocess).</p>
 <p>Claude could've done this whole loop from one prompt — you wrote the loop yourself, and that's the skill that carries into the app and the database.</p>
+<hr />
+<h1 id="lesson-16-inside-the-machine-inside-the-app">Lesson 16: Inside the Machine, Inside the App</h1>
+<p><strong>The investment app:</strong> Pretend money, real companies. It rides one story — the AI boom and the chain feeding it (compute → power → materials). You'll trade the companies whose chips you're about to study. Each buy or sell is a <strong>trade</strong>.</p>
+<h2 id="what-even-is-software">What even is software?</h2>
+<p>A computer on its own does nothing — it just sits there, metal and chips, waiting to be told what to do.</p>
+<ul>
+<li><strong>A program</strong> = a list of instructions that tells the computer exactly what to do, step by step</li>
+<li><strong>Software</strong> = just the everyday word for programs</li>
+</ul>
+<p>Your browser, Slack, a game, the camera on your phone — every one is a program. Your news bot and the web page you put up are programs too.</p>
+<h2 id="the-instructions-are-written-as-code">The instructions are written as code</h2>
+<p>You write a program's instructions as <strong>code</strong> — in a <strong>programming language</strong>. Your news bot is written in Python. Code is just those instructions in a form the computer can follow exactly. Normally a person writes every single line by hand. But you won't — at least not at first.</p>
+<p><strong>Vibe coding</strong> = you describe it; the AI writes the code. You say what you want in plain words → the AI writes the code → the app is made of parts you can now name. It makes building easy, but you still have to know <em>what to ask for</em>. You need to understand the machine and the app first, then vibe-code it.</p>
+<h2 id="the-four-parts-of-every-computer">The four parts of every computer</h2>
+<p>Every computer (laptop, phone, server) is built from the same few parts:</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Role</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CPU</strong></td>
+<td>The worker</td>
+<td>Does the actual work — runs the steps of a program</td>
+</tr>
+<tr>
+<td><strong>RAM</strong></td>
+<td>Fast, temporary space</td>
+<td>Where a running program holds what it's working on. Wiped when power's off</td>
+</tr>
+<tr>
+<td><strong>Disk</strong></td>
+<td>Storage</td>
+<td>Where files are saved. Kept when the power's off</td>
+</tr>
+<tr>
+<td><strong>Network</strong></td>
+<td>The connection</td>
+<td>How it sends and receives data over the internet</td>
+</tr>
+</tbody>
+</table>
+<h3 id="reading-a-real-spec-sheet-macbook-air-m5">Reading a real spec sheet (MacBook Air M5)</h3>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Spec</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU</td>
+<td>10 cores</td>
+<td>10 workers doing the work</td>
+</tr>
+<tr>
+<td>Memory (RAM)</td>
+<td>16 GB</td>
+<td>Fast temporary space a running program uses</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>512 GB SSD</td>
+<td>Where files are saved — about 32× bigger than RAM</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>8 cores</td>
+<td>The chip for graphics and AI math</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cpu-one-core-one-task-at-a-time">CPU: one core = one task at a time</h3>
+<p>A CPU is split into <strong>cores</strong> — each one is one worker. One worker does one thing at a time; more workers means more at once. A MacBook Air has 10 cores; your EC2 server has <strong>2</strong>. In Activity Monitor, a process's CPU% is of <em>one</em> core, not the whole chip.</p>
+<h3 id="ram-vs-disk-why-unsaved-work-disappears">RAM vs Disk: why unsaved work disappears</h3>
+<ul>
+<li><strong>RAM</strong> — fast, but temporary. A running program holds its work in RAM. Cut the power → it's wiped. Your unsaved page lived only here.</li>
+<li><strong>Disk</strong> — slower, but kept. Hit save and it's written to the disk. Keeps what's on it after the power's off.</li>
+</ul>
+<p>⌘S / Ctrl+S writes your work from RAM to the disk — like a tiny <code>git commit</code>. Data safely on disk is <strong>persistent</strong>. So our app needs somewhere real to put a trade — in RAM alone, it vanishes the moment the app restarts.</p>
+<h3 id="network-data-goes-out-data-comes-in">Network: data goes out, data comes in</h3>
+<p>The <strong>network</strong> is how a computer sends and receives data. Your server already works in both directions: your nginx page goes OUT to a visitor's browser; news comes IN from a news site. Later, the app will ask another computer for stock prices — that ask travels over this same network.</p>
+<h3 id="the-gpu-a-different-kind-of-chip">The GPU — a different kind of chip</h3>
+<p>The CPU and GPU are built for <strong>opposite</strong> jobs:</p>
+<table>
+<thead>
+<tr>
+<th>CPU</th>
+<th>GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A few big workers</td>
+<td>A crowd of tiny ones</td>
+</tr>
+<tr>
+<td>A handful of strong cores — great at complicated things, one after another</td>
+<td>Thousands of small cores doing simple math all at once</td>
+</tr>
+<tr>
+<td>What your laptop and server run on</td>
+<td>What <strong>runs AI</strong> — fills datacenters</td>
+</tr>
+</tbody>
+</table>
+<p>Your EC2 server has <strong>no GPU</strong> — you don't need one to host a site. But it's the chip everyone is racing to buy.</p>
+<p><strong>Why chips are in the news:</strong> The AI boom needs GPUs and memory faster than the world can make them. Shortages push prices up.
+- <strong>NVDA</strong> (NVIDIA — makes the GPUs): ~$4.7 trillion, the world's most valuable company
+- <strong>MU</strong> (Micron — makes the memory): up ~325% in 2026, on a record memory shortage</p>
+<p>You'll soon be trading these exact companies in the app you build.</p>
+<h3 id="ask-a-real-server-what-its-made-of">Ask a real server what it's made of</h3>
+<pre><code class="language-bash">nproc        # CPU — how many cores?  → 2
+free -h      # RAM — how much fast temporary space?  → ~1 GB
+df -h        # Disk — how much storage, how much free?  → 8 GB
+top          # everything at once, live — like Activity Monitor
+</code></pre>
+<p>This server is a <strong>t3.micro</strong>: 2 cores, ~1GB RAM, 8GB disk, no GPU. The exact numbers don't matter; what matters is that any machine answers the same way — the parts are the ones we just named.</p>
+<h2 id="what-makes-a-thing-an-app">What makes a thing an "app"?</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Scheduled script (news bot)</th>
+<th>Static site (nginx page)</th>
+<th>App (investment app)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Does something?</td>
+<td>Yes — one task</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Keeps data?</td>
+<td>No</td>
+<td>No</td>
+<td><strong>Yes ← the new thing</strong></td>
+</tr>
+<tr>
+<td>Always on?</td>
+<td>No — runs, then stops</td>
+<td>Yes, but fixed</td>
+<td>Yes — answers anyone</td>
+</tr>
+</tbody>
+</table>
+<p>The new thing an app does is <strong>keep what it's given</strong> — across visits, across restarts.</p>
+<h2 id="three-questions-our-app-must-answer">Three questions our app must answer</h2>
+<ol>
+<li><strong>Where does all its data live?</strong> — Prices, people, every trade — a lot to keep, and it must find any one piece fast. → <em>answered next</em></li>
+<li><strong>Where do live stock prices come from?</strong> — They move every second — we can't type them in ourselves. → <em>right after that</em></li>
+<li><strong>How do all the parts connect?</strong> — The page, the app, the data — wired together. → <em>at the end</em></li>
+</ol>
+<h3 id="question-1-we-need-to-organize-a-lot-of-data">Question 1: We need to organize a lot of data</h3>
+<p>Take one stock — NVIDIA. Already a fair bit to keep: symbol, name, price, market cap. Add every other company, every person, and every trade. That's a lot of data — and it all has to survive a restart.</p>
+<p><strong>Why not just a file?</strong> A file of every trade: <code>Ali bought 3 NVDA / Sam sold 1 MU / Ali bought 2 MU...</code> "What does Ali own right now?" → you'd read every line and add it up by hand, every time anyone loads the page. Slow, and easy to get wrong. We need storage we can look one thing up in instantly.</p>
+<p><strong>That's a database.</strong> A <strong>database</strong> keeps data in organized tables, so a program can find or update <em>any one thing</em> instantly. It lives on the disk — so it survives a restart. The one we'll use is called <strong>Postgres</strong>.</p>
+<pre><code class="language-sql">SELECT * FROM companies WHERE symbol = 'NVDA';
+-- → finds the NVIDIA row instantly
+</code></pre>
+<p>Tables in the app: <code>companies</code>, <code>trades</code>, <code>holdings</code>.</p>
+<h3 id="question-2-prices-never-stop-moving">Question 2: Prices never stop moving</h3>
+<p>Our app shows live stock prices — and they change every second. Typing them in by hand is hopeless: the moment you type one, it's already wrong. The prices have to come from <strong>outside</strong> our app.</p>
+<p><strong>You get them from a service (SaaS).</strong> Some companies track the market and publish prices in real time — that's their whole business. You use their service over the internet instead of building your own. That's <strong>SaaS</strong> — software as a service: software you use over the internet, run by someone else. Most have a free plan, fine for us. We'll pick one when we build.</p>
+<p><em>(Slides 21–40 not yet captured — resend remaining screenshots)</em></p>
+<hr />
+<h1 id="lesson-17-direct-an-ai-to-build-your-live-app">Lesson 17: Direct an AI to Build Your Live App</h1>
+<p><strong>Goal:</strong> You give one instruction; a working app on your own server comes out — then you take that instruction apart until you could have written it yourself.</p>
+<h2 id="the-finished-thing">The finished thing</h2>
+<p>A live web page, on a real server, on the internet right now. It shows one company, pretend money, real prices.</p>
+<p><strong>Vocabulary to know first:</strong>
+| Term | Meaning |
+|------|---------|
+| <strong>Share</strong> | A company is split into many tiny equal pieces; one piece is a share. Own one, you own that slice. |
+| <strong>Trade</strong> | Buying or selling a share |
+| <strong>Position</strong> | How many shares you hold right now |
+| <strong>Paper-trading</strong> | Pretend money, not real money — so you can't lose anything |</p>
+<p>On a Buy, the pretend cash goes <strong>down</strong> and the share you now own <strong>appears</strong>. By the end, this is <em>your</em> app, on <em>your</em> server, with a company <em>you</em> picked.</p>
+<h2 id="the-ai-agent-not-just-an-answerer">The AI agent — not just an answerer</h2>
+<p>The Claude Code you already met was a <strong>tutor</strong>: you asked a question, it answered. Today the same tool does something different — you tell it what to <strong>build</strong>, and it builds it.</p>
+<p>The real name for a tool that acts on its own like this: an <strong>agentic AI</strong>, an <strong>AI agent</strong>.</p>
+<p><strong>Before (as tutor):</strong> you ask a question → it answers (two steps, calm, it just talks)</p>
+<p><strong>Today (as agent):</strong> plan → write the code → run it (try it out) → read its own errors → <strong>fix</strong> → loops until it works</p>
+<p>The surprising part: it reads its own errors and fixes them.</p>
+<h2 id="your-two-real-jobs-direct-and-verify">Your two real jobs: direct and verify</h2>
+<p>You are not the typist anymore. You have two jobs, both hard:
+- <strong>Directing</strong> — say clearly what you want, with enough context
+- <strong>Verifying</strong> — use the app yourself and check it did what you asked</p>
+<p><strong>The golden rule:</strong> <code>it runs ≠ it's right ≠ I understand it</code></p>
+<p>The AI types, fast and all of it — but it can't tell if it built the right thing. You think and check; the AI types.</p>
+<h2 id="how-ai-coding-tools-got-here">How AI coding tools got here</h2>
+<p>Three generations:
+1. <strong>Autocomplete</strong> — finishes the word you're typing (code editors, since the 1990s)
+2. <strong>Suggests a line</strong> — AI writes the next line of code for you (~2021)
+3. <strong>Does whole tasks</strong> — plans, writes, runs, and fixes — an agent (2024–25, today)</p>
+<p>Same idea, bigger steps. That last one is where we are today.</p>
+<h2 id="the-agent-does-a-small-throwaway-job-first">The agent does a small throwaway job first</h2>
+<p>Before anything valuable rides on it, give the agent a harmless task and see the question-answerer become a <strong>doer</strong>:</p>
+<pre><code># type this to the agent, in plain words:
+Make a file called hello.txt, put the line &quot;it works&quot; in it, then read it back to me.
+
+# or, pointed at the server:
+Log into my server and tell me what's running on it.
+</code></pre>
+<p>It doesn't just tell you how — it goes and <strong>does it</strong>. That's the whole shift.</p>
+<h2 id="the-architecture-everything-on-one-server">The architecture: everything on one server</h2>
+<pre><code>YOUR BROWSER                YOUR ONE SERVER (EC2)
+the page you see     asks→  FLASK · the program
+shows: price/cash/position      receives the ask
+buttons: Buy / Sell             makes the change, records it
+                                sends back the new numbers
+writes nothing itself    ←shows POSTGRESQL · your data
+holds no secret key             cash · position · every money move
+
+                           FINNHUB KEY · secret
+                                lives ONLY on the server
+                                never sent to the browser
+                           ↕
+                           FINNHUB · outside service
+                                the real price comes from here
+</code></pre>
+<p>One box you own. Pretend money, nothing precious. The page only <strong>asks</strong> — the server makes every change and holds every secret.</p>
+<h2 id="give-the-agent-the-keys-ssh-access">Give the agent the keys — SSH access</h2>
+<p><strong>SSH access</strong> = permission to log into your server and run commands there — so the agent can reach your EC2, where everything runs.</p>
+<h2 id="brief-it-first-a-vague-brief-gets-a-vague-app">Brief it first — a vague brief gets a vague app</h2>
+<p>You don't shout an order. You <strong>brief</strong> the agent: what you're building, where, and the rules.</p>
+<table>
+<thead>
+<tr>
+<th>Vague</th>
+<th>Real brief</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"build me a stock app"</code> — agent guesses, wrong company, wrong money rules, wrong place</td>
+<td><code>"I'm a complete beginner… here's what I want… everything on this one server…"</code> — context, rules, and the exact shape</td>
+</tr>
+</tbody>
+</table>
+<p>Directing is real work. A vague brief gets a vague app.</p>
+<h2 id="approve-the-plan-before-it-runs">Approve the plan before it runs</h2>
+<p>With a big open-ended build, look at the plan (or a rough version) <strong>before</strong> it builds the real thing — so it doesn't build the wrong app and waste your effort. Cheap to redirect early; expensive to redirect after.</p>
+<p>Today's build is one clean paste — the instruction was pre-tested ahead of time so you go straight to a working build instead of failing for an hour.</p>
+<h2 id="paste-the-prepared-instruction-fill-three-blanks">Paste the prepared instruction — fill three blanks</h2>
+<p>The whole prepared instruction is one message. Fill in three things that are <strong>yours</strong>, then paste into Claude Code:</p>
+<pre><code>ssh -i &lt;path to your SSH key&gt; ubuntu@&lt;your server address&gt;
+Finnhub key:  &lt;your free key&gt;
+Company:      &lt;the ticker you picked, e.g. NVDA&gt;
+</code></pre>
+<p>A lot is about to scroll past. You are <strong>not</strong> meant to read or understand it now — watch for one thing: does a working page appear at the end?</p>
+<h2 id="the-instruction-you-ran-seven-plain-parts">The instruction you ran — seven plain parts</h2>
+<pre><code>context   — I'm a complete beginner; just build it, I'll watch. A small practice stock app,
+              pretend money, on my own server, anyone can open it in a browser.
+one server — the page, the program, and the data all on this one server; nothing else except
+              Finnhub for prices.
+the tools  — the standard way: Python + Flask, data in a PostgreSQL database. I'll learn each one later.
+the ask    — one company: name + price, $10,000 pretend cash, shares I own, Buy/Sell one share,
+              green if up / red if down.
+the rule   — only the server may change my cash or holdings; the page just asks; my key stays on the server.
+the record — write every money move as a new row you never edit or erase; add them up for my cash and shares.
+the data   — use my Finnhub key on the server to look up the real price, save it, show the saved price.
+stay up    — keep running after I log out; start again on its own if the server restarts.
+</code></pre>
+<h2 id="verify-never-trust-always-check">Verify — never trust, always check</h2>
+<p><strong>Is the price even right?</strong>
+- Open the page in your browser
+- Open the source — a news quote, or Finnhub's own number
+- Compare the two. Close enough (prices lag a few minutes) = it's real</p>
+<p>The <strong>method</strong> is worth more than the number.</p>
+<p><strong>Verify a trade: predict the change, then check it.</strong>
+Before Buy → predict: cash $10,000 → $9,799.91 (down by one share's price), shares 0 → 1.
+After Buy → check: cash $9,799.91 ✓, shares 1 ✓, up/down shown in green ✓.</p>
+<p>"The computer's probably right" is the trap — that's how you switch off and stop checking. Keep a plain record of ask → change; that's the habit that lasts.</p>
+<h2 id="take-it-apart-seven-lines-seven-things">Take it apart — seven lines, seven things</h2>
+<p><strong>Line 1 → context (the brief)</strong>
+"small practice app… pretend money… runs on my own server… anyone can open it" — no jargon, no code. Three phrases, three things it produced: practice·pretend money, my own server, anyone can open it.</p>
+<p><strong>Line 2 → the tools (Flask + PostgreSQL)</strong>
+- <strong>Flask</strong> = the program's <strong>framework</strong> — the standard, well-trodden way to write the program behind a web page in Python
+- <strong>PostgreSQL</strong> = the <strong>database</strong> — where the app keeps your cash, your shares, and every money move</p>
+<p>You'll learn what each one is in the next unit.</p>
+<p><strong>Line 3 → the ask (what's on the page)</strong>
+Every phrase points at one visible thing: one company → name + price; $10,000 pretend cash → the cash line; shares I own → your position; Buy/Sell → the two buttons; green up/red down → profit/loss. Up or down = what your shares are worth now vs. the average price you paid.</p>
+<p><strong>Line 4 → the rule (only the server changes your money)</strong>
+"only the server may change my cash or what I own; the page just asks; my key lives only on the server." The browser can <strong>knock</strong> — not reach in. Asks cross left, writes and keys stay right.</p>
+<p><strong>Line 5 → the honest record (the ledger)</strong>
+"write every money move as a new row you never edit or erase; add them up."</p>
+<p>Every trade = a new row appended. Cash and shares = sum of the list (derived, never stored as a running total):</p>
+<pre><code>10000 - 200.09 - 200.09 + 201.50 = 9801.32
+</code></pre>
+<p>Rows are only ever <strong>added</strong> — nothing above is ever edited or erased.</p>
+<p><strong>Line 6 → the data (your key, real prices)</strong>
+The Finnhub key lives on the <strong>server</strong>, never in the browser. Server looks up the price, saves it, page shows the saved copy. This is the line you leaned on when you checked the price was real.</p>
+<p><strong>Line 7 → stay up (always on)</strong>
+"keep running after I log out; start again if the server restarts."
+- After you log out: the app keeps running on the server — it doesn't stop when you close your laptop.
+- After a restart: the app starts itself again — the page is always there when someone opens the address.</p>
+<p>How it does that (services that restart themselves) is the next unit.</p>
+<h2 id="you-could-direct-this-yourself">You could direct this yourself</h2>
+<p>You can point at <strong>any line</strong> and say why it's there. There's no magic phrase — just a clear description of things you now understand. Seven plain lines, seven real parts of an app.</p>
+<h2 id="grow-it-by-directing-expect-some-mess">Grow it by directing — expect some mess</h2>
+<p>Bigger asks: "add the rest of these companies," "make it shareable," "change how it looks." The normal loop:</p>
+<p><strong>Big ask</strong> → <strong>Partial</strong> (does half, or gets one part wrong) → <strong>Re-prompt</strong> (say what's off, ask again) → <strong>Fix · verify</strong> (it corrects — then you check)</p>
+<p>This part is messy on purpose. A clean one-shot would be the surprise. <strong>Verify after each change.</strong></p>
+<h2 id="close-vibe-got-it-working-next-we-make-it-legible">Close: vibe got it working — next, we make it legible</h2>
+<p>Today: you made it work — directed and verified a real, live app.</p>
+<p>Next: <strong>True engineering</strong> — learn in detail how each part works (the database, the backend, the API) and harden the server. From vibe coding to true engineering: you feel the system first, then open up each part and learn how it works.</p>
+<h2 id="after-class-grow-your-own-app">After class: grow your own app</h2>
+<p>Direct your app with your <strong>own</strong> instructions — and verify each change:
+- <strong>Add companies</strong> — ask it to add more of the companies you care about
+- <strong>Change the look</strong> — tweak the colors, the layout — make it yours
+- <strong>Share it</strong> — send the link; it's pretend money, safe to share</p>
+<p>Stuck? Go up the ladder in order: read the error → ask Claude in the browser → ask Claude in the terminal → post in Slack. Not graded — the point is the reps.</p>
 </main>
 </body>
 </html>

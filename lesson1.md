@@ -1002,3 +1002,309 @@ for folder in sorted(glob.glob("decks/session-*")):     # LIST + LOOP
 Every line is one of the four verbs: **List** (glob), **Loop** (for), **Skip** (if not exists), **Run** (subprocess).
 
 Claude could've done this whole loop from one prompt — you wrote the loop yourself, and that's the skill that carries into the app and the database.
+
+---
+
+# Lesson 16: Inside the Machine, Inside the App
+
+**The investment app:** Pretend money, real companies. It rides one story — the AI boom and the chain feeding it (compute → power → materials). You'll trade the companies whose chips you're about to study. Each buy or sell is a **trade**.
+
+## What even is software?
+A computer on its own does nothing — it just sits there, metal and chips, waiting to be told what to do.
+
+- **A program** = a list of instructions that tells the computer exactly what to do, step by step
+- **Software** = just the everyday word for programs
+
+Your browser, Slack, a game, the camera on your phone — every one is a program. Your news bot and the web page you put up are programs too.
+
+## The instructions are written as code
+You write a program's instructions as **code** — in a **programming language**. Your news bot is written in Python. Code is just those instructions in a form the computer can follow exactly. Normally a person writes every single line by hand. But you won't — at least not at first.
+
+**Vibe coding** = you describe it; the AI writes the code. You say what you want in plain words → the AI writes the code → the app is made of parts you can now name. It makes building easy, but you still have to know *what to ask for*. You need to understand the machine and the app first, then vibe-code it.
+
+## The four parts of every computer
+Every computer (laptop, phone, server) is built from the same few parts:
+
+| Part | Role | Details |
+|------|------|---------|
+| **CPU** | The worker | Does the actual work — runs the steps of a program |
+| **RAM** | Fast, temporary space | Where a running program holds what it's working on. Wiped when power's off |
+| **Disk** | Storage | Where files are saved. Kept when the power's off |
+| **Network** | The connection | How it sends and receives data over the internet |
+
+### Reading a real spec sheet (MacBook Air M5)
+| Part | Spec | What it means |
+|------|------|---------------|
+| CPU | 10 cores | 10 workers doing the work |
+| Memory (RAM) | 16 GB | Fast temporary space a running program uses |
+| Storage | 512 GB SSD | Where files are saved — about 32× bigger than RAM |
+| GPU | 8 cores | The chip for graphics and AI math |
+
+### CPU: one core = one task at a time
+A CPU is split into **cores** — each one is one worker. One worker does one thing at a time; more workers means more at once. A MacBook Air has 10 cores; your EC2 server has **2**. In Activity Monitor, a process's CPU% is of *one* core, not the whole chip.
+
+### RAM vs Disk: why unsaved work disappears
+- **RAM** — fast, but temporary. A running program holds its work in RAM. Cut the power → it's wiped. Your unsaved page lived only here.
+- **Disk** — slower, but kept. Hit save and it's written to the disk. Keeps what's on it after the power's off.
+
+⌘S / Ctrl+S writes your work from RAM to the disk — like a tiny `git commit`. Data safely on disk is **persistent**. So our app needs somewhere real to put a trade — in RAM alone, it vanishes the moment the app restarts.
+
+### Network: data goes out, data comes in
+The **network** is how a computer sends and receives data. Your server already works in both directions: your nginx page goes OUT to a visitor's browser; news comes IN from a news site. Later, the app will ask another computer for stock prices — that ask travels over this same network.
+
+### The GPU — a different kind of chip
+The CPU and GPU are built for **opposite** jobs:
+
+| CPU | GPU |
+|-----|-----|
+| A few big workers | A crowd of tiny ones |
+| A handful of strong cores — great at complicated things, one after another | Thousands of small cores doing simple math all at once |
+| What your laptop and server run on | What **runs AI** — fills datacenters |
+
+Your EC2 server has **no GPU** — you don't need one to host a site. But it's the chip everyone is racing to buy.
+
+**Why chips are in the news:** The AI boom needs GPUs and memory faster than the world can make them. Shortages push prices up.
+- **NVDA** (NVIDIA — makes the GPUs): ~$4.7 trillion, the world's most valuable company
+- **MU** (Micron — makes the memory): up ~325% in 2026, on a record memory shortage
+
+You'll soon be trading these exact companies in the app you build.
+
+### Ask a real server what it's made of
+```bash
+nproc        # CPU — how many cores?  → 2
+free -h      # RAM — how much fast temporary space?  → ~1 GB
+df -h        # Disk — how much storage, how much free?  → 8 GB
+top          # everything at once, live — like Activity Monitor
+```
+This server is a **t3.micro**: 2 cores, ~1GB RAM, 8GB disk, no GPU. The exact numbers don't matter; what matters is that any machine answers the same way — the parts are the ones we just named.
+
+## What makes a thing an "app"?
+
+| | Scheduled script (news bot) | Static site (nginx page) | App (investment app) |
+|--|--|--|--|
+| Does something? | Yes — one task | No | Yes |
+| Keeps data? | No | No | **Yes ← the new thing** |
+| Always on? | No — runs, then stops | Yes, but fixed | Yes — answers anyone |
+
+The new thing an app does is **keep what it's given** — across visits, across restarts.
+
+## Three questions our app must answer
+
+1. **Where does all its data live?** — Prices, people, every trade — a lot to keep, and it must find any one piece fast. → *answered next*
+2. **Where do live stock prices come from?** — They move every second — we can't type them in ourselves. → *right after that*
+3. **How do all the parts connect?** — The page, the app, the data — wired together. → *at the end*
+
+### Question 1: We need to organize a lot of data
+Take one stock — NVIDIA. Already a fair bit to keep: symbol, name, price, market cap. Add every other company, every person, and every trade. That's a lot of data — and it all has to survive a restart.
+
+**Why not just a file?** A file of every trade: `Ali bought 3 NVDA / Sam sold 1 MU / Ali bought 2 MU...` "What does Ali own right now?" → you'd read every line and add it up by hand, every time anyone loads the page. Slow, and easy to get wrong. We need storage we can look one thing up in instantly.
+
+**That's a database.** A **database** keeps data in organized tables, so a program can find or update *any one thing* instantly. It lives on the disk — so it survives a restart. The one we'll use is called **Postgres**.
+
+```sql
+SELECT * FROM companies WHERE symbol = 'NVDA';
+-- → finds the NVIDIA row instantly
+```
+
+Tables in the app: `companies`, `trades`, `holdings`.
+
+### Question 2: Prices never stop moving
+Our app shows live stock prices — and they change every second. Typing them in by hand is hopeless: the moment you type one, it's already wrong. The prices have to come from **outside** our app.
+
+**You get them from a service (SaaS).** Some companies track the market and publish prices in real time — that's their whole business. You use their service over the internet instead of building your own. That's **SaaS** — software as a service: software you use over the internet, run by someone else. Most have a free plan, fine for us. We'll pick one when we build.
+
+*(Slides 21–40 not yet captured — resend remaining screenshots)*
+
+---
+
+# Lesson 17: Direct an AI to Build Your Live App
+
+**Goal:** You give one instruction; a working app on your own server comes out — then you take that instruction apart until you could have written it yourself.
+
+## The finished thing
+A live web page, on a real server, on the internet right now. It shows one company, pretend money, real prices.
+
+**Vocabulary to know first:**
+| Term | Meaning |
+|------|---------|
+| **Share** | A company is split into many tiny equal pieces; one piece is a share. Own one, you own that slice. |
+| **Trade** | Buying or selling a share |
+| **Position** | How many shares you hold right now |
+| **Paper-trading** | Pretend money, not real money — so you can't lose anything |
+
+On a Buy, the pretend cash goes **down** and the share you now own **appears**. By the end, this is *your* app, on *your* server, with a company *you* picked.
+
+## The AI agent — not just an answerer
+The Claude Code you already met was a **tutor**: you asked a question, it answered. Today the same tool does something different — you tell it what to **build**, and it builds it.
+
+The real name for a tool that acts on its own like this: an **agentic AI**, an **AI agent**.
+
+**Before (as tutor):** you ask a question → it answers (two steps, calm, it just talks)
+
+**Today (as agent):** plan → write the code → run it (try it out) → read its own errors → **fix** → loops until it works
+
+The surprising part: it reads its own errors and fixes them.
+
+## Your two real jobs: direct and verify
+You are not the typist anymore. You have two jobs, both hard:
+- **Directing** — say clearly what you want, with enough context
+- **Verifying** — use the app yourself and check it did what you asked
+
+**The golden rule:** `it runs ≠ it's right ≠ I understand it`
+
+The AI types, fast and all of it — but it can't tell if it built the right thing. You think and check; the AI types.
+
+## How AI coding tools got here
+Three generations:
+1. **Autocomplete** — finishes the word you're typing (code editors, since the 1990s)
+2. **Suggests a line** — AI writes the next line of code for you (~2021)
+3. **Does whole tasks** — plans, writes, runs, and fixes — an agent (2024–25, today)
+
+Same idea, bigger steps. That last one is where we are today.
+
+## The agent does a small throwaway job first
+Before anything valuable rides on it, give the agent a harmless task and see the question-answerer become a **doer**:
+```
+# type this to the agent, in plain words:
+Make a file called hello.txt, put the line "it works" in it, then read it back to me.
+
+# or, pointed at the server:
+Log into my server and tell me what's running on it.
+```
+It doesn't just tell you how — it goes and **does it**. That's the whole shift.
+
+## The architecture: everything on one server
+```
+YOUR BROWSER                YOUR ONE SERVER (EC2)
+the page you see     asks→  FLASK · the program
+shows: price/cash/position      receives the ask
+buttons: Buy / Sell             makes the change, records it
+                                sends back the new numbers
+writes nothing itself    ←shows POSTGRESQL · your data
+holds no secret key             cash · position · every money move
+
+                           FINNHUB KEY · secret
+                                lives ONLY on the server
+                                never sent to the browser
+                           ↕
+                           FINNHUB · outside service
+                                the real price comes from here
+```
+One box you own. Pretend money, nothing precious. The page only **asks** — the server makes every change and holds every secret.
+
+## Give the agent the keys — SSH access
+**SSH access** = permission to log into your server and run commands there — so the agent can reach your EC2, where everything runs.
+
+## Brief it first — a vague brief gets a vague app
+You don't shout an order. You **brief** the agent: what you're building, where, and the rules.
+
+| Vague | Real brief |
+|-------|-----------|
+| `"build me a stock app"` — agent guesses, wrong company, wrong money rules, wrong place | `"I'm a complete beginner… here's what I want… everything on this one server…"` — context, rules, and the exact shape |
+
+Directing is real work. A vague brief gets a vague app.
+
+## Approve the plan before it runs
+With a big open-ended build, look at the plan (or a rough version) **before** it builds the real thing — so it doesn't build the wrong app and waste your effort. Cheap to redirect early; expensive to redirect after.
+
+Today's build is one clean paste — the instruction was pre-tested ahead of time so you go straight to a working build instead of failing for an hour.
+
+## Paste the prepared instruction — fill three blanks
+The whole prepared instruction is one message. Fill in three things that are **yours**, then paste into Claude Code:
+
+```
+ssh -i <path to your SSH key> ubuntu@<your server address>
+Finnhub key:  <your free key>
+Company:      <the ticker you picked, e.g. NVDA>
+```
+
+A lot is about to scroll past. You are **not** meant to read or understand it now — watch for one thing: does a working page appear at the end?
+
+## The instruction you ran — seven plain parts
+```
+context   — I'm a complete beginner; just build it, I'll watch. A small practice stock app,
+              pretend money, on my own server, anyone can open it in a browser.
+one server — the page, the program, and the data all on this one server; nothing else except
+              Finnhub for prices.
+the tools  — the standard way: Python + Flask, data in a PostgreSQL database. I'll learn each one later.
+the ask    — one company: name + price, $10,000 pretend cash, shares I own, Buy/Sell one share,
+              green if up / red if down.
+the rule   — only the server may change my cash or holdings; the page just asks; my key stays on the server.
+the record — write every money move as a new row you never edit or erase; add them up for my cash and shares.
+the data   — use my Finnhub key on the server to look up the real price, save it, show the saved price.
+stay up    — keep running after I log out; start again on its own if the server restarts.
+```
+
+## Verify — never trust, always check
+
+**Is the price even right?**
+- Open the page in your browser
+- Open the source — a news quote, or Finnhub's own number
+- Compare the two. Close enough (prices lag a few minutes) = it's real
+
+The **method** is worth more than the number.
+
+**Verify a trade: predict the change, then check it.**
+Before Buy → predict: cash $10,000 → $9,799.91 (down by one share's price), shares 0 → 1.
+After Buy → check: cash $9,799.91 ✓, shares 1 ✓, up/down shown in green ✓.
+
+"The computer's probably right" is the trap — that's how you switch off and stop checking. Keep a plain record of ask → change; that's the habit that lasts.
+
+## Take it apart — seven lines, seven things
+
+**Line 1 → context (the brief)**
+"small practice app… pretend money… runs on my own server… anyone can open it" — no jargon, no code. Three phrases, three things it produced: practice·pretend money, my own server, anyone can open it.
+
+**Line 2 → the tools (Flask + PostgreSQL)**
+- **Flask** = the program's **framework** — the standard, well-trodden way to write the program behind a web page in Python
+- **PostgreSQL** = the **database** — where the app keeps your cash, your shares, and every money move
+
+You'll learn what each one is in the next unit.
+
+**Line 3 → the ask (what's on the page)**
+Every phrase points at one visible thing: one company → name + price; $10,000 pretend cash → the cash line; shares I own → your position; Buy/Sell → the two buttons; green up/red down → profit/loss. Up or down = what your shares are worth now vs. the average price you paid.
+
+**Line 4 → the rule (only the server changes your money)**
+"only the server may change my cash or what I own; the page just asks; my key lives only on the server." The browser can **knock** — not reach in. Asks cross left, writes and keys stay right.
+
+**Line 5 → the honest record (the ledger)**
+"write every money move as a new row you never edit or erase; add them up."
+
+Every trade = a new row appended. Cash and shares = sum of the list (derived, never stored as a running total):
+```
+10000 - 200.09 - 200.09 + 201.50 = 9801.32
+```
+Rows are only ever **added** — nothing above is ever edited or erased.
+
+**Line 6 → the data (your key, real prices)**
+The Finnhub key lives on the **server**, never in the browser. Server looks up the price, saves it, page shows the saved copy. This is the line you leaned on when you checked the price was real.
+
+**Line 7 → stay up (always on)**
+"keep running after I log out; start again if the server restarts."
+- After you log out: the app keeps running on the server — it doesn't stop when you close your laptop.
+- After a restart: the app starts itself again — the page is always there when someone opens the address.
+
+How it does that (services that restart themselves) is the next unit.
+
+## You could direct this yourself
+You can point at **any line** and say why it's there. There's no magic phrase — just a clear description of things you now understand. Seven plain lines, seven real parts of an app.
+
+## Grow it by directing — expect some mess
+Bigger asks: "add the rest of these companies," "make it shareable," "change how it looks." The normal loop:
+
+**Big ask** → **Partial** (does half, or gets one part wrong) → **Re-prompt** (say what's off, ask again) → **Fix · verify** (it corrects — then you check)
+
+This part is messy on purpose. A clean one-shot would be the surprise. **Verify after each change.**
+
+## Close: vibe got it working — next, we make it legible
+Today: you made it work — directed and verified a real, live app.
+
+Next: **True engineering** — learn in detail how each part works (the database, the backend, the API) and harden the server. From vibe coding to true engineering: you feel the system first, then open up each part and learn how it works.
+
+## After class: grow your own app
+Direct your app with your **own** instructions — and verify each change:
+- **Add companies** — ask it to add more of the companies you care about
+- **Change the look** — tweak the colors, the layout — make it yours
+- **Share it** — send the link; it's pretend money, safe to share
+
+Stuck? Go up the ladder in order: read the error → ask Claude in the browser → ask Claude in the terminal → post in Slack. Not graded — the point is the reps.
