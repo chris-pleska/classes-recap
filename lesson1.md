@@ -1308,3 +1308,435 @@ Direct your app with your **own** instructions — and verify each change:
 - **Share it** — send the link; it's pretend money, safe to share
 
 Stuck? Go up the ladder in order: read the error → ask Claude in the browser → ask Claude in the terminal → post in Slack. Not graded — the point is the reps.
+
+---
+
+# Lesson 18 — Ports and the Firewall: Who Can Reach Your Server
+
+## The Deal, Renegotiated
+
+Every time you asked what something really is — a database, a network, a firewall — you got the short version **on purpose**, so we could keep building. That deal ends today. One box at a time, in this order: The Machine (EC2), The Firewall, The Network, Storage, The Database.
+
+Same contract, other half: AI is back to being your tutor — it explains, **you** do. When you ask Claude anything about your server, end your prompt with *"do not change anything"* — Claude Code can act on your box, and those four words keep its hands off.
+
+---
+
+## What You Rented — The Virtual Machine
+
+Your EC2 instance is a **virtual machine** — a computer made by software. It behaves like a whole computer of your own, but no single physical box in the building IS your box.
+
+That "AWS building" is a real place: a **datacenter** — a warehouse packed with racks, thousands of screenless bare-metal servers, and enough cooling and power to keep them from melting. A region (e.g. `us-east-1`) is a city-sized *area*, not an address. AWS never publishes exactly where — a security matter. When one hiccups, a big region having a bad day can stall a large slice of the internet.
+
+**Virtualization** = making machines out of software instead of metal. One big physical server gets carved into many virtual ones.
+
+**Hypervisor** = the one program that runs on the physical server whose "programs" are entire machines. It hands out the slices and keeps the VMs from seeing each other.
+
+| Server type | Who's in charge |
+|---|---|
+| One server, one OS (bare metal) | OS owns the hardware directly |
+| One server, many VMs (cloud) | Hypervisor owns the hardware; each VM gets its own OS |
+
+Your server? It's one of the machines a hypervisor is running on some physical box in that building. That's what "launch instance" made.
+
+**Real resources, virtual slices:** The hypervisor assigns each VM a **vCPU** (virtual CPU = scheduled time on the real cores, not a chip soldered off for you). Your t3.micro slice: **2 vCPU · 1 GB RAM**. Your disk lives outside the box (a coming topic).
+
+**Virtualization names you'll hear:**
+- **VMware (ESXi)** — the big commercial one; runs many company datacenters
+- **KVM** — built right into Linux; free, open source, everywhere
+- **Microsoft Hyper-V** — the Windows world's hypervisor
+- **Xen** — what AWS ran on for years; a few old instance types still do
+- **AWS Nitro System** — AWS's own stripped-down hypervisor, built on KVM; what your t3.micro actually runs on
+
+**On-premises vs cloud vs hybrid:**
+- **On-premises** — company owns the physical servers in its own datacenter and runs the hypervisors itself. Still common today.
+- **Cloud** — someone else's datacenter, someone else's hypervisors — you rent VMs by the hour. The default for most companies and nearly every startup.
+- **Hybrid cloud** — both at once, connected. Common in banks and big enterprises.
+
+The cloud is not a different technology. It's **someone else's datacenter, someone else's hypervisors** — the exact machinery you just met, rented out.
+
+---
+
+## Live — Inside the Machine
+
+Five commands on the app's server (plus one bonus):
+
+```bash
+sudo dnf install htop   # htop is NOT preinstalled on Amazon Linux
+htop                    # the vCPUs and the RAM, moving in real time
+btop                    # optional: a nicer htop
+nproc                   # count the vCPUs
+free -h                 # the RAM slice, in human units
+df -h                   # the disk, seen from inside
+uname -a                # what OS and kernel this box reports
+```
+
+Reading htop: the two bars at the top are your **2 vCPUs** (mostly idle on a fresh box); `Mem` shows the RAM slice — ~913 MB, i.e. your 1 GB.
+
+---
+
+## Your Slice — Decoding t3.micro
+
+`t3.micro` = **t** (family) · **3** (generation) · **micro** (size)
+
+- Family = what the machine is shaped for
+- Generation = which hardware era it runs on
+- Size = how big your slice is
+
+**Machine families:**
+- `t`, `m` — **general purpose**: balanced CPU and RAM; your t3.micro lives here
+- `c` — **compute-heavy**: more CPU per GB of RAM; for number-crunching
+- `r` — **RAM-heavy**: much more RAM per core; for data that must sit in RAM ("memory optimized")
+- `g`, `p` — **GPU**: the graphics + AI chips; model-training machines
+
+**One line to keep: you pay for the shape you pick.**
+
+**Why t3.micro costs cents — burstable:**
+- `t` family: your slice shares its cores **aggressively** with neighbors and is allowed short bursts of full speed. Costs cents. Perfect for our app — it sits idle between visits.
+- `c` family: gets its cores **full-time**, no bursting, no sharing tricks. The price reflects that.
+
+**On-demand vs reserved — the money lever:**
+- **On-demand** — walk-up price; pay by the hour, start and stop anytime. Flexible, but the most expensive way to run something always on.
+- **Reserved** — commit to 1–3 years up front and AWS drops the rate hard — often ~40% off the very same instance.
+- Real numbers: a big compute box at ~$4.8/hr runs about $42,000/year on-demand. A 3-year reservation at ~40% off saves roughly $17,000 a year — on a single instance. Companies run hundreds of them.
+- **FinOps** = the real job of picking the right size and right commitment. Saving the company money on its cloud bill is one of the clearest reasons they hire you.
+
+---
+
+## The OS Inside
+
+**OS** = everything a machine ships with so programs can run and people can use it: the program-starter (launches and schedules every program), the file system (the folders and files you've been `cd`-ing through since week one), and users & permissions (`chmod`, `sudo`, who-may-do-what).
+
+Three OSes: **Linux** (servers — what your EC2 runs) · **macOS** (your laptop) · **Windows** (big-company desktops, PC gaming).
+
+From the VM picture: **every VM runs its own full OS** — that's what makes each one a whole machine.
+
+**The kernel** = the core of the OS (not the whole OS) — the engine of the car; the rest of the OS is the wheel, the body, the seats. The kernel is the **one program allowed to touch the hardware**.
+
+Your app, `psql`, `htop` — none of them touches the hardware. They ask the kernel. And in your VM, the kernel's "hardware" has a secret: the kernel asks what it *thinks* is hardware — **the hypervisor is answering**. That one sentence is the whole trick.
+
+**AMI (Amazon Machine Image)** = a frozen starting disk: OS pre-installed, ready to copy. "Launch instance" copies that image — your VM is born ready, OS and all. Remember picking an operating system on the launch page? That was you choosing the AMI.
+
+Two common picks:
+- **Amazon Linux 2023** — AWS's own Linux; package installer is `dnf`; your news-bot box was born from this one
+- **Ubuntu** — the other popular server Linux; installer is `apt`; log in as `ubuntu` instead of `ec2-user`; the vibe build used this one
+
+**Where AMIs come from:**
+- **Golden AMI** — one *you* make; snapshot a box you've set up just right, then launch identical copies from it. How teams keep servers consistent.
+- **Marketplace** — sold by a vendor, pre-loaded with their software. You pay the creator on top of the instance price.
+- **Community** — free, shared by anyone — and **unvetted**. AWS takes no responsibility for what's inside; verify before you trust one.
+
+Same mechanism every time: **a box is a copy of an image**. The only question is *whose* image.
+
+---
+
+## Live — The Instance Page
+
+Five facts on your instance page (EC2 → Instances → your instance):
+
+| Field | Example | What it means |
+|---|---|---|
+| Instance ID | i-0… | its name in AWS's books |
+| Instance type | t3.micro | decoded today — family · generation · size |
+| Instance state | Running | the VM the hypervisor is running for you |
+| AMI | ami-0… | the image it was born from — AL2023 or Ubuntu |
+| Storage · volume | 1 volume, 8 GB | the disk exists — a whole topic of its own, coming |
+
+---
+
+## Ports and the Firewall
+
+### The Callback — What You Actually Clicked, Weeks Ago
+
+When your server was launched, a thing called a **security group** got created, and two rules appeared in it. You clicked past them. They've been guarding your box ever since:
+
+| TYPE | PROTOCOL | PORT | SOURCE |
+|---|---|---|---|
+| HTTP | TCP | 80 | 0.0.0.0/0 |
+| SSH | TCP | 22 | 0.0.0.0/0 |
+
+`0.0.0.0/0` just means "from anywhere." By the end of this lesson you can read every column yourself.
+
+### A Port — The Numbered Ways Into a Machine
+
+Every machine has **65,535 ports**. A program picks one and **listens** on it (listens = waits there for connections). Port 80 = websites. Port 22 = SSH.
+
+Most ports sit silent — until a program picks one and listens.
+
+**`sudo ss -tlnp`** — see who's listening:
+- `-t` = TCP connections (the kind the web and SSH use)
+- `-l` = only ports being listened on
+- `-n` = show numbers, not names
+- `-p` = show the program
+
+```
+State   Local Address:Port   Process
+LISTEN  0.0.0.0:80           gunicorn   ← answering the web port
+LISTEN  0.0.0.0:22           sshd       ← how your terminal gets in
+LISTEN  127.0.0.1:5432       postgres   ← a port that matters in a later topic
+```
+
+**A port belongs to a program, not to magic.**
+
+### A Firewall — A Guard With a Written List
+
+A **firewall** checks every incoming connection against a written list of rules **before** it reaches any port. Every company has one. Your home router has one.
+
+Your app's security group = AWS's firewall, checked **before traffic ever reaches the machine**. It's an allow-list: not on it → turned away silently.
+
+**Reading the inbound rule:**
+
+| Column | Means |
+|---|---|
+| TYPE | which kind of traffic this rule is about |
+| PORT | which port it may reach |
+| SOURCE | who may connect (`0.0.0.0/0` = anyone) |
+
+### Live Demo — The Port-80 Rule Comes Out
+
+On the demo box: the port-80 rule is removed → site stops loading (checkable from any phone). But `ss` proves **gunicorn is still listening on 80**. The app never stopped.
+
+The rule goes back → site returns within seconds. Reversibility is part of the lesson.
+
+**The server never stopped — the firewall stopped letting traffic through.**
+
+### So Who Answers on Port 80?
+
+You already saw the name in the real output — `gunicorn`. Three programs between a visitor and your app:
+
+- **Flask** — what the app is *written with* (the framework from the build)
+- **gunicorn** — the program **answering port 80** — the name in the `ss` output
+- **systemd** — the **starter** — why the app came back after every reboot
+
+The mystery is closed: **you now know every program between a visitor and your app.** (We come back to all three when we open the app layer — today, only the names.)
+
+### Inbound, Outbound — And Why Replies Just Work
+
+- **Inbound** — who may connect *in*, to which ports (checked against the security group list)
+- **Outbound** — where your box may call *out* to (default: anywhere — e.g. the app calls the price service every day; no gate in this direction)
+- **Replies don't need their own rule** — a reply isn't a new connection. It rides back on the one the visitor already opened, and the security group remembers who opened it. That memory is called being **stateful**.
+
+### Port 22 Is Yours — SSH
+
+Every terminal session you've ever had with your server came in through **port 22** — past this exact rule.
+
+| Source option | Means | Trade-off |
+|---|---|---|
+| `0.0.0.0/0` | "anyone on the internet may try" | Trying ≠ entering — your SSH key still guards the login. What your rule says today. |
+| Your own IP | Only your address may even knock — safer | Your home IP changes; when it does, you're locked out until you update the rule. |
+
+No right answer to memorize — just know **what each choice means**.
+
+---
+
+## Take Home — Open Your Own Box + Firewall
+
+After class: run `htop`, `nproc`, `free -h`, `df -h`, `uname -a` on your own server; find the 5 facts on your instance page; do the kill-and-restore on your own box (revert step written first).
+
+**Done this lesson:** The machine opened (virtualization, slice, OS, kernel, AMI) · Ports decoded · Firewall and security group understood  
+**Next topic:** The Network — the street the machine lives on
+
+
+---
+
+# Lesson 19 — The Neighborhood: Where Your Server Lives
+
+The machine, opened. Its firewall, opened. Now zoom out: the box sits somewhere. Today — its addresses, how they really work, and the fenced network around them.
+
+---
+
+## What a Network Actually Is
+
+A **network** = computers that can pass messages to each other, each with an **address**. That's the whole definition.
+
+The **internet** = networks, connected to networks — nothing more mysterious than that. A home network, an office network, and AWS's network are all the same idea; the internet just connects them.
+
+---
+
+## You Already Own a Network — Your WiFi
+
+At home, the router runs a small network: every device gets an inside address like `192.168.0.5` — and the **whole house shows up to the internet as ONE address**.
+
+Your router is the little network's gatekeeper — it hands out inside addresses and carries everything in and out. The inside numbers repeat in every apartment in the building, and nothing breaks. Hold that thought.
+
+---
+
+## Your Box Has TWO Addresses
+
+The console shows both on the instance page, and `ip addr` on the box confirms the second:
+
+| Address | Example | What it means |
+|---|---|---|
+| **Public IP** | 3.91.24.7 | Reachable from the internet — the address behind the URL you've been visiting since the app went live |
+| **Private IP** | 172.31.5.14 | Only means something **inside its own fence** — like the `192.168` numbers at home |
+
+Hold the question: **why does every machine need two?** The answer starts with what this number actually *is*.
+
+---
+
+## An IP Address, Taken Apart
+
+An **IPv4** address is **four slots**, separated by dots. Each slot holds a number from **0 to 255** — that's one byte: 8 on/off switches, 256 combinations.
+
+`172 . 31 . 5 . 14` → Slot 1 · Slot 2 · Slot 3 · Slot 4
+
+Four slots × 256 choices each: **256 × 256 × 256 × 256 ≈ 4.3 billion possible addresses.**
+
+32 switches in total (4 slots × 8) — engineers call this a **32-bit address**.
+
+---
+
+## The Internet Ran Out of Addresses
+
+IPv4's ~4.3 billion addresses — **all handed out**. The world has far more phones, laptops, TVs, and servers than that.
+
+**The workaround the world picked: private addresses** — reuse the same inside-numbers behind every fence. That's why your box carries a private address next to its public one. Your WiFi has been doing this all along.
+
+You'll also see **IPv6** (e.g. `2600:1f18:4b2:...`) — the newer, enormously bigger scheme; nothing to do today.
+
+And that's why a box needs two addresses: four slots only make ~4.3 billion numbers — fewer than the world has devices. The workaround: **private addresses** — your WiFi has been doing it all along.
+
+---
+
+## Private Ranges — The Same Numbers in Every Fence
+
+Three blocks of addresses are reserved as **private**: they only mean something **inside a fence**, so every home, office, and cloud can reuse them without asking anyone:
+
+| Range | Who uses it |
+|---|---|
+| `192.168.x.x` | Home-router favorite — your WiFi uses this one |
+| `172.16–31.x.x` | The middle range — **AWS hands your box its `172.31…` address from here** |
+| `10.x.x.x` | The big one — offices and large companies |
+
+That's why your neighbor's laptop and yours can both be `192.168.0.5` and nothing breaks — and why a box needs a **public** address too, the moment the world must reach it. And that public address? **AWS only lends you one.**
+
+---
+
+## Elastic IP — A Public Address You Keep
+
+Your box's public IP is **borrowed** from AWS's pool. Stop the box and start it again — you get a **different number**, while your DNS record still points at the old one: **the site goes dark** until you fix the record.
+
+| Option | What happens |
+|---|---|
+| **Borrowed (default)** | Handed out at start, taken back at stop. Stop → start = a new number and a stale A record. |
+| **Elastic IP — reserved** | A public IPv4 reserved for your account: survives stop→start, moves to a replacement box in one click — **DNS never notices** |
+| **Price** | $0.005/hour ≈ $3.65/month for **any** public IPv4 (borrowed or reserved); the catch: a reserved one **keeps billing while idle** — box stopped, or not attached at all |
+
+Why does a number cost money? Only ~4.3 billion exist — AWS even caps you at **five per region**. Reserve one while it has a job, **release it when it doesn't**.
+
+New AWS accounts run on sign-up credits — this charge quietly eats them before you ever see a bill.
+
+---
+
+## CIDR — The /Number, Decoded
+
+`172.31.0.0/16` = where the block starts / switches locked (of the 32 total — here: the first two slots are fixed).
+
+Locked slots are fixed; the free slots make the block's **size**. Every 8 locked switches = one full slot:
+
+| Notation | Slots locked | Addresses | Example |
+|---|---|---|---|
+| `/8` | 1 slot locked | 16,777,216 | `10.0.0.0/8` — the big private range |
+| `/16` | 2 slots locked | 65,536 | `172.31.0.0/16` — remember this one |
+| `/24` | 3 slots locked | 256 | `192.168.0.0/24` — one home's worth |
+| `/32` | All 32 locked | 1 | Exactly one address |
+
+And the one you've met twice already: **`0.0.0.0/0`** = zero locked = **every address on the internet**. That's why the firewall rule's source column used it to mean "anyone."
+
+---
+
+## The VPC — Your Fenced Patch of AWS's Network
+
+**VPC** (Virtual Private Cloud) = your own fenced-off patch of AWS's network. What it owns is a block you can now read yourself: **`172.31.0.0/16`** — two slots locked, 65,536 private addresses. Yours since day one.
+
+The VPC is to your servers what your home WiFi is to your devices — **with you as the landlord**.
+
+---
+
+## Subnets — The VPC's Block, Split Up
+
+A **subnet** = a smaller block cut from the VPC's block — same CIDR idea, more switches locked. Slices never overlap.
+
+The rule that surprises everyone: **a machine never launches "into the VPC" — it always launches into one subnet.**
+
+Example: VPC block `172.31.0.0/16` →
+- Subnet `172.31.0.0/20` (4,096 addresses: `.0.0` – `.15.255`) — YOUR SERVER `172.31.5.14` lives here (`.5` sits between `.0` and `.15`)
+- Subnet `172.31.16.0/20` (4,096 addresses: `.16.0` – `.31.255`) — room for future machines
+- More slices as needed...
+
+Picture: streets inside a fenced neighborhood — the word to keep is **subnet**.
+
+---
+
+## Route Tables — The Subnet's Written Directions
+
+Your box sends a message. Its subnet decides the path with its **route table**: a short list of rows, each reading **"traffic going THERE → send it THIS way."**
+
+The first row you can already read yourself:
+
+| DESTINATION | TARGET | Meaning |
+|---|---|---|
+| `172.31.0.0/16` | **local** | Any address in the VPC's block → deliver directly, stay inside the fence |
+
+One row handles the whole neighborhood: box-to-box traffic **never leaves the fence**. But your box also calls the stock-price service on the internet every day — so there must be a second row.
+
+---
+
+## Everywhere Else → The Internet Gateway
+
+Complete route table:
+
+| DESTINATION | TARGET | Meaning |
+|---|---|---|
+| `172.31.0.0/16` | **local** | Inside the block → stay inside |
+| `0.0.0.0/0` | **igw-0a1b2c…** | Every address (zero locked!) → the internet gateway |
+
+The **internet gateway** = your VPC's **one way in or out**. Nothing in your fence reaches the internet — or is reached — except through this gateway. Built once per VPC, attached at the edge.
+
+When an inside address matches both rows, the rule is: **the more locked row wins** (`/16` beats `/0`) — so neighborhood traffic never accidentally leaves.
+
+---
+
+## Public or Private — One Line Decides
+
+| Subnet type | Route table has |
+|---|---|
+| **Public** | `172.31.0.0/16 → local` AND `0.0.0.0/0 → igw-…` |
+| **Private** | `172.31.0.0/16 → local` only — the gateway row is simply **missing** |
+
+A subnet is **public** if its route table includes "everywhere else → the internet gateway" — and **private** if that row is simply missing. **One missing row. That's the entire difference.** A database would love the private one.
+
+---
+
+## Live — Your Box's Subnet, Found in the Console
+
+Four clicks, every name taught in the last five slides — nothing new appears:
+
+Instance page (both IPs + VPC id) → **Its VPC** (the fence, `172.31.0.0/16`) → **Its subnet** (the `/20` slice the box launched into) → **Its route table** (both rows — local and `0.0.0.0/0 → igw-…`)
+
+---
+
+## The Whole Path — Follow One Request, Start to Finish
+
+Before any message travels, the browser asks **DNS** to turn the name into an address. Then the journey starts:
+
+1. A phone opens your app
+2. **DNS**: `yourapp.example` → `3.91.24.7`
+3. **The internet** (networks of networks)
+4. **Internet gateway** (the one way in)
+5. **Public subnet** `172.31.0.0/20` (its route table includes the gateway — that's what makes it public)
+6. **Security group** (the allow-list check: port 80 — on the list)
+7. **Your server** `172.31.5.14` — gunicorn answers → your app
+
+**name → address → internet → gateway → subnet → the allow-list → port 80 → the app. Every word is yours now.**
+
+---
+
+## Take Home — Find All of It on Your Own Account
+
+After class: find your two addresses on the instance page and with `ip addr`; do the four clicks (instance → VPC → subnet → route table); draw the request start to finish on your own copy — this drawing grows with every box you open.
+
+**Done this lesson:** The neighborhood, opened — IP addresses slot by slot, Elastic IPs, CIDR blocks, the VPC, subnets, route tables, the internet gateway  
+**Next topic:** Where your bytes live — the disk that isn't in the box, and storage that isn't a disk at all
+
+Optional: reading CIDR is the main line. Want to *calculate* any block by hand — odd masks like `/21` or `/27`, or splitting a VPC into equal subnets? Use a visual subnet calculator (linked in #class-26a) or just ask Claude.
+

@@ -3,69 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DTC/312 Study Notes — Lessons 1–17</title>
+<title>DTC/312 Study Notes</title>
 <style>
-  :root {
-    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
-    --text: #e2e8f0; --muted: #8892a4; --accent: #7c6af7;
-    --code-bg: #12141e; --code-text: #a5f3fc;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; min-height: 100vh; }
-  nav { width: 240px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-  nav h2 { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 0 20px 12px; }
-  nav a { display: block; padding: 6px 20px; color: var(--muted); text-decoration: none; font-size: 13px; border-left: 2px solid transparent; transition: all .15s; }
-  nav a:hover { color: var(--text); border-left-color: var(--accent); background: rgba(124,106,247,.08); }
-  main { flex: 1; max-width: 860px; padding: 48px 64px 80px; margin: 0 auto; }
-  h1 { font-size: 1.7rem; color: #fff; margin: 2.5rem 0 .6rem; padding-top: .5rem; border-top: 1px solid var(--border); }
-  h1:first-child { border-top: none; margin-top: 0; }
-  h2 { font-size: 1.15rem; color: var(--accent); margin: 1.8rem 0 .5rem; }
-  h3 { font-size: 1rem; color: #c4b5fd; margin: 1.3rem 0 .4rem; }
-  p { margin: .6rem 0; }
-  ul, ol { margin: .5rem 0 .5rem 1.4rem; }
-  li { margin: .2rem 0; }
-  a { color: var(--accent); }
-  code { font-family: "JetBrains Mono","Fira Code",monospace; font-size: .88em; background: var(--code-bg); color: var(--code-text); padding: .15em .4em; border-radius: 4px; border: 1px solid var(--border); }
-  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin: .8rem 0; }
-  pre code { background: none; border: none; padding: 0; font-size: .85rem; color: #e2e8f0; }
-  table { width: 100%; border-collapse: collapse; margin: .8rem 0; font-size: .9rem; }
-  th { background: var(--surface); color: var(--accent); font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
-  td { padding: 7px 12px; border: 1px solid var(--border); vertical-align: top; }
-  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
-  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
-  strong { color: #fff; }
-  .header-banner { background: linear-gradient(135deg,#1a1d27 0%,#12141e 100%); border: 1px solid var(--border); border-radius: 12px; padding: 28px 32px; margin-bottom: 40px; }
-  .header-banner h1 { border: none; margin: 0 0 6px; font-size: 1.9rem; }
-  .header-banner p { color: var(--muted); margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; display: flex; min-height: 100vh; }
+  nav { width: 260px; min-width: 220px; background: #161b22; border-right: 1px solid #30363d; padding: 24px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
+  nav h2 { color: #58a6ff; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+  nav ul { list-style: none; }
+  nav li { margin-bottom: 6px; }
+  nav a { color: #8b949e; text-decoration: none; font-size: 13px; display: block; padding: 4px 8px; border-radius: 6px; line-height: 1.4; }
+  nav a:hover { color: #c9d1d9; background: #21262d; }
+  main { flex: 1; padding: 40px 48px; max-width: 860px; }
+  h1 { color: #58a6ff; font-size: 26px; margin: 48px 0 16px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+  h1:first-of-type { margin-top: 0; }
+  h2 { color: #79c0ff; font-size: 19px; margin: 32px 0 12px; }
+  h3 { color: #a5d6ff; font-size: 16px; margin: 24px 0 8px; }
+  p { line-height: 1.7; margin-bottom: 12px; color: #c9d1d9; }
+  ul, ol { margin: 8px 0 12px 24px; line-height: 1.7; }
+  li { margin-bottom: 4px; }
+  code { background: #21262d; color: #e3b341; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', Consolas, monospace; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; }
+  pre code { background: none; padding: 0; color: #a9b7c6; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th { background: #21262d; color: #79c0ff; text-align: left; padding: 8px 12px; border: 1px solid #30363d; font-size: 14px; }
+  td { padding: 8px 12px; border: 1px solid #30363d; font-size: 14px; color: #c9d1d9; }
+  tr:nth-child(even) td { background: #161b22; }
+  strong { color: #e3b341; }
+  hr { border: none; border-top: 1px solid #30363d; margin: 40px 0; }
+  blockquote { border-left: 3px solid #58a6ff; padding-left: 16px; color: #8b949e; margin: 12px 0; }
 </style>
 </head>
 <body>
 <nav>
-  <h2>Lessons</h2>
-  <a href="#lesson-1-the-terminal">1 · Terminal</a>
-  <a href="#lesson-2-compose-commands-work-together">2 · Compose</a>
-  <a href="#lesson-3-session-04-pipes-search-and-the-path-drill">3 · Pipes & PATH</a>
-  <a href="#lesson-4-file-permissions-users-groups">4 · Permissions</a>
-  <a href="#lesson-5-git-github-never-losing-your-files">5 · Git & GitHub</a>
-  <a href="#lesson-6-servers-aws-ec2-linux">6 · Servers / EC2</a>
-  <a href="#lesson-7-ssh-networking-firewalls-find-it-log-in-guard-it">7 · SSH & Firewalls</a>
-  <a href="#lesson-8-dns-nginx-deploying-your-website-name-it-build-it-serve-it">8 · DNS & nginx</a>
-  <a href="#lesson-9-curl-http-https-tls-certificates-talk-to-it-lock-it-check-it">9 · curl & HTTPS</a>
-  <a href="#lesson-10-when-it-breaks-logs-the-triage-ladder-your-first-bot-look-check-build">10 · Logs & Triage</a>
-  <a href="#lesson-11-scripts-cron-secrets-manager-run-it-schedule-it-lock-it">11 · Scripts & cron</a>
-  <a href="#lesson-12-iam-give-your-server-an-identity">12 · IAM</a>
-  <a href="#lesson-13-the-quiz-bot-variables-ifelse-exit-codes-failing-loudly">13 · Quiz Bot (bash)</a>
-  <a href="#lesson-14-python-programs-variables-types-lists-loops">14 · Python basics</a>
-  <a href="#lesson-15-write-the-real-quizzes-list-loop-skip-run">15 · Quiz Bot (Python)</a>
-  <a href="#lesson-16-inside-the-machine-inside-the-app">16 · Inside the Machine</a>
-  <a href="#lesson-17-direct-an-ai-to-build-your-live-app">17 · Direct an AI</a>
+  <h2>DTC/312 Lessons</h2>
+  <ul>
+<li><a href="#lesson-1-the-terminal">Lesson 1: The Terminal</a></li>
+<li><a href="#lesson-2-compose-commands-work-together">Lesson 2: Compose — Commands Work Together</a></li>
+<li><a href="#lesson-3-session-04-pipes-search-and-the-path-drill">Lesson 3 (Session 04): Pipes, Search, and the Path Drill</a></li>
+<li><a href="#lesson-4-file-permissions-users-groups">Lesson 4: File Permissions, Users &amp; Groups</a></li>
+<li><a href="#lesson-5-git-github-never-losing-your-files">Lesson 5: Git &amp; GitHub — Never Losing Your Files</a></li>
+<li><a href="#lesson-6-servers-aws-ec2-linux">Lesson 6: Servers, AWS, EC2 &amp; Linux</a></li>
+<li><a href="#lesson-7-ssh-networking-firewalls-find-it-log-in-guard-it">Lesson 7: SSH, Networking &amp; Firewalls — Find It, Log In, Guard It</a></li>
+<li><a href="#lesson-8-dns-nginx-deploying-your-website-name-it-build-it-serve-it">Lesson 8: DNS, nginx &amp; Deploying Your Website — Name It, Build It, Serve It</a></li>
+<li><a href="#lesson-9-curl-http-https-tls-certificates-talk-to-it-lock-it-check-it">Lesson 9: curl, HTTP, HTTPS &amp; TLS Certificates — Talk to It, Lock It, Check It</a></li>
+<li><a href="#lesson-10-when-it-breaks-logs-the-triage-ladder-your-first-bot-look-check-build">Lesson 10: When It Breaks, Logs, the Triage Ladder &amp; Your First Bot — Look, Check, Build</a></li>
+<li><a href="#lesson-11-scripts-cron-secrets-manager-run-it-schedule-it-lock-it">Lesson 11: Scripts, cron &amp; Secrets Manager — Run It, Schedule It, Lock It</a></li>
+<li><a href="#lesson-12-iam-give-your-server-an-identity">Lesson 12: IAM — Give Your Server an Identity</a></li>
+<li><a href="#lesson-13-the-quiz-bot-variables-ifelse-exit-codes-failing-loudly">Lesson 13: The Quiz Bot — Variables, if/else, Exit Codes &amp; Failing Loudly</a></li>
+<li><a href="#lesson-14-python-programs-variables-types-lists-loops">Lesson 14: Python — Programs, Variables, Types, Lists &amp; Loops</a></li>
+<li><a href="#lesson-15-write-the-real-quizzes-list-loop-skip-run">Lesson 15: Write the Real Quizzes — List, Loop, Skip, Run</a></li>
+<li><a href="#lesson-16-inside-the-machine-inside-the-app">Lesson 16: Inside the Machine, Inside the App</a></li>
+<li><a href="#lesson-17-direct-an-ai-to-build-your-live-app">Lesson 17: Direct an AI to Build Your Live App</a></li>
+<li><a href="#lesson-18-ports-and-the-firewall-who-can-reach-your-server">Lesson 18 — Ports and the Firewall: Who Can Reach Your Server</a></li>
+<li><a href="#lesson-19-the-neighborhood-where-your-server-lives">Lesson 19 — The Neighborhood: Where Your Server Lives</a></li>
+  </ul>
 </nav>
 <main>
-  <div class="header-banner">
-    <h1>DTC/312 Study Notes</h1>
-    <p>Lessons 1–17 &nbsp;·&nbsp; Terminal → Python → Quiz Bot → The Investment App</p>
-  </div>
-  <h1 id="lesson-1-the-terminal">Lesson 1: The Terminal</h1>
+<h1 id="lesson-1-the-terminal">Lesson 1: The Terminal</h1>
 <h2 id="what-is-the-terminal">What is the terminal?</h2>
 <p>The terminal is a text interface to your computer. Instead of clicking icons, you type commands. The computer does exactly what you type — no more, no less.</p>
 <p>The <strong>shell</strong> (bash) is the program that reads your commands and runs them.</p>
@@ -1384,6 +1378,499 @@ The Finnhub key lives on the <strong>server</strong>, never in the browser. Serv
 - <strong>Change the look</strong> — tweak the colors, the layout — make it yours
 - <strong>Share it</strong> — send the link; it's pretend money, safe to share</p>
 <p>Stuck? Go up the ladder in order: read the error → ask Claude in the browser → ask Claude in the terminal → post in Slack. Not graded — the point is the reps.</p>
+<hr />
+<h1 id="lesson-18-ports-and-the-firewall-who-can-reach-your-server">Lesson 18 — Ports and the Firewall: Who Can Reach Your Server</h1>
+<h2 id="the-deal-renegotiated">The Deal, Renegotiated</h2>
+<p>Every time you asked what something really is — a database, a network, a firewall — you got the short version <strong>on purpose</strong>, so we could keep building. That deal ends today. One box at a time, in this order: The Machine (EC2), The Firewall, The Network, Storage, The Database.</p>
+<p>Same contract, other half: AI is back to being your tutor — it explains, <strong>you</strong> do. When you ask Claude anything about your server, end your prompt with <em>"do not change anything"</em> — Claude Code can act on your box, and those four words keep its hands off.</p>
+<hr />
+<h2 id="what-you-rented-the-virtual-machine">What You Rented — The Virtual Machine</h2>
+<p>Your EC2 instance is a <strong>virtual machine</strong> — a computer made by software. It behaves like a whole computer of your own, but no single physical box in the building IS your box.</p>
+<p>That "AWS building" is a real place: a <strong>datacenter</strong> — a warehouse packed with racks, thousands of screenless bare-metal servers, and enough cooling and power to keep them from melting. A region (e.g. <code>us-east-1</code>) is a city-sized <em>area</em>, not an address. AWS never publishes exactly where — a security matter. When one hiccups, a big region having a bad day can stall a large slice of the internet.</p>
+<p><strong>Virtualization</strong> = making machines out of software instead of metal. One big physical server gets carved into many virtual ones.</p>
+<p><strong>Hypervisor</strong> = the one program that runs on the physical server whose "programs" are entire machines. It hands out the slices and keeps the VMs from seeing each other.</p>
+<table>
+<thead>
+<tr>
+<th>Server type</th>
+<th>Who's in charge</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One server, one OS (bare metal)</td>
+<td>OS owns the hardware directly</td>
+</tr>
+<tr>
+<td>One server, many VMs (cloud)</td>
+<td>Hypervisor owns the hardware; each VM gets its own OS</td>
+</tr>
+</tbody>
+</table>
+<p>Your server? It's one of the machines a hypervisor is running on some physical box in that building. That's what "launch instance" made.</p>
+<p><strong>Real resources, virtual slices:</strong> The hypervisor assigns each VM a <strong>vCPU</strong> (virtual CPU = scheduled time on the real cores, not a chip soldered off for you). Your t3.micro slice: <strong>2 vCPU · 1 GB RAM</strong>. Your disk lives outside the box (a coming topic).</p>
+<p><strong>Virtualization names you'll hear:</strong>
+- <strong>VMware (ESXi)</strong> — the big commercial one; runs many company datacenters
+- <strong>KVM</strong> — built right into Linux; free, open source, everywhere
+- <strong>Microsoft Hyper-V</strong> — the Windows world's hypervisor
+- <strong>Xen</strong> — what AWS ran on for years; a few old instance types still do
+- <strong>AWS Nitro System</strong> — AWS's own stripped-down hypervisor, built on KVM; what your t3.micro actually runs on</p>
+<p><strong>On-premises vs cloud vs hybrid:</strong>
+- <strong>On-premises</strong> — company owns the physical servers in its own datacenter and runs the hypervisors itself. Still common today.
+- <strong>Cloud</strong> — someone else's datacenter, someone else's hypervisors — you rent VMs by the hour. The default for most companies and nearly every startup.
+- <strong>Hybrid cloud</strong> — both at once, connected. Common in banks and big enterprises.</p>
+<p>The cloud is not a different technology. It's <strong>someone else's datacenter, someone else's hypervisors</strong> — the exact machinery you just met, rented out.</p>
+<hr />
+<h2 id="live-inside-the-machine">Live — Inside the Machine</h2>
+<p>Five commands on the app's server (plus one bonus):</p>
+<pre><code class="language-bash">sudo dnf install htop   # htop is NOT preinstalled on Amazon Linux
+htop                    # the vCPUs and the RAM, moving in real time
+btop                    # optional: a nicer htop
+nproc                   # count the vCPUs
+free -h                 # the RAM slice, in human units
+df -h                   # the disk, seen from inside
+uname -a                # what OS and kernel this box reports
+</code></pre>
+<p>Reading htop: the two bars at the top are your <strong>2 vCPUs</strong> (mostly idle on a fresh box); <code>Mem</code> shows the RAM slice — ~913 MB, i.e. your 1 GB.</p>
+<hr />
+<h2 id="your-slice-decoding-t3micro">Your Slice — Decoding t3.micro</h2>
+<p><code>t3.micro</code> = <strong>t</strong> (family) · <strong>3</strong> (generation) · <strong>micro</strong> (size)</p>
+<ul>
+<li>Family = what the machine is shaped for</li>
+<li>Generation = which hardware era it runs on</li>
+<li>Size = how big your slice is</li>
+</ul>
+<p><strong>Machine families:</strong>
+- <code>t</code>, <code>m</code> — <strong>general purpose</strong>: balanced CPU and RAM; your t3.micro lives here
+- <code>c</code> — <strong>compute-heavy</strong>: more CPU per GB of RAM; for number-crunching
+- <code>r</code> — <strong>RAM-heavy</strong>: much more RAM per core; for data that must sit in RAM ("memory optimized")
+- <code>g</code>, <code>p</code> — <strong>GPU</strong>: the graphics + AI chips; model-training machines</p>
+<p><strong>One line to keep: you pay for the shape you pick.</strong></p>
+<p><strong>Why t3.micro costs cents — burstable:</strong>
+- <code>t</code> family: your slice shares its cores <strong>aggressively</strong> with neighbors and is allowed short bursts of full speed. Costs cents. Perfect for our app — it sits idle between visits.
+- <code>c</code> family: gets its cores <strong>full-time</strong>, no bursting, no sharing tricks. The price reflects that.</p>
+<p><strong>On-demand vs reserved — the money lever:</strong>
+- <strong>On-demand</strong> — walk-up price; pay by the hour, start and stop anytime. Flexible, but the most expensive way to run something always on.
+- <strong>Reserved</strong> — commit to 1–3 years up front and AWS drops the rate hard — often ~40% off the very same instance.
+- Real numbers: a big compute box at ~$4.8/hr runs about $42,000/year on-demand. A 3-year reservation at ~40% off saves roughly $17,000 a year — on a single instance. Companies run hundreds of them.
+- <strong>FinOps</strong> = the real job of picking the right size and right commitment. Saving the company money on its cloud bill is one of the clearest reasons they hire you.</p>
+<hr />
+<h2 id="the-os-inside">The OS Inside</h2>
+<p><strong>OS</strong> = everything a machine ships with so programs can run and people can use it: the program-starter (launches and schedules every program), the file system (the folders and files you've been <code>cd</code>-ing through since week one), and users &amp; permissions (<code>chmod</code>, <code>sudo</code>, who-may-do-what).</p>
+<p>Three OSes: <strong>Linux</strong> (servers — what your EC2 runs) · <strong>macOS</strong> (your laptop) · <strong>Windows</strong> (big-company desktops, PC gaming).</p>
+<p>From the VM picture: <strong>every VM runs its own full OS</strong> — that's what makes each one a whole machine.</p>
+<p><strong>The kernel</strong> = the core of the OS (not the whole OS) — the engine of the car; the rest of the OS is the wheel, the body, the seats. The kernel is the <strong>one program allowed to touch the hardware</strong>.</p>
+<p>Your app, <code>psql</code>, <code>htop</code> — none of them touches the hardware. They ask the kernel. And in your VM, the kernel's "hardware" has a secret: the kernel asks what it <em>thinks</em> is hardware — <strong>the hypervisor is answering</strong>. That one sentence is the whole trick.</p>
+<p><strong>AMI (Amazon Machine Image)</strong> = a frozen starting disk: OS pre-installed, ready to copy. "Launch instance" copies that image — your VM is born ready, OS and all. Remember picking an operating system on the launch page? That was you choosing the AMI.</p>
+<p>Two common picks:
+- <strong>Amazon Linux 2023</strong> — AWS's own Linux; package installer is <code>dnf</code>; your news-bot box was born from this one
+- <strong>Ubuntu</strong> — the other popular server Linux; installer is <code>apt</code>; log in as <code>ubuntu</code> instead of <code>ec2-user</code>; the vibe build used this one</p>
+<p><strong>Where AMIs come from:</strong>
+- <strong>Golden AMI</strong> — one <em>you</em> make; snapshot a box you've set up just right, then launch identical copies from it. How teams keep servers consistent.
+- <strong>Marketplace</strong> — sold by a vendor, pre-loaded with their software. You pay the creator on top of the instance price.
+- <strong>Community</strong> — free, shared by anyone — and <strong>unvetted</strong>. AWS takes no responsibility for what's inside; verify before you trust one.</p>
+<p>Same mechanism every time: <strong>a box is a copy of an image</strong>. The only question is <em>whose</em> image.</p>
+<hr />
+<h2 id="live-the-instance-page">Live — The Instance Page</h2>
+<p>Five facts on your instance page (EC2 → Instances → your instance):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Example</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Instance ID</td>
+<td>i-0…</td>
+<td>its name in AWS's books</td>
+</tr>
+<tr>
+<td>Instance type</td>
+<td>t3.micro</td>
+<td>decoded today — family · generation · size</td>
+</tr>
+<tr>
+<td>Instance state</td>
+<td>Running</td>
+<td>the VM the hypervisor is running for you</td>
+</tr>
+<tr>
+<td>AMI</td>
+<td>ami-0…</td>
+<td>the image it was born from — AL2023 or Ubuntu</td>
+</tr>
+<tr>
+<td>Storage · volume</td>
+<td>1 volume, 8 GB</td>
+<td>the disk exists — a whole topic of its own, coming</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ports-and-the-firewall">Ports and the Firewall</h2>
+<h3 id="the-callback-what-you-actually-clicked-weeks-ago">The Callback — What You Actually Clicked, Weeks Ago</h3>
+<p>When your server was launched, a thing called a <strong>security group</strong> got created, and two rules appeared in it. You clicked past them. They've been guarding your box ever since:</p>
+<table>
+<thead>
+<tr>
+<th>TYPE</th>
+<th>PROTOCOL</th>
+<th>PORT</th>
+<th>SOURCE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP</td>
+<td>TCP</td>
+<td>80</td>
+<td>0.0.0.0/0</td>
+</tr>
+<tr>
+<td>SSH</td>
+<td>TCP</td>
+<td>22</td>
+<td>0.0.0.0/0</td>
+</tr>
+</tbody>
+</table>
+<p><code>0.0.0.0/0</code> just means "from anywhere." By the end of this lesson you can read every column yourself.</p>
+<h3 id="a-port-the-numbered-ways-into-a-machine">A Port — The Numbered Ways Into a Machine</h3>
+<p>Every machine has <strong>65,535 ports</strong>. A program picks one and <strong>listens</strong> on it (listens = waits there for connections). Port 80 = websites. Port 22 = SSH.</p>
+<p>Most ports sit silent — until a program picks one and listens.</p>
+<p><strong><code>sudo ss -tlnp</code></strong> — see who's listening:
+- <code>-t</code> = TCP connections (the kind the web and SSH use)
+- <code>-l</code> = only ports being listened on
+- <code>-n</code> = show numbers, not names
+- <code>-p</code> = show the program</p>
+<pre><code>State   Local Address:Port   Process
+LISTEN  0.0.0.0:80           gunicorn   ← answering the web port
+LISTEN  0.0.0.0:22           sshd       ← how your terminal gets in
+LISTEN  127.0.0.1:5432       postgres   ← a port that matters in a later topic
+</code></pre>
+<p><strong>A port belongs to a program, not to magic.</strong></p>
+<h3 id="a-firewall-a-guard-with-a-written-list">A Firewall — A Guard With a Written List</h3>
+<p>A <strong>firewall</strong> checks every incoming connection against a written list of rules <strong>before</strong> it reaches any port. Every company has one. Your home router has one.</p>
+<p>Your app's security group = AWS's firewall, checked <strong>before traffic ever reaches the machine</strong>. It's an allow-list: not on it → turned away silently.</p>
+<p><strong>Reading the inbound rule:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TYPE</td>
+<td>which kind of traffic this rule is about</td>
+</tr>
+<tr>
+<td>PORT</td>
+<td>which port it may reach</td>
+</tr>
+<tr>
+<td>SOURCE</td>
+<td>who may connect (<code>0.0.0.0/0</code> = anyone)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="live-demo-the-port-80-rule-comes-out">Live Demo — The Port-80 Rule Comes Out</h3>
+<p>On the demo box: the port-80 rule is removed → site stops loading (checkable from any phone). But <code>ss</code> proves <strong>gunicorn is still listening on 80</strong>. The app never stopped.</p>
+<p>The rule goes back → site returns within seconds. Reversibility is part of the lesson.</p>
+<p><strong>The server never stopped — the firewall stopped letting traffic through.</strong></p>
+<h3 id="so-who-answers-on-port-80">So Who Answers on Port 80?</h3>
+<p>You already saw the name in the real output — <code>gunicorn</code>. Three programs between a visitor and your app:</p>
+<ul>
+<li><strong>Flask</strong> — what the app is <em>written with</em> (the framework from the build)</li>
+<li><strong>gunicorn</strong> — the program <strong>answering port 80</strong> — the name in the <code>ss</code> output</li>
+<li><strong>systemd</strong> — the <strong>starter</strong> — why the app came back after every reboot</li>
+</ul>
+<p>The mystery is closed: <strong>you now know every program between a visitor and your app.</strong> (We come back to all three when we open the app layer — today, only the names.)</p>
+<h3 id="inbound-outbound-and-why-replies-just-work">Inbound, Outbound — And Why Replies Just Work</h3>
+<ul>
+<li><strong>Inbound</strong> — who may connect <em>in</em>, to which ports (checked against the security group list)</li>
+<li><strong>Outbound</strong> — where your box may call <em>out</em> to (default: anywhere — e.g. the app calls the price service every day; no gate in this direction)</li>
+<li><strong>Replies don't need their own rule</strong> — a reply isn't a new connection. It rides back on the one the visitor already opened, and the security group remembers who opened it. That memory is called being <strong>stateful</strong>.</li>
+</ul>
+<h3 id="port-22-is-yours-ssh">Port 22 Is Yours — SSH</h3>
+<p>Every terminal session you've ever had with your server came in through <strong>port 22</strong> — past this exact rule.</p>
+<table>
+<thead>
+<tr>
+<th>Source option</th>
+<th>Means</th>
+<th>Trade-off</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0.0.0.0/0</code></td>
+<td>"anyone on the internet may try"</td>
+<td>Trying ≠ entering — your SSH key still guards the login. What your rule says today.</td>
+</tr>
+<tr>
+<td>Your own IP</td>
+<td>Only your address may even knock — safer</td>
+<td>Your home IP changes; when it does, you're locked out until you update the rule.</td>
+</tr>
+</tbody>
+</table>
+<p>No right answer to memorize — just know <strong>what each choice means</strong>.</p>
+<hr />
+<h2 id="take-home-open-your-own-box-firewall">Take Home — Open Your Own Box + Firewall</h2>
+<p>After class: run <code>htop</code>, <code>nproc</code>, <code>free -h</code>, <code>df -h</code>, <code>uname -a</code> on your own server; find the 5 facts on your instance page; do the kill-and-restore on your own box (revert step written first).</p>
+<p><strong>Done this lesson:</strong> The machine opened (virtualization, slice, OS, kernel, AMI) · Ports decoded · Firewall and security group understood<br />
+<strong>Next topic:</strong> The Network — the street the machine lives on</p>
+<hr />
+<h1 id="lesson-19-the-neighborhood-where-your-server-lives">Lesson 19 — The Neighborhood: Where Your Server Lives</h1>
+<p>The machine, opened. Its firewall, opened. Now zoom out: the box sits somewhere. Today — its addresses, how they really work, and the fenced network around them.</p>
+<hr />
+<h2 id="what-a-network-actually-is">What a Network Actually Is</h2>
+<p>A <strong>network</strong> = computers that can pass messages to each other, each with an <strong>address</strong>. That's the whole definition.</p>
+<p>The <strong>internet</strong> = networks, connected to networks — nothing more mysterious than that. A home network, an office network, and AWS's network are all the same idea; the internet just connects them.</p>
+<hr />
+<h2 id="you-already-own-a-network-your-wifi">You Already Own a Network — Your WiFi</h2>
+<p>At home, the router runs a small network: every device gets an inside address like <code>192.168.0.5</code> — and the <strong>whole house shows up to the internet as ONE address</strong>.</p>
+<p>Your router is the little network's gatekeeper — it hands out inside addresses and carries everything in and out. The inside numbers repeat in every apartment in the building, and nothing breaks. Hold that thought.</p>
+<hr />
+<h2 id="your-box-has-two-addresses">Your Box Has TWO Addresses</h2>
+<p>The console shows both on the instance page, and <code>ip addr</code> on the box confirms the second:</p>
+<table>
+<thead>
+<tr>
+<th>Address</th>
+<th>Example</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public IP</strong></td>
+<td>3.91.24.7</td>
+<td>Reachable from the internet — the address behind the URL you've been visiting since the app went live</td>
+</tr>
+<tr>
+<td><strong>Private IP</strong></td>
+<td>172.31.5.14</td>
+<td>Only means something <strong>inside its own fence</strong> — like the <code>192.168</code> numbers at home</td>
+</tr>
+</tbody>
+</table>
+<p>Hold the question: <strong>why does every machine need two?</strong> The answer starts with what this number actually <em>is</em>.</p>
+<hr />
+<h2 id="an-ip-address-taken-apart">An IP Address, Taken Apart</h2>
+<p>An <strong>IPv4</strong> address is <strong>four slots</strong>, separated by dots. Each slot holds a number from <strong>0 to 255</strong> — that's one byte: 8 on/off switches, 256 combinations.</p>
+<p><code>172 . 31 . 5 . 14</code> → Slot 1 · Slot 2 · Slot 3 · Slot 4</p>
+<p>Four slots × 256 choices each: <strong>256 × 256 × 256 × 256 ≈ 4.3 billion possible addresses.</strong></p>
+<p>32 switches in total (4 slots × 8) — engineers call this a <strong>32-bit address</strong>.</p>
+<hr />
+<h2 id="the-internet-ran-out-of-addresses">The Internet Ran Out of Addresses</h2>
+<p>IPv4's ~4.3 billion addresses — <strong>all handed out</strong>. The world has far more phones, laptops, TVs, and servers than that.</p>
+<p><strong>The workaround the world picked: private addresses</strong> — reuse the same inside-numbers behind every fence. That's why your box carries a private address next to its public one. Your WiFi has been doing this all along.</p>
+<p>You'll also see <strong>IPv6</strong> (e.g. <code>2600:1f18:4b2:...</code>) — the newer, enormously bigger scheme; nothing to do today.</p>
+<p>And that's why a box needs two addresses: four slots only make ~4.3 billion numbers — fewer than the world has devices. The workaround: <strong>private addresses</strong> — your WiFi has been doing it all along.</p>
+<hr />
+<h2 id="private-ranges-the-same-numbers-in-every-fence">Private Ranges — The Same Numbers in Every Fence</h2>
+<p>Three blocks of addresses are reserved as <strong>private</strong>: they only mean something <strong>inside a fence</strong>, so every home, office, and cloud can reuse them without asking anyone:</p>
+<table>
+<thead>
+<tr>
+<th>Range</th>
+<th>Who uses it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>192.168.x.x</code></td>
+<td>Home-router favorite — your WiFi uses this one</td>
+</tr>
+<tr>
+<td><code>172.16–31.x.x</code></td>
+<td>The middle range — <strong>AWS hands your box its <code>172.31…</code> address from here</strong></td>
+</tr>
+<tr>
+<td><code>10.x.x.x</code></td>
+<td>The big one — offices and large companies</td>
+</tr>
+</tbody>
+</table>
+<p>That's why your neighbor's laptop and yours can both be <code>192.168.0.5</code> and nothing breaks — and why a box needs a <strong>public</strong> address too, the moment the world must reach it. And that public address? <strong>AWS only lends you one.</strong></p>
+<hr />
+<h2 id="elastic-ip-a-public-address-you-keep">Elastic IP — A Public Address You Keep</h2>
+<p>Your box's public IP is <strong>borrowed</strong> from AWS's pool. Stop the box and start it again — you get a <strong>different number</strong>, while your DNS record still points at the old one: <strong>the site goes dark</strong> until you fix the record.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Borrowed (default)</strong></td>
+<td>Handed out at start, taken back at stop. Stop → start = a new number and a stale A record.</td>
+</tr>
+<tr>
+<td><strong>Elastic IP — reserved</strong></td>
+<td>A public IPv4 reserved for your account: survives stop→start, moves to a replacement box in one click — <strong>DNS never notices</strong></td>
+</tr>
+<tr>
+<td><strong>Price</strong></td>
+<td>$0.005/hour ≈ $3.65/month for <strong>any</strong> public IPv4 (borrowed or reserved); the catch: a reserved one <strong>keeps billing while idle</strong> — box stopped, or not attached at all</td>
+</tr>
+</tbody>
+</table>
+<p>Why does a number cost money? Only ~4.3 billion exist — AWS even caps you at <strong>five per region</strong>. Reserve one while it has a job, <strong>release it when it doesn't</strong>.</p>
+<p>New AWS accounts run on sign-up credits — this charge quietly eats them before you ever see a bill.</p>
+<hr />
+<h2 id="cidr-the-number-decoded">CIDR — The /Number, Decoded</h2>
+<p><code>172.31.0.0/16</code> = where the block starts / switches locked (of the 32 total — here: the first two slots are fixed).</p>
+<p>Locked slots are fixed; the free slots make the block's <strong>size</strong>. Every 8 locked switches = one full slot:</p>
+<table>
+<thead>
+<tr>
+<th>Notation</th>
+<th>Slots locked</th>
+<th>Addresses</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/8</code></td>
+<td>1 slot locked</td>
+<td>16,777,216</td>
+<td><code>10.0.0.0/8</code> — the big private range</td>
+</tr>
+<tr>
+<td><code>/16</code></td>
+<td>2 slots locked</td>
+<td>65,536</td>
+<td><code>172.31.0.0/16</code> — remember this one</td>
+</tr>
+<tr>
+<td><code>/24</code></td>
+<td>3 slots locked</td>
+<td>256</td>
+<td><code>192.168.0.0/24</code> — one home's worth</td>
+</tr>
+<tr>
+<td><code>/32</code></td>
+<td>All 32 locked</td>
+<td>1</td>
+<td>Exactly one address</td>
+</tr>
+</tbody>
+</table>
+<p>And the one you've met twice already: <strong><code>0.0.0.0/0</code></strong> = zero locked = <strong>every address on the internet</strong>. That's why the firewall rule's source column used it to mean "anyone."</p>
+<hr />
+<h2 id="the-vpc-your-fenced-patch-of-awss-network">The VPC — Your Fenced Patch of AWS's Network</h2>
+<p><strong>VPC</strong> (Virtual Private Cloud) = your own fenced-off patch of AWS's network. What it owns is a block you can now read yourself: <strong><code>172.31.0.0/16</code></strong> — two slots locked, 65,536 private addresses. Yours since day one.</p>
+<p>The VPC is to your servers what your home WiFi is to your devices — <strong>with you as the landlord</strong>.</p>
+<hr />
+<h2 id="subnets-the-vpcs-block-split-up">Subnets — The VPC's Block, Split Up</h2>
+<p>A <strong>subnet</strong> = a smaller block cut from the VPC's block — same CIDR idea, more switches locked. Slices never overlap.</p>
+<p>The rule that surprises everyone: <strong>a machine never launches "into the VPC" — it always launches into one subnet.</strong></p>
+<p>Example: VPC block <code>172.31.0.0/16</code> →
+- Subnet <code>172.31.0.0/20</code> (4,096 addresses: <code>.0.0</code> – <code>.15.255</code>) — YOUR SERVER <code>172.31.5.14</code> lives here (<code>.5</code> sits between <code>.0</code> and <code>.15</code>)
+- Subnet <code>172.31.16.0/20</code> (4,096 addresses: <code>.16.0</code> – <code>.31.255</code>) — room for future machines
+- More slices as needed...</p>
+<p>Picture: streets inside a fenced neighborhood — the word to keep is <strong>subnet</strong>.</p>
+<hr />
+<h2 id="route-tables-the-subnets-written-directions">Route Tables — The Subnet's Written Directions</h2>
+<p>Your box sends a message. Its subnet decides the path with its <strong>route table</strong>: a short list of rows, each reading <strong>"traffic going THERE → send it THIS way."</strong></p>
+<p>The first row you can already read yourself:</p>
+<table>
+<thead>
+<tr>
+<th>DESTINATION</th>
+<th>TARGET</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>172.31.0.0/16</code></td>
+<td><strong>local</strong></td>
+<td>Any address in the VPC's block → deliver directly, stay inside the fence</td>
+</tr>
+</tbody>
+</table>
+<p>One row handles the whole neighborhood: box-to-box traffic <strong>never leaves the fence</strong>. But your box also calls the stock-price service on the internet every day — so there must be a second row.</p>
+<hr />
+<h2 id="everywhere-else-the-internet-gateway">Everywhere Else → The Internet Gateway</h2>
+<p>Complete route table:</p>
+<table>
+<thead>
+<tr>
+<th>DESTINATION</th>
+<th>TARGET</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>172.31.0.0/16</code></td>
+<td><strong>local</strong></td>
+<td>Inside the block → stay inside</td>
+</tr>
+<tr>
+<td><code>0.0.0.0/0</code></td>
+<td><strong>igw-0a1b2c…</strong></td>
+<td>Every address (zero locked!) → the internet gateway</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>internet gateway</strong> = your VPC's <strong>one way in or out</strong>. Nothing in your fence reaches the internet — or is reached — except through this gateway. Built once per VPC, attached at the edge.</p>
+<p>When an inside address matches both rows, the rule is: <strong>the more locked row wins</strong> (<code>/16</code> beats <code>/0</code>) — so neighborhood traffic never accidentally leaves.</p>
+<hr />
+<h2 id="public-or-private-one-line-decides">Public or Private — One Line Decides</h2>
+<table>
+<thead>
+<tr>
+<th>Subnet type</th>
+<th>Route table has</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public</strong></td>
+<td><code>172.31.0.0/16 → local</code> AND <code>0.0.0.0/0 → igw-…</code></td>
+</tr>
+<tr>
+<td><strong>Private</strong></td>
+<td><code>172.31.0.0/16 → local</code> only — the gateway row is simply <strong>missing</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A subnet is <strong>public</strong> if its route table includes "everywhere else → the internet gateway" — and <strong>private</strong> if that row is simply missing. <strong>One missing row. That's the entire difference.</strong> A database would love the private one.</p>
+<hr />
+<h2 id="live-your-boxs-subnet-found-in-the-console">Live — Your Box's Subnet, Found in the Console</h2>
+<p>Four clicks, every name taught in the last five slides — nothing new appears:</p>
+<p>Instance page (both IPs + VPC id) → <strong>Its VPC</strong> (the fence, <code>172.31.0.0/16</code>) → <strong>Its subnet</strong> (the <code>/20</code> slice the box launched into) → <strong>Its route table</strong> (both rows — local and <code>0.0.0.0/0 → igw-…</code>)</p>
+<hr />
+<h2 id="the-whole-path-follow-one-request-start-to-finish">The Whole Path — Follow One Request, Start to Finish</h2>
+<p>Before any message travels, the browser asks <strong>DNS</strong> to turn the name into an address. Then the journey starts:</p>
+<ol>
+<li>A phone opens your app</li>
+<li><strong>DNS</strong>: <code>yourapp.example</code> → <code>3.91.24.7</code></li>
+<li><strong>The internet</strong> (networks of networks)</li>
+<li><strong>Internet gateway</strong> (the one way in)</li>
+<li><strong>Public subnet</strong> <code>172.31.0.0/20</code> (its route table includes the gateway — that's what makes it public)</li>
+<li><strong>Security group</strong> (the allow-list check: port 80 — on the list)</li>
+<li><strong>Your server</strong> <code>172.31.5.14</code> — gunicorn answers → your app</li>
+</ol>
+<p><strong>name → address → internet → gateway → subnet → the allow-list → port 80 → the app. Every word is yours now.</strong></p>
+<hr />
+<h2 id="take-home-find-all-of-it-on-your-own-account">Take Home — Find All of It on Your Own Account</h2>
+<p>After class: find your two addresses on the instance page and with <code>ip addr</code>; do the four clicks (instance → VPC → subnet → route table); draw the request start to finish on your own copy — this drawing grows with every box you open.</p>
+<p><strong>Done this lesson:</strong> The neighborhood, opened — IP addresses slot by slot, Elastic IPs, CIDR blocks, the VPC, subnets, route tables, the internet gateway<br />
+<strong>Next topic:</strong> Where your bytes live — the disk that isn't in the box, and storage that isn't a disk at all</p>
+<p>Optional: reading CIDR is the main line. Want to <em>calculate</em> any block by hand — odd masks like <code>/21</code> or <code>/27</code>, or splitting a VPC into equal subnets? Use a visual subnet calculator (linked in #class-26a) or just ask Claude.</p>
 </main>
 </body>
 </html>
