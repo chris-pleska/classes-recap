@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTC/312 Quiz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 680px;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 28px;
+    color: #58a6ff;
+    margin-bottom: 4px;
+  }
+  .header p {
+    color: #8b949e;
+    font-size: 14px;
+  }
+
+  /* ── Progress ── */
+  .progress-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #8b949e;
+  }
+  .progress-bar-bg {
+    background: #21262d;
+    border-radius: 99px;
+    height: 6px;
+    overflow: hidden;
+    margin-bottom: 28px;
+  }
+  .progress-bar-fill {
+    background: #58a6ff;
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.4s ease;
+  }
+
+  /* ── Lesson badge ── */
+  .lesson-badge {
+    display: inline-block;
+    background: #21262d;
+    color: #79c0ff;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    margin-bottom: 14px;
+  }
+
+  /* ── Question card ── */
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 28px 32px 32px;
+  }
+
+  .question-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e6edf3;
+    line-height: 1.45;
+    margin-bottom: 28px;
+  }
+
+  /* ── Answer buttons ── */
+  .answers {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .answer-btn {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #c9d1d9;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 14px 18px;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    line-height: 1.4;
+  }
+  .answer-btn:hover:not(:disabled) {
+    border-color: #58a6ff;
+    background: #1c2128;
+  }
+  .answer-btn .letter {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #30363d;
+    color: #8b949e;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+
+  .answer-btn.correct {
+    border-color: #3fb950;
+    background: #12261e;
+    color: #3fb950;
+  }
+  .answer-btn.correct .letter {
+    background: #3fb950;
+    color: #0d1117;
+  }
+  .answer-btn.wrong {
+    border-color: #f85149;
+    background: #2d1318;
+    color: #f85149;
+  }
+  .answer-btn.wrong .letter {
+    background: #f85149;
+    color: #fff;
+  }
+  .answer-btn.reveal {
+    border-color: #3fb950;
+    background: #12261e;
+    color: #3fb950;
+    opacity: 0.75;
+  }
+  .answer-btn.reveal .letter {
+    background: #3fb950;
+    color: #0d1117;
+  }
+  .answer-btn:disabled { cursor: default; }
+
+  /* ── Explanation ── */
+  .explanation {
+    margin-top: 20px;
+    padding: 14px 16px;
+    background: #0d1117;
+    border-left: 3px solid #58a6ff;
+    border-radius: 0 6px 6px 0;
+    font-size: 14px;
+    color: #8b949e;
+    line-height: 1.6;
+    display: none;
+  }
+  .explanation.show { display: block; }
+
+  /* ── Next button ── */
+  .next-btn {
+    margin-top: 24px;
+    width: 100%;
+    padding: 14px;
+    background: #58a6ff;
+    color: #0d1117;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: none;
+  }
+  .next-btn:hover { background: #79b8ff; }
+  .next-btn.show { display: block; }
+
+  /* ── Score screen ── */
+  .score-screen {
+    display: none;
+    text-align: center;
+  }
+  .score-screen.show { display: block; }
+  .score-circle {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    border: 6px solid #58a6ff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 28px;
+  }
+  .score-circle .score-num {
+    font-size: 36px;
+    font-weight: 800;
+    color: #e6edf3;
+    line-height: 1;
+  }
+  .score-circle .score-denom {
+    font-size: 14px;
+    color: #8b949e;
+    margin-top: 4px;
+  }
+  .score-screen h2 {
+    font-size: 24px;
+    color: #e6edf3;
+    margin-bottom: 8px;
+  }
+  .score-screen p {
+    color: #8b949e;
+    font-size: 15px;
+    margin-bottom: 32px;
+  }
+
+  .missed-list {
+    text-align: left;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 28px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .missed-list h3 {
+    color: #79c0ff;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 14px;
+  }
+  .missed-item {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #21262d;
+    font-size: 14px;
+  }
+  .missed-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .missed-item .q { color: #c9d1d9; margin-bottom: 4px; }
+  .missed-item .a { color: #3fb950; }
+
+  .restart-btn {
+    padding: 14px 40px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #c9d1d9;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    margin-right: 12px;
+  }
+  .restart-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  .review-btn {
+    padding: 14px 40px;
+    background: #58a6ff;
+    border: none;
+    border-radius: 8px;
+    color: #0d1117;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .review-btn:hover { background: #79b8ff; }
+
+  /* ── Start screen ── */
+  .start-screen { text-align: center; }
+  .start-screen .big { font-size: 52px; margin-bottom: 16px; }
+  .start-screen h2 { font-size: 22px; color: #e6edf3; margin-bottom: 10px; }
+  .start-screen p { color: #8b949e; font-size: 15px; margin-bottom: 32px; line-height: 1.6; }
+  .start-btn {
+    padding: 15px 48px;
+    background: #58a6ff;
+    border: none;
+    border-radius: 8px;
+    color: #0d1117;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-right: 12px;
+  }
+  .start-btn:hover { background: #79b8ff; }
+  .mode-btn {
+    padding: 15px 24px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #c9d1d9;
+    font-size: 15px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .mode-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  .quiz-section { display: none; }
+  .quiz-section.show { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>DTC / 312</h1>
+    <p>Study Quiz — Lessons 1 – 19</p>
+  </div>
+
+  <!-- Start screen -->
+  <div class="card start-screen" id="startScreen">
+    <div class="big">🧠</div>
+    <h2>Ready to test yourself?</h2>
+    <p>58 questions across all 19 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
+    <button class="start-btn" onclick="startQuiz('all')">Start full quiz</button>
+    <button class="mode-btn" onclick="startQuiz('random20')">Quick — 20 random</button>
+  </div>
+
+  <!-- Quiz section -->
+  <div class="quiz-section" id="quizSection">
+    <div class="progress-row">
+      <span id="progressLabel">Question 1 of 58</span>
+      <span id="scoreLabel">Score: 0</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+    </div>
+
+    <div class="card">
+      <div class="lesson-badge" id="lessonBadge">Lesson 1</div>
+      <div class="question-text" id="questionText"></div>
+      <div class="answers" id="answersContainer"></div>
+      <div class="explanation" id="explanation"></div>
+      <button class="next-btn" id="nextBtn" onclick="nextQuestion()">Next question →</button>
+    </div>
+  </div>
+
+  <!-- Score screen -->
+  <div class="score-screen" id="scoreScreen">
+    <div class="score-circle">
+      <span class="score-num" id="finalScore">0</span>
+      <span class="score-denom" id="finalDenom">/ 58</span>
+    </div>
+    <h2 id="scoreTitle">Nice work!</h2>
+    <p id="scoreMsg">Keep reviewing and you'll nail it.</p>
+    <div class="missed-list" id="missedList" style="display:none">
+      <h3>Review — questions you missed</h3>
+      <div id="missedItems"></div>
+    </div>
+    <div>
+      <button class="restart-btn" onclick="restartQuiz()">↺ Restart</button>
+      <button class="review-btn" onclick="reviewMissed()">Study missed only</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const ALL_QUESTIONS = [
+  // ── Lesson 1: Terminal ──
+  { lesson: "Lesson 1", q: "What does the command `pwd` print?", answers: ["Your current directory path", "A list of running processes", "The contents of a file", "Your username"], correct: 0, explain: "pwd = print working directory — it shows exactly where you are in the file system." },
+  { lesson: "Lesson 1", q: "Which flag makes `ls` show hidden files?", answers: ["-a", "-l", "-h", "-r"], correct: 0, explain: "Hidden files start with a dot. `ls -a` reveals them." },
+  { lesson: "Lesson 1", q: "What does `cd ..` do?", answers: ["Goes up one directory level", "Lists directory contents", "Creates a new directory", "Deletes a file"], correct: 0, explain: "`..` always means the parent directory." },
+  { lesson: "Lesson 1", q: "Which command creates a new empty file?", answers: ["touch filename", "mkdir filename", "cat filename", "rm filename"], correct: 0, explain: "`touch` creates an empty file (or updates the timestamp if it already exists)." },
+  { lesson: "Lesson 1", q: "What does `man ls` do?", answers: ["Opens the manual page for ls", "Runs ls as an administrator", "Lists hidden files", "Creates a directory called ls"], correct: 0, explain: "`man` = manual. Every Unix command has one." },
+
+  // ── Lesson 2: Pipes & Compose ──
+  { lesson: "Lesson 2", q: "What does the pipe `|` operator do?", answers: ["Sends the output of one command as input to the next", "Runs two commands at the same time", "Redirects output to a file", "Loops over a list"], correct: 0, explain: "The pipe is the glue of the terminal — chain commands together." },
+  { lesson: "Lesson 2", q: "What does `>` do when used with a command?", answers: ["Redirects output to a file, overwriting it", "Appends output to a file", "Pipes output to another command", "Runs the command in the background"], correct: 0, explain: "`>` overwrites. Use `>>` if you want to append instead." },
+  { lesson: "Lesson 2", q: "What does `>>` do vs `>`?", answers: ["`>>` appends; `>` overwrites", "Both overwrite the file", "`>>` overwrites; `>` appends", "They do the same thing"], correct: 0, explain: "Think of `>>` as 'add to the bottom' and `>` as 'replace everything'." },
+
+  // ── Lesson 3: grep & search ──
+  { lesson: "Lesson 3", q: "What does `grep 'error' app.log` do?", answers: ["Prints every line in app.log that contains 'error'", "Deletes lines containing 'error'", "Counts the number of errors", "Replaces 'error' with a blank line"], correct: 0, explain: "grep = global regular expression print. It filters lines." },
+  { lesson: "Lesson 3", q: "What does the `-r` flag add to `grep`?", answers: ["Searches recursively through all files in a directory", "Makes the search case-insensitive", "Shows line numbers", "Inverts the match"], correct: 0, explain: "`grep -r` digs into every subdirectory." },
+  { lesson: "Lesson 3", q: "What is the PATH variable in the terminal?", answers: ["A list of directories the shell searches to find commands", "The current directory you're in", "Your SSH key location", "The file you last edited"], correct: 0, explain: "When you type `python3`, the shell looks through each directory in PATH until it finds that program." },
+
+  // ── Lesson 4: Permissions ──
+  { lesson: "Lesson 4", q: "In Unix permissions `rwxr-xr--`, what can 'others' do?", answers: ["Read only", "Read and execute", "Read, write, and execute", "Nothing"], correct: 0, explain: "The last three characters are 'others'. `r--` = read only." },
+  { lesson: "Lesson 4", q: "What does `chmod 755 script.sh` set?", answers: ["Owner: rwx · Group: r-x · Others: r-x", "Owner: rwx · Group: rwx · Others: rwx", "Owner: r-x · Group: r-x · Others: r-x", "Owner: rw- · Group: r-- · Others: r--"], correct: 0, explain: "7=rwx, 5=r-x, 5=r-x. A common permission for scripts." },
+  { lesson: "Lesson 4", q: "What does `sudo` do?", answers: ["Runs a command as the superuser (root)", "Switches to a different user permanently", "Deletes a file forcefully", "Runs a command in the background"], correct: 0, explain: "sudo = 'superuser do'. Use it carefully — root can break everything." },
+
+  // ── Lesson 5: Git ──
+  { lesson: "Lesson 5", q: "What is a git commit?", answers: ["A saved snapshot of changes with a message", "A copy of your repo sent to GitHub", "A request to merge code", "A list of changed files"], correct: 0, explain: "Commits are the unit of history. Each one is a point you can return to." },
+  { lesson: "Lesson 5", q: "What does `git push` do?", answers: ["Sends your local commits to the remote repository", "Downloads the latest changes from the remote", "Creates a new branch", "Reverts the last commit"], correct: 0, explain: "push = send. pull = receive." },
+  { lesson: "Lesson 5", q: "What does `.gitignore` do?", answers: ["Tells git which files to never track", "Lists your recent commits", "Stores your GitHub credentials", "Sets the default branch name"], correct: 0, explain: "Put secrets, build output, and `.DS_Store` in here." },
+  { lesson: "Lesson 5", q: "What is a git branch?", answers: ["An independent line of development that can be merged later", "A backup copy on GitHub", "A tag marking a release", "A way to revert changes"], correct: 0, explain: "Branches let you work on features without touching the main code." },
+
+  // ── Lesson 6: Servers & AWS ──
+  { lesson: "Lesson 6", q: "What is EC2?", answers: ["AWS's virtual machine rental service", "Amazon's database service", "A load balancer", "Amazon's file storage service"], correct: 0, explain: "EC2 = Elastic Compute Cloud. You rent virtual servers by the hour." },
+  { lesson: "Lesson 6", q: "What is a region in AWS?", answers: ["A geographic area containing one or more datacenters", "A type of virtual machine", "A billing category", "A storage bucket"], correct: 0, explain: "Regions are like cities — us-east-1 is Northern Virginia, eu-west-1 is Ireland, etc." },
+
+  // ── Lesson 7: SSH ──
+  { lesson: "Lesson 7", q: "What port does SSH use by default?", answers: ["22", "80", "443", "3000"], correct: 0, explain: "Port 22 is reserved for SSH. That's why your security group has a rule for it." },
+  { lesson: "Lesson 7", q: "What is an SSH key pair?", answers: ["A public key (shared) and private key (kept secret)", "A username and password", "Two private keys stored in different places", "An SSL certificate and its CA"], correct: 0, explain: "The public key goes on the server; the private key stays on your laptop. Never share the private key." },
+  { lesson: "Lesson 7", q: "Which command connects to a remote server via SSH?", answers: ["ssh -i key.pem user@ip", "curl user@ip", "ftp user@ip", "ping user@ip"], correct: 0, explain: "-i specifies your key file. `ec2-user` is the default user on Amazon Linux." },
+
+  // ── Lesson 8: DNS & nginx ──
+  { lesson: "Lesson 8", q: "What does a DNS A record do?", answers: ["Maps a domain name to an IPv4 address", "Maps a domain name to another domain name", "Handles email routing", "Stores TLS certificates"], correct: 0, explain: "A = Address. yourapp.com → 3.91.24.7" },
+  { lesson: "Lesson 8", q: "What is nginx?", answers: ["A web server and reverse proxy", "A database", "A programming language", "A package manager"], correct: 0, explain: "nginx sits in front of your app, handles HTTPS, and forwards requests to your Flask/gunicorn server." },
+  { lesson: "Lesson 8", q: "What is a reverse proxy?", answers: ["A server that forwards incoming requests to a backend app", "A firewall that blocks outbound traffic", "A DNS server that caches lookups", "A load balancer between two databases"], correct: 0, explain: "The browser talks to nginx; nginx talks to your app. The browser never sees your app directly." },
+
+  // ── Lesson 9: HTTP & TLS ──
+  { lesson: "Lesson 9", q: "What HTTP status code means 'Not Found'?", answers: ["404", "200", "500", "301"], correct: 0, explain: "200 = OK, 301 = Redirect, 404 = Not Found, 500 = Server Error." },
+  { lesson: "Lesson 9", q: "What does TLS add to HTTP?", answers: ["Encryption — the connection is private and verified", "Faster loading via compression", "Automatic redirects", "Database caching"], correct: 0, explain: "TLS = Transport Layer Security. HTTPS = HTTP + TLS." },
+  { lesson: "Lesson 9", q: "What does `curl -I https://example.com` show?", answers: ["The HTTP response headers only", "The full page HTML", "The server's IP address", "The SSL certificate details"], correct: 0, explain: "-I fetches only the headers — useful for checking status codes and redirect chains." },
+
+  // ── Lesson 10: Logs & Triage ──
+  { lesson: "Lesson 10", q: "What command shows running processes in real time?", answers: ["htop", "ls -a", "grep", "cat /var/log/syslog"], correct: 0, explain: "htop shows CPU, RAM, and every process — live. `top` is the older version." },
+  { lesson: "Lesson 10", q: "What does `systemctl status appname` show?", answers: ["Whether the service is running, and its recent log lines", "The IP address of the service", "CPU usage of the app", "The app's open ports"], correct: 0, explain: "This is usually step 1 when something breaks." },
+  { lesson: "Lesson 10", q: "Where does nginx store its error log by default?", answers: ["/var/log/nginx/error.log", "/etc/nginx/nginx.conf", "/home/ec2-user/errors.log", "/tmp/nginx.log"], correct: 0, explain: "/var/log is the conventional home for all logs on Linux." },
+
+  // ── Lesson 11: Scripts & cron ──
+  { lesson: "Lesson 11", q: "What does cron do?", answers: ["Schedules commands to run automatically at set times", "Encrypts secret environment variables", "Manages background services", "Compresses log files"], correct: 0, explain: "crontab -e lets you edit your schedule. Five fields: minute, hour, day, month, weekday." },
+  { lesson: "Lesson 11", q: "How should you store secret API keys on a server?", answers: ["As environment variables or in a secrets manager, never in code", "At the top of your Python script", "In a public GitHub repo", "In a file called secrets.txt"], correct: 0, explain: "Keys in code end up in git history and public repos. Environment variables are invisible to the process's children." },
+  { lesson: "Lesson 11", q: "What does `chmod +x script.sh` do?", answers: ["Makes the script executable", "Makes the script read-only", "Deletes the script", "Runs the script"], correct: 0, explain: "+x adds execute permission. Without it, `./script.sh` would give 'Permission denied'." },
+
+  // ── Lesson 12: IAM ──
+  { lesson: "Lesson 12", q: "What does IAM stand for in AWS?", answers: ["Identity and Access Management", "Internet Address Mapping", "Instance AMI Manager", "Inbound Access Monitor"], correct: 0, explain: "IAM controls who (or what) can do what in your AWS account." },
+  { lesson: "Lesson 12", q: "What is an IAM role?", answers: ["An identity that grants permissions to an AWS service or resource", "A type of EC2 instance", "A billing category", "A VPN connection"], correct: 0, explain: "Your EC2 can wear a role — then it can call AWS services (like S3) without embedding credentials." },
+  { lesson: "Lesson 12", q: "What is the principle of least privilege?", answers: ["Grant only the minimum permissions needed — nothing extra", "Always use the root account for speed", "Share credentials between team members", "Allow all outbound traffic by default"], correct: 0, explain: "If a role only needs to read S3, don't give it write access. Limits blast radius if something goes wrong." },
+
+  // ── Lesson 13: Exit codes & Bash logic ──
+  { lesson: "Lesson 13", q: "What does exit code 0 mean in a shell script?", answers: ["Success — the command ran without errors", "The command was not found", "The script was cancelled", "An error occurred"], correct: 0, explain: "0 = success; anything else = failure. `$?` holds the last exit code." },
+  { lesson: "Lesson 13", q: "In a bash script, what does `set -e` do?", answers: ["Stops the script immediately if any command fails", "Prints every command before running it", "Runs commands in parallel", "Disables exit codes"], correct: 0, explain: "`set -e` = exit on error. Prevents scripts from limping on after a failure." },
+
+  // ── Lesson 14: Python ──
+  { lesson: "Lesson 14", q: "What is a Python list?", answers: ["An ordered, mutable collection of items", "A key-value store", "An immutable sequence of characters", "A function that returns multiple values"], correct: 0, explain: "Lists use square brackets: `[1, 2, 3]`. Ordered and changeable." },
+  { lesson: "Lesson 14", q: "What does `range(5)` produce?", answers: ["The numbers 0, 1, 2, 3, 4", "The numbers 1, 2, 3, 4, 5", "Five empty values", "An error unless assigned to a variable"], correct: 0, explain: "range starts at 0 by default and goes up to (not including) the number you give it." },
+  { lesson: "Lesson 14", q: "What is the difference between a string and an integer in Python?", answers: ["A string is text in quotes; an integer is a whole number", "Strings are faster; integers are slower", "Integers can contain letters; strings cannot", "They are identical in Python 3"], correct: 0, explain: "Type matters: `'5' + '3'` = `'53'`, but `5 + 3` = `8`." },
+
+  // ── Lesson 15: Loops & Quizzes ──
+  { lesson: "Lesson 15", q: "What does `continue` do inside a Python loop?", answers: ["Skips the rest of this iteration and moves to the next one", "Exits the loop entirely", "Restarts the loop from the beginning", "Pauses the loop"], correct: 0, explain: "Use `continue` to skip. Use `break` to exit the loop entirely." },
+  { lesson: "Lesson 15", q: "What does `len(my_list)` return?", answers: ["The number of items in the list", "The largest item in the list", "The last item in the list", "The type of the list"], correct: 0, explain: "len() works on strings, lists, dicts, and more." },
+
+  // ── Lesson 16: Machine & App ──
+  { lesson: "Lesson 16", q: "What is RAM?", answers: ["Fast temporary memory — contents are lost when power is off", "Permanent disk storage", "The CPU's processing cores", "The graphics chip"], correct: 0, explain: "RAM = Random Access Memory. That's why unsaved work disappears when your computer crashes." },
+  { lesson: "Lesson 16", q: "Why is a GPU better than a CPU for AI math?", answers: ["A GPU has thousands of tiny cores running in parallel", "A GPU has a faster clock speed", "A GPU has more RAM", "A GPU uses less power"], correct: 0, explain: "AI training is matrix math — thousands of identical operations at once. GPUs are built for exactly that." },
+  { lesson: "Lesson 16", q: "What makes an app different from a script?", answers: ["An app keeps data across visits and restarts; a script runs then stops", "An app is written in Python; a script is not", "An app runs faster", "A script uses a database; an app doesn't"], correct: 0, explain: "If data survives a restart, there's a database involved — that's the key signal you're building an app." },
+
+  // ── Lesson 17: Direct AI ──
+  { lesson: "Lesson 17", q: "What does 'vibe coding' mean?", answers: ["You describe what you want and AI writes the code", "You code while listening to music", "You write tests before code", "You copy-paste from Stack Overflow"], correct: 0, explain: "Vibe coding is Lesson 17's term for directing an AI agent to build something for you." },
+  { lesson: "Lesson 17", q: "What is the golden rule of AI-built code?", answers: ["It runs ≠ it's right ≠ I understand it", "If it runs, ship it", "AI never makes logical errors", "Always ask the AI to test its own code"], correct: 0, explain: "Running code can still be wrong. Understanding it is your job as the engineer." },
+  { lesson: "Lesson 17", q: "In the investment app architecture, what is gunicorn?", answers: ["The program that serves the Flask app on port 80", "The database", "The price-data API", "The firewall"], correct: 0, explain: "Flask writes the app; gunicorn runs it in production; nginx sits in front." },
+
+  // ── Lesson 18: Ports & Firewall ──
+  { lesson: "Lesson 18", q: "How many ports does every machine have?", answers: ["65,535", "256", "1,024", "4.3 billion"], correct: 0, explain: "Ports 0–65,535. Ports below 1024 are 'well-known' — like 22 for SSH and 80 for HTTP." },
+  { lesson: "Lesson 18", q: "What does a security group do in AWS?", answers: ["Acts as a firewall — an allow-list checked before traffic reaches your machine", "Encrypts data at rest on your instance", "Backs up your instance automatically", "Controls IAM permissions for EC2"], correct: 0, explain: "Security group = AWS's firewall. Not on the list → silently turned away." },
+  { lesson: "Lesson 18", q: "What command shows which programs are listening on which ports?", answers: ["sudo ss -tlnp", "ps aux", "netstat -r", "ip addr"], correct: 0, explain: "-t=TCP, -l=listening, -n=numbers, -p=program. You'll see gunicorn on :80 and sshd on :22." },
+  { lesson: "Lesson 18", q: "What does 'stateful' mean for a firewall?", answers: ["It remembers open connections, so replies don't need their own inbound rule", "It stores logs of every packet", "It blocks all traffic by default", "It resets rules after a reboot"], correct: 0, explain: "AWS security groups are stateful — a reply rides back on the connection the visitor opened." },
+  { lesson: "Lesson 18", q: "What is virtualization?", answers: ["Making machines out of software — one physical server carved into many virtual ones", "Storing files in the cloud", "Encrypting network traffic", "Running two operating systems on the same hardware simultaneously for speed"], correct: 0, explain: "The hypervisor does the carving. Your EC2 is a virtual machine created by AWS's Nitro hypervisor." },
+  { lesson: "Lesson 18", q: "What is the Nitro System?", answers: ["AWS's own hypervisor, built on KVM, that runs all modern EC2 instances", "Amazon's database engine", "A firewall product", "A GPU driver for EC2"], correct: 0, explain: "Nitro replaced Xen. Every modern instance type (including your t3.micro) runs on it." },
+  { lesson: "Lesson 18", q: "What does `t3.micro` decode to?", answers: ["t=general purpose family · 3=generation · micro=size", "t=tiny · 3=3 cores · micro=microservice", "t=test · 3=3rd region · micro=microVM", "t=type · 3=3GB RAM · micro=minimal cost"], correct: 0, explain: "Family (what it's shaped for) · Generation (hardware era) · Size (how big your slice is)." },
+
+  // ── Lesson 19: Networking ──
+  { lesson: "Lesson 19", q: "How many possible IPv4 addresses exist?", answers: ["~4.3 billion", "~256 million", "~4.3 trillion", "Unlimited"], correct: 0, explain: "4 slots × 256 values each = 256⁴ ≈ 4.3 billion. They've all been handed out — hence private ranges." },
+  { lesson: "Lesson 19", q: "Why does your EC2 have two IP addresses?", answers: ["One public (internet-reachable) and one private (inside the VPC only)", "One for IPv4 and one for IPv6", "One for incoming traffic and one for outgoing", "One permanent and one temporary"], correct: 0, explain: "The private IP is from the 172.16–31.x.x range inside your VPC. The public one is from AWS's pool." },
+  { lesson: "Lesson 19", q: "What is an Elastic IP?", answers: ["A public IPv4 address reserved for your account that survives stop/start", "A dynamic IP that changes on every request", "A private IP with no expiry", "A load balancer IP"], correct: 0, explain: "Without an Elastic IP, stopping your instance changes its public IP — breaking your DNS record." },
+  { lesson: "Lesson 19", q: "What does CIDR notation `/24` mean?", answers: ["Three slots are locked — 256 addresses in the block", "24 total addresses", "All 24 bits are free", "Two slots locked — 65,536 addresses"], correct: 0, explain: "/24 = 24 bits locked = 3 full slots fixed, 1 free. 256 combinations for the last slot." },
+  { lesson: "Lesson 19", q: "What is a VPC?", answers: ["Virtual Private Cloud — your fenced-off patch of AWS's network", "Virtual Private Computer — a cloud-hosted desktop", "A type of VPN", "A load balancer service"], correct: 0, explain: "Your VPC owns the block 172.31.0.0/16. Your servers get private IPs from that block." },
+  { lesson: "Lesson 19", q: "What makes a subnet 'public' vs 'private'?", answers: ["A public subnet's route table has a row sending 0.0.0.0/0 to the internet gateway; private subnets don't", "Public subnets have more IP addresses", "Public subnets allow SSH; private ones don't", "Public subnets are in a different region"], correct: 0, explain: "One missing row. That's the entire difference. A database would love the private one." },
+  { lesson: "Lesson 19", q: "What is an internet gateway?", answers: ["The VPC's one way in or out to the internet", "A NAT device inside the VPC", "AWS's DNS server", "A load balancer at the edge of AWS"], correct: 0, explain: "Nothing in your fence reaches the internet — or is reached — except through this gateway." },
+  { lesson: "Lesson 19", q: "When a route table has both a /16 row and a /0 row, which wins for traffic inside the VPC?", answers: ["The /16 row — the more specific (more locked) row always wins", "The /0 row — it covers all addresses", "They conflict and traffic is dropped", "The last row in the table wins"], correct: 0, explain: "Longest-prefix match: the most specific route wins. /16 beats /0, so VPC traffic stays inside the fence." },
+];
+
+let questions = [];
+let current = 0;
+let score = 0;
+let missed = [];
+let answered = false;
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startQuiz(mode) {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('quizSection').classList.add('show');
+
+  if (mode === 'random20') {
+    questions = shuffle(ALL_QUESTIONS).slice(0, 20);
+  } else {
+    questions = shuffle(ALL_QUESTIONS);
+  }
+
+  current = 0;
+  score = 0;
+  missed = [];
+  renderQuestion();
+}
+
+function renderQuestion() {
+  answered = false;
+  const q = questions[current];
+  const total = questions.length;
+
+  document.getElementById('progressLabel').textContent = `Question ${current + 1} of ${total}`;
+  document.getElementById('scoreLabel').textContent = `Score: ${score}`;
+  document.getElementById('progressFill').style.width = `${(current / total) * 100}%`;
+  document.getElementById('lessonBadge').textContent = q.lesson;
+  document.getElementById('questionText').textContent = q.q;
+  document.getElementById('explanation').classList.remove('show');
+  document.getElementById('explanation').textContent = '';
+  document.getElementById('nextBtn').classList.remove('show');
+
+  // Shuffle answer order
+  const letters = ['A', 'B', 'C', 'D'];
+  const indices = shuffle([0, 1, 2, 3]);
+  const container = document.getElementById('answersContainer');
+  container.innerHTML = '';
+
+  indices.forEach((origIdx, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'answer-btn';
+    btn.innerHTML = `<span class="letter">${letters[i]}</span><span>${q.answers[origIdx]}</span>`;
+    btn.dataset.original = origIdx;
+    btn.onclick = () => selectAnswer(btn, origIdx === q.correct, q);
+    container.appendChild(btn);
+  });
+}
+
+function selectAnswer(btn, isCorrect, q) {
+  if (answered) return;
+  answered = true;
+
+  const allBtns = document.querySelectorAll('.answer-btn');
+  allBtns.forEach(b => {
+    b.disabled = true;
+    if (parseInt(b.dataset.original) === q.correct) {
+      b.classList.add(b === btn ? 'correct' : 'reveal');
+    }
+  });
+
+  if (isCorrect) {
+    btn.classList.add('correct');
+    score++;
+  } else {
+    btn.classList.add('wrong');
+    missed.push({ q: q.q, a: q.answers[q.correct] });
+  }
+
+  document.getElementById('scoreLabel').textContent = `Score: ${score}`;
+
+  const exp = document.getElementById('explanation');
+  exp.textContent = q.explain;
+  exp.classList.add('show');
+  document.getElementById('nextBtn').classList.add('show');
+  document.getElementById('nextBtn').textContent = current + 1 < questions.length ? 'Next question →' : 'See my score →';
+}
+
+function nextQuestion() {
+  current++;
+  if (current >= questions.length) {
+    showScore();
+  } else {
+    renderQuestion();
+  }
+}
+
+function showScore() {
+  document.getElementById('quizSection').classList.remove('show');
+  const screen = document.getElementById('scoreScreen');
+  screen.classList.add('show');
+
+  const total = questions.length;
+  const pct = Math.round((score / total) * 100);
+
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalDenom').textContent = `/ ${total}`;
+  document.getElementById('progressFill').style.width = '100%';
+
+  let title, msg;
+  if (pct === 100) { title = '🏆 Perfect score!'; msg = 'You know this material cold.'; }
+  else if (pct >= 80) { title = '🎉 Great work!'; msg = `${pct}% — you're in solid shape. Review the ones you missed.`; }
+  else if (pct >= 60) { title = '📚 Getting there!'; msg = `${pct}% — keep reviewing and you'll nail it.`; }
+  else { title = '🔁 Keep studying!'; msg = `${pct}% — go back to the notes and try again.`; }
+
+  document.getElementById('scoreTitle').textContent = title;
+  document.getElementById('scoreMsg').textContent = msg;
+
+  if (missed.length > 0) {
+    const list = document.getElementById('missedList');
+    list.style.display = 'block';
+    const items = document.getElementById('missedItems');
+    items.innerHTML = '';
+    missed.forEach(m => {
+      const d = document.createElement('div');
+      d.className = 'missed-item';
+      d.innerHTML = `<div class="q">${m.q}</div><div class="a">✓ ${m.a}</div>`;
+      items.appendChild(d);
+    });
+  }
+}
+
+function restartQuiz() {
+  document.getElementById('scoreScreen').classList.remove('show');
+  document.getElementById('startScreen').style.display = 'block';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('missedList').style.display = 'none';
+  document.getElementById('missedItems').innerHTML = '';
+}
+
+function reviewMissed() {
+  if (missed.length === 0) return;
+  // Build questions from missed items
+  const missedQs = missed.map(m => ALL_QUESTIONS.find(q => q.q === m.q)).filter(Boolean);
+  if (missedQs.length === 0) return;
+  document.getElementById('scoreScreen').classList.remove('show');
+  document.getElementById('quizSection').classList.add('show');
+  document.getElementById('missedList').style.display = 'none';
+  document.getElementById('missedItems').innerHTML = '';
+  questions = shuffle(missedQs);
+  current = 0;
+  score = 0;
+  missed = [];
+  renderQuestion();
+}
+</script>
+</body>
+</html>
