@@ -3,39 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DTC/312 Study Notes</title>
+<title>DTC/312 — Study Notes</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; display: flex; min-height: 100vh; }
-  nav { width: 260px; min-width: 220px; background: #161b22; border-right: 1px solid #30363d; padding: 24px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
-  nav h2 { color: #58a6ff; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
-  nav ul { list-style: none; }
-  nav li { margin-bottom: 6px; }
-  nav a { color: #8b949e; text-decoration: none; font-size: 13px; display: block; padding: 4px 8px; border-radius: 6px; line-height: 1.4; }
-  nav a:hover { color: #c9d1d9; background: #21262d; }
-  main { flex: 1; padding: 40px 48px; max-width: 860px; }
-  h1 { color: #58a6ff; font-size: 26px; margin: 48px 0 16px; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
-  h1:first-of-type { margin-top: 0; }
-  h2 { color: #79c0ff; font-size: 19px; margin: 32px 0 12px; }
-  h3 { color: #a5d6ff; font-size: 16px; margin: 24px 0 8px; }
-  p { line-height: 1.7; margin-bottom: 12px; color: #c9d1d9; }
-  ul, ol { margin: 8px 0 12px 24px; line-height: 1.7; }
-  li { margin-bottom: 4px; }
-  code { background: #21262d; color: #e3b341; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', Consolas, monospace; }
-  pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; }
-  pre code { background: none; padding: 0; color: #a9b7c6; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-  th { background: #21262d; color: #79c0ff; text-align: left; padding: 8px 12px; border: 1px solid #30363d; font-size: 14px; }
-  td { padding: 8px 12px; border: 1px solid #30363d; font-size: 14px; color: #c9d1d9; }
+  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; min-height: 100vh; }
+  nav { width: 260px; min-width: 260px; background: #161b22; border-right: 1px solid #30363d; padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  nav h2 { color: #58a6ff; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; padding: 0 20px 16px; border-bottom: 1px solid #30363d; margin-bottom: 12px; }
+  nav ul { list-style: none; padding: 0 8px; }
+  nav ul li a { display: block; padding: 7px 12px; color: #8b949e; text-decoration: none; font-size: 13px; border-radius: 6px; transition: all 0.15s; line-height: 1.4; }
+  nav ul li a:hover { background: #21262d; color: #c9d1d9; }
+  main { flex: 1; padding: 40px 48px; max-width: 900px; }
+  h1 { color: #58a6ff; font-size: 1.8em; margin: 48px 0 16px; padding-top: 16px; border-top: 1px solid #30363d; }
+  h1:first-child { margin-top: 0; border-top: none; }
+  h2 { color: #e3b341; font-size: 1.2em; margin: 28px 0 10px; }
+  h3 { color: #7ee787; font-size: 1em; margin: 20px 0 8px; }
+  p { line-height: 1.7; margin: 10px 0; }
+  ul, ol { margin: 10px 0 10px 24px; line-height: 1.7; }
+  li { margin: 4px 0; }
+  code { background: #21262d; color: #79c0ff; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.88em; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; color: #e6edf3; font-size: 0.85em; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; }
+  th { background: #21262d; color: #58a6ff; padding: 10px 14px; text-align: left; font-size: 0.85em; border: 1px solid #30363d; }
+  td { padding: 9px 14px; border: 1px solid #30363d; font-size: 0.9em; vertical-align: top; }
   tr:nth-child(even) td { background: #161b22; }
+  hr { border: none; border-top: 1px solid #30363d; margin: 36px 0; }
   strong { color: #e3b341; }
-  hr { border: none; border-top: 1px solid #30363d; margin: 40px 0; }
-  blockquote { border-left: 3px solid #58a6ff; padding-left: 16px; color: #8b949e; margin: 12px 0; }
+  blockquote { border-left: 3px solid #58a6ff; padding: 8px 16px; margin: 12px 0; color: #8b949e; background: #161b22; border-radius: 0 6px 6px 0; }
+  a { color: #58a6ff; }
 </style>
 </head>
 <body>
 <nav>
-  <h2>DTC/312 Lessons</h2>
+  <h2>DTC/312 Notes</h2>
   <ul>
 <li><a href="#lesson-1-the-terminal">Lesson 1: The Terminal</a></li>
 <li><a href="#lesson-2-compose-commands-work-together">Lesson 2: Compose — Commands Work Together</a></li>
@@ -56,6 +56,8 @@
 <li><a href="#lesson-17-direct-an-ai-to-build-your-live-app">Lesson 17: Direct an AI to Build Your Live App</a></li>
 <li><a href="#lesson-18-ports-and-the-firewall-who-can-reach-your-server">Lesson 18 — Ports and the Firewall: Who Can Reach Your Server</a></li>
 <li><a href="#lesson-19-the-neighborhood-where-your-server-lives">Lesson 19 — The Neighborhood: Where Your Server Lives</a></li>
+<li><a href="#lesson-20-data-storage-where-your-bytes-live">Lesson 20 — Data Storage: Where Your Bytes Live</a></li>
+<li><a href="#lesson-21-the-database-for-real">Lesson 21 — The Database, for Real</a></li>
   </ul>
 </nav>
 <main>
@@ -1871,6 +1873,584 @@ LISTEN  127.0.0.1:5432       postgres   ← a port that matters in a later topic
 <p><strong>Done this lesson:</strong> The neighborhood, opened — IP addresses slot by slot, Elastic IPs, CIDR blocks, the VPC, subnets, route tables, the internet gateway<br />
 <strong>Next topic:</strong> Where your bytes live — the disk that isn't in the box, and storage that isn't a disk at all</p>
 <p>Optional: reading CIDR is the main line. Want to <em>calculate</em> any block by hand — odd masks like <code>/21</code> or <code>/27</code>, or splitting a VPC into equal subnets? Use a visual subnet calculator (linked in #class-26a) or just ask Claude.</p>
+<hr />
+<h1 id="lesson-20-data-storage-where-your-bytes-live">Lesson 20 — Data Storage: Where Your Bytes Live</h1>
+<h2 id="all-data-is-bytes">All Data is Bytes</h2>
+<p>A photo, a song, your app's code — to the computer, it's all just bytes.</p>
+<table>
+<thead>
+<tr>
+<th>Unit</th>
+<th>How Big</th>
+<th>Feels Like</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bit</td>
+<td>a single 0 or 1</td>
+<td>the smallest piece of data there is</td>
+</tr>
+<tr>
+<td>byte</td>
+<td>8 bits</td>
+<td>one letter — "A"</td>
+</tr>
+<tr>
+<td>kilobyte (KB)</td>
+<td>~1,000 bytes</td>
+<td>a paragraph of text</td>
+</tr>
+<tr>
+<td>megabyte (MB)</td>
+<td>~1,000 KB</td>
+<td>a phone photo is a few MB</td>
+</tr>
+<tr>
+<td>gigabyte (GB)</td>
+<td>~1,000 MB</td>
+<td>a movie is 1–2 GB</td>
+</tr>
+<tr>
+<td>terabyte (TB)</td>
+<td>~1,000 GB</td>
+<td>hundreds of movies</td>
+</tr>
+</tbody>
+</table>
+<p>Today's whole question: <strong>where is your data kept?</strong></p>
+<h2 id="today-in-two-parts">Today in Two Parts</h2>
+<p><strong>Part 1 — EBS (your server's disk):</strong> what a disk actually is, moving one between servers, backups (snapshots) and restores, what happens when it fills.</p>
+<p><strong>Part 2 — S3:</strong> files kept by AWS, each with a web address; what real apps keep there; how pricing differs.</p>
+<p>You already know: RAM vs disk · <code>df -h</code> · <code>sudo</code>. New today: EBS volumes · snapshots · S3.</p>
+<p>The thread held the whole way: <strong>you press Buy on a share in the investment app — where does that fact live when the power goes out?</strong></p>
+<h2 id="ram-vs-the-disk">RAM vs The Disk</h2>
+<ul>
+<li><strong>RAM</strong> — the working space. Fast, wiped clean on every reboot. Anything that lives only in RAM is gone when the power goes.</li>
+<li><strong>The disk</strong> — the keeping space. Slower, and it stays. Files survive the reboot.</li>
+</ul>
+<h2 id="what-a-disk-actually-is">What a Disk Actually Is</h2>
+<p>A disk is a real, physical object — a device that keeps bytes even with the power off.</p>
+<ul>
+<li><strong>HDD (hard disk drive)</strong> — spinning metal platter; a little arm writes and reads bytes. Slower, big, cheap.</li>
+<li><strong>SSD</strong> — chips only, nothing moves. Much faster. What's inside your laptop and inside AWS's data centers.</li>
+</ul>
+<p>Every file you've ever saved landed on a device like these. Your AWS server writes to a disk too — the question is where that disk actually sits.</p>
+<h2 id="ebs-your-disk-is-outside-the-server">EBS — Your Disk Is Outside the Server</h2>
+<p><strong>EBS volume</strong> — the disk your server uses. It sits on separate storage hardware, attached to your server over the network.</p>
+<pre><code>YOUR VM — YOUR SERVER          SEPARATE STORAGE HARDWARE
+  /dev/nvme0n1 — 8 GB   ←— attached over the network —→   your EBS volume — 8 GB
+  &quot;a disk,&quot; as far as                                        (other customers' volumes)
+   anything inside can tell
+</code></pre>
+<p>It behaves exactly like a disk inside the server — it has never been inside it. The <code>df -h</code> from the machine topic was reading this exact disk the whole time.</p>
+<p>Inside AWS's data center: two kinds of racks — the <strong>server rack</strong> (computers, including yours) and the <strong>storage rack</strong> (shelves of disks — your volume is here). AWS reserved 8 GB on a storage rack, a network cable away from your server.</p>
+<h2 id="attaching-a-second-disk-live">Attaching a Second Disk Live</h2>
+<p>Three steps: <strong>create</strong> a second 8 GB disk in the AWS console → <strong>attach</strong> it to the server → <strong>write a file</strong> on it. The server never stops running.</p>
+<p>Key commands:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lsblk</code></td>
+<td>list the disks the server can see (not the space inside them — that's <code>df -h</code>)</td>
+</tr>
+<tr>
+<td><code>mkfs</code></td>
+<td>put an empty filesystem on a blank disk — format it, like a new USB stick</td>
+</tr>
+<tr>
+<td><code>mount</code></td>
+<td>plug a disk's contents into a folder, so the server can read them</td>
+</tr>
+<tr>
+<td><code>sudo</code></td>
+<td>as the machine's admin</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The demo sequence:</strong></p>
+<pre><code class="language-bash">lsblk                                    # one disk: nvme0n1 — the 8 GB root volume
+# console: Volumes → Create volume (8 GB) → Attach → this server
+lsblk                                    # second disk appeared: nvme1n1 — blank
+sudo mkfs -t ext4 /dev/nvme1n1           # format it (put empty filesystem on it)
+sudo mount /dev/nvme1n1 /mnt/spare       # plug its contents into a folder
+sudo vi /mnt/spare/survivor.txt          # write a file (i · type · Esc · :wq)
+cat /mnt/spare/survivor.txt              # read it straight back off the disk
+# 312 — this byte survives.
+</code></pre>
+<p>Nobody plugged anything in. AWS reserved another slice on a storage rack and connected it over the network — that's all "creating a disk" means in the cloud. And the server never stopped running.</p>
+<h2 id="a-server-and-its-storage-are-two-separate-things">A Server and Its Storage Are Two Separate Things</h2>
+<ul>
+<li><strong>The server</strong> — CPU + RAM. It does the work. Kill it, and the computer is gone.</li>
+<li><strong>The storage</strong> — a separate disk on a storage rack. It keeps the bytes — whether your server is alive or not.</li>
+</ul>
+<p>Kill the server — the disk is fine. It survives because it's on separate hardware; your bytes were never inside the server.</p>
+<h2 id="the-root-disk-exception">The Root Disk Exception</h2>
+<p>Your server boots from its <strong>root disk</strong> — the OS and your app live on it. At launch, a checkbox decides its fate: <strong>"delete this disk when the server is deleted" — checked by default.</strong></p>
+<ul>
+<li>The <strong>root disk</strong> — deleted with the server by default</li>
+<li>A <strong>spare disk</strong> (like the one from the demo) — no checkbox touches it, survives on its own</li>
+</ul>
+<p>So the spare disk survives the server — but the disk your app lives on, by default, does not. Which is why you need a <strong>backup</strong>.</p>
+<h2 id="backup">Backup</h2>
+<p><strong>backup</strong> — a copy of your data stored in a <strong>different place</strong> than the original, so that one accident can't destroy both.</p>
+<p>Three ordinary accidents:
+- <strong>A wrong click</strong> — the volume is deleted in the console; every byte on it, gone
+- <strong>A bad command</strong> — one mistyped command wipes the disk; it happens to real engineers
+- <strong>The server dies</strong> — and takes its root disk with it (the default you just saw)</p>
+<p>The one rule: <strong>a copy on the same disk is not a backup.</strong> If the disk dies, both copies die together. The copy has to live somewhere else.</p>
+<h2 id="snapshot-awss-built-in-backup">Snapshot — AWS's Built-In Backup</h2>
+<p><strong>snapshot</strong> — a backup of the whole disk at one moment, one click; AWS keeps the copy <strong>away from your server</strong>.</p>
+<pre><code>EC2 → Volumes → the volume you just wrote to → Actions → Create snapshot
+Snapshots → snap-... · the volume's size
+# finishes in the background over a couple minutes — the server never pauses
+</code></pre>
+<p>A kept snapshot is the first thing that costs money: cents per month, and only for bytes actually written.</p>
+<h2 id="the-snapshot-survives-everything">The Snapshot Survives Everything</h2>
+<ul>
+<li>The server — gone (terminated, nothing left to connect to)</li>
+<li>The volume — wiped (one wrong click, one bad command — bytes are gone)</li>
+<li>The snapshot — <strong>safe</strong> (the copy AWS keeps, away from any server; it survived both)</li>
+</ul>
+<p>A backup only counts if you can get the data back. That's the restore.</p>
+<h2 id="restore-from-snapshot-back-to-your-files">Restore: From Snapshot Back to Your Files</h2>
+<pre><code>THE SNAPSHOT → &quot;Create volume from snapshot&quot; → A NEW VOLUME → attach → mount → cat → your files
+</code></pre>
+<p><strong>Live steps:</strong></p>
+<pre><code class="language-bash"># Snapshots → the one you watched get taken → Create volume from snapshot → attach
+sudo mount /dev/nvme1n1 /mnt/spare
+cat /mnt/spare/survivor.txt
+# 312 — this byte survives.   ← the line you watched being written, back off a disk that didn't exist a minute ago
+</code></pre>
+<p><strong>A broken disk is not lost data — if a backup exists.</strong></p>
+<h2 id="the-disk-fills-up">The Disk Fills Up</h2>
+<p>The volume is 8 GB only. Three things keep writing to it: the operating system, your app, and the database's files (Postgres).</p>
+<pre><code class="language-bash">df -h /
+# Filesystem      Size  Used  Avail  Use%  Mounted on
+# /dev/nvme0n1p1  8.0G  4.2G  3.9G   52%  /
+</code></pre>
+<p>At <strong>100% full</strong>, programs that need to write — including the database — start failing. Check it occasionally; it's one command.</p>
+<pre><code class="language-bash">sudo du -sh /* | sort -h    # shows what's eating the disk, biggest last
+</code></pre>
+<h2 id="s3-storage-that-isnt-a-disk-at-all">S3 — Storage That Isn't a Disk at All</h2>
+<p>The disk is 8 GB and serves one server. Some things outgrow that: backups, logs, images — files that grow forever and belong to no one server.</p>
+<p><strong>S3</strong> — you hand AWS a file and a name. AWS keeps the file and hands it back to anyone allowed to ask for it by that name. No disk of yours, no server of yours, no <code>df -h</code>, no size to pick. You reach S3 over the network — like a website.</p>
+<p>S3 doesn't replace the disk — it sits <strong>beside</strong> it.</p>
+<h2 id="bucket-and-object-s3s-two-words">Bucket and Object — S3's Two Words</h2>
+<ul>
+<li><strong>bucket</strong> — a named container in AWS's storage service; you make one, it holds your files</li>
+<li><strong>object</strong> — one file in a bucket; fetched by name, and <strong>replaced whole, never edited in place</strong> (S3 keeps files; it doesn't open them)</li>
+</ul>
+<p>Every object gets a <strong>web address:</strong></p>
+<pre><code>https://312school-storage-demo.s3.us-east-1.amazonaws.com/312-logo.png
+         ↑ bucket                ↑ S3 service + region             ↑ object
+</code></pre>
+<p>The disk serves <strong>YOUR server</strong>. S3 serves <strong>anyone you allow</strong>.</p>
+<h2 id="s3-demo-make-a-bucket-put-a-file-in-fetch-it-by-name">S3 Demo — Make a Bucket, Put a File In, Fetch It by Name</h2>
+<p><strong>Three acts:</strong>
+1. <strong>Create + upload</strong> — a new bucket, one logo image into it
+2. <strong>Locked, by default</strong> — its URL answers <code>AccessDenied</code>: new buckets are private; nothing is public unless you decide it
+3. <strong>The unlock</strong> — a decision, never a default; the URL then fetches clean</p>
+<p><strong>The whole class proves it:</strong> the same URL loads on every phone at once, wherever each student is sitting. The disk needs your server running to serve anything — S3 served the whole class with <strong>no server of yours involved at all</strong>.</p>
+<h2 id="what-s3-is-actually-used-for">What S3 Is Actually Used For</h2>
+<ul>
+<li><strong>Backups</strong> — a database backup file must live somewhere safer than the disk it backs up</li>
+<li><strong>Logs</strong> — they pile up forever and belong to no one server</li>
+<li><strong>Images &amp; video</strong> — files every visitor fetches by name (delivery photos, logos)</li>
+<li><strong>Entire static websites</strong> — page files fetched by name, no server of yours involved</li>
+</ul>
+<p>Four different jobs, one shape every time: <strong>files that grow forever, served by name.</strong></p>
+<h2 id="pricing-renting-a-disk-vs-paying-for-bytes">Pricing: Renting a Disk vs Paying for Bytes</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>EBS Volume (rented disk)</th>
+<th>S3 Bucket (bottomless)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Size</td>
+<td>You pick up front (8 GB)</td>
+<td>No size to pick, ever</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>Pay for all of it — full or empty</td>
+<td>Pay for exactly what you store — cents per GB/month</td>
+</tr>
+</tbody>
+</table>
+<p>Big, ever-growing things — backups, logs, media — <strong>end up in buckets, not on disks.</strong></p>
+<h2 id="the-disk-and-s3-side-by-side">The Disk and S3 Side by Side</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>EBS — The Disk</th>
+<th>S3 — Buckets of Files</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Serves</td>
+<td>one server: yours</td>
+<td>anyone you allow, by web address</td>
+</tr>
+<tr>
+<td>Size</td>
+<td>fixed (8 GB, full or empty)</td>
+<td>no size — just grows; pay per GB stored</td>
+</tr>
+<tr>
+<td>Holds</td>
+<td>OS, your app, the database's files</td>
+<td>backups, logs, images, whole websites</td>
+</tr>
+<tr>
+<td>Needs your server?</td>
+<td>yes — needs server running to serve anything</td>
+<td>no — AWS runs it all</td>
+</tr>
+<tr>
+<td>Backup</td>
+<td>the snapshot</td>
+<td>AWS keeps the copies itself</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Files for your server → the disk. Files that grow forever, served to the world → S3.</strong></p>
+<h2 id="the-full-map-where-your-bytes-live">The Full Map: Where Your Bytes Live</h2>
+<p><strong>Memory (working space — emptied when the power goes):</strong>
+- RAM — what programs are using right now; fast, and gone on every reboot</p>
+<p><strong>Storage (keeping space — it stays):</strong>
+- The disk (EBS) — the server's own disk; the OS, your app, Postgres's files. Its backup: <strong>the snapshot</strong>
+- S3 — files with web addresses; backups, logs, images; served to <strong>anyone allowed</strong></p>
+<p>Postgres isn't a fourth place — it's a <strong>program</strong> whose files live on the disk.</p>
+<h2 id="the-answer-you-pressed-buy-where-does-that-share-live">The Answer: You Pressed Buy — Where Does That Share Live?</h2>
+<p>The question from the start: in the investment app, you press Buy on a share. The app must remember that fact forever — through reboots, power cuts, even a dead server.</p>
+<pre><code>The share you bought  →  a row in Postgres  →  bytes in files  →  on the EBS volume  →  outside the server
+(the fact, as the DB     (Postgres keeps its    (your server's      (on a storage rack —
+ keeps it)               data as regular        disk — all 8 GB     where it survives
+                         files, in a folder)    of it)              the server)
+</code></pre>
+<p>Postgres is a <strong>program using the disk</strong> — not a third kind of storage. So reboot, even kill the server: <strong>the share you bought is still out there, on the volume.</strong> That was the whole question.</p>
+<h2 id="after-class">After Class</h2>
+<ul>
+<li><strong>The full round trip:</strong> billing alarm first → snapshot your disk → create a volume FROM the snapshot → attach it → see it in <code>lsblk</code> → clean up</li>
+<li><strong>A bucket with one file:</strong> fetch its URL, hit the default AccessDenied, follow the unlock click-path, fetch again — then send your URL to someone</li>
+<li><strong>Your drawing grows:</strong> add the storage layer (volume drawn outside the server; S3 off to the side)</li>
+</ul>
+<p><strong>Next topic: The database, for real</strong> — the program sitting on that disk; what it is, and how your app talks to it.</p>
+<hr />
+<h1 id="lesson-21-the-database-for-real">Lesson 21 — The Database, for Real</h1>
+<h2 id="the-problem-never-lose-a-fact">The Problem: Never Lose a Fact</h2>
+<p>Your app remembers every trade you ever made. Close it. Restart the server. Open it again — still there. You never wrote the code that saves them. So where do they live?</p>
+<p>Yesterday you bought 2 NVIDIA shares. That one fact has to be there tomorrow, next month, next year — through every restart, every crash, every reboot. The app has to keep: every buy and every sell since the beginning, your cash, the companies and their prices. Money facts, kept for years, correct to the cent.</p>
+<h2 id="why-a-file-wont-work">Why a File Won't Work</h2>
+<p>You could write every trade into <code>trades.txt</code>, one line per trade. Three days later that file will meet:</p>
+<ul>
+<li><strong>The power dies mid-write</strong> — app is halfway through writing a buy when the server reboots. What's in the file now? Half a line — half a money fact.</li>
+<li><strong>Find one line in a million</strong> — one trade, somewhere in a million-line file. Reading the whole file every single time — how long, at line 999,999?</li>
+<li><strong>Two saves, same instant</strong> — two people buy at the same moment; both write the file. Whose write wins — and whose is gone? The day an app has more than one user, this day comes.</li>
+</ul>
+<p>A file answers none of these. Keeping records safe is a <strong>full-time job</strong> — and there is a kind of program built for exactly that job.</p>
+<h2 id="what-a-database-is">What a Database Is</h2>
+<p><strong>database</strong> — a separate program whose only job is records: keep them safe, answer questions about them fast, and serve many programs and people at once — without ever losing a fact.</p>
+<p>Two programs talking: your app asks → the database answers — the records. Stop the app, crash it, rebuild it — <strong>the records sit safe in the other program.</strong></p>
+<p>Every real app has one behind it:
+- <strong>Bank's app</strong> — holds accounts, transfers, card payments; your balance is read from it, never guessed
+- <strong>Instagram</strong> — holds photo links, comments, likes, follows; pictures sit in storage, the database keeps the facts about them
+- <strong>Your investment app</strong> — database on your own server, holding companies and trades; yesterday's buy is in there right now</p>
+<h2 id="records-sit-in-tables">Records Sit in Tables</h2>
+<p>A database is not one big pile of everything. Records are sorted into <strong>tables</strong> — a grid that holds <strong>one kind of fact</strong>.</p>
+<p>Your app's companies table:</p>
+<table>
+<thead>
+<tr>
+<th>SYMBOL</th>
+<th>NAME</th>
+<th>PRICE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NVDA</td>
+<td>NVIDIA</td>
+<td>131.26</td>
+</tr>
+<tr>
+<td>AMD</td>
+<td>Advanced Micro Devices</td>
+<td>117.53</td>
+</tr>
+<tr>
+<td>TSM</td>
+<td>Taiwan Semiconductor</td>
+<td>184.10</td>
+</tr>
+</tbody>
+</table>
+<p>One row = one fact. One column = one detail. <strong>A table is that simple</strong> — and a database keeps many of them.</p>
+<h2 id="two-kinds-of-facts-two-tables">Two Kinds of Facts — Two Tables</h2>
+<p>Companies are one kind of fact. Trades are another — they get their own table. But the trade has to say <strong>which company</strong> was bought.</p>
+<p>How should a trade name its company — copy all its details in, or point at it?</p>
+<h2 id="relational-point-dont-copy">Relational — Point, Don't Copy</h2>
+<p>The trade stores one small thing: the company's number. Row #1 is NVIDIA, so the trade says "company 1" — it points, and nothing is written twice:</p>
+<pre><code>transactions:                    companies:
+ID    | COMPANY_ID | SHARES | AMOUNT    ID | SYMBOL | NAME
+4183  |     1      |   2    | -262.52    1 | NVDA   | NVIDIA
+                   points at ──────────→  2 | AMD    | Advanced Micro Devices
+</code></pre>
+<p><strong>relational database</strong> — records kept in tables, and the tables point at each other.</p>
+<p>Tables that point at each other are <strong>related</strong> tables. That one word describes how nearly every serious app on earth keeps its facts.</p>
+<h2 id="postgres-the-database-on-your-server">Postgres — The Database on Your Server</h2>
+<p><strong>PostgreSQL</strong> (Postgres for short) is a particular database program — real software. The vibe build installed it on your server.</p>
+<ol>
+<li><strong>Installed</strong> — put on the server with <code>dnf</code> (the same installer as any other program)</li>
+<li><strong>Running</strong> — started once, then on day and night, waiting (not run-and-exit like your scripts)</li>
+<li><strong>On duty</strong> — holding every trade since the vibe build</li>
+</ol>
+<pre><code class="language-bash">systemctl status postgresql
+# ● postgresql.service — active (running)   ← on since the vibe build — you just never looked
+</code></pre>
+<p>You never installed it and never started it — <strong>the Claude Code agents did both during the vibe build.</strong></p>
+<h2 id="how-your-app-talks-to-postgres">How Your App Talks to Postgres</h2>
+<p>Postgres runs as a <strong>server program</strong>: always on, waiting for questions on <strong>port 5432</strong> (the port from the firewall topic). Any program that connects and asks is a <strong>client</strong>. Two clients today:</p>
+<ul>
+<li><strong>psql</strong> — the client you type into, from the terminal</li>
+<li><strong>your app</strong> — the other client, connected since the vibe build</li>
+</ul>
+<p>Both connect to port 5432. Postgres holds tables: companies, transactions.</p>
+<h2 id="the-database-landscape">The Database Landscape</h2>
+<p>Databases are a field of products. Five big names:</p>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PostgreSQL</strong></td>
+<td>serious open-source default — the one on your server right now</td>
+</tr>
+<tr>
+<td><strong>MySQL</strong></td>
+<td>the classic of the web</td>
+</tr>
+<tr>
+<td><strong>SQLite</strong></td>
+<td>the tiny one hiding inside phones and apps</td>
+</tr>
+<tr>
+<td><strong>SQL Server</strong></td>
+<td>Microsoft's big corporate one</td>
+</tr>
+<tr>
+<td><strong>Oracle</strong></td>
+<td>the other big corporate one</td>
+</tr>
+</tbody>
+</table>
+<p>All five keep records the same way: tables that point at each other — <strong>relational</strong> databases, all of them. And <strong>all five speak the same language — SQL.</strong> Learn it once, it works on all five.</p>
+<h2 id="nosql-the-other-family">NoSQL — The Other Family</h2>
+<p>Not every database keeps tables. The other family is <strong>NoSQL</strong> (non-relational):</p>
+<ul>
+<li><strong>MongoDB</strong> — keeps documents, not tables</li>
+<li><strong>Redis</strong> — works out of RAM, very fast; can still save to disk</li>
+<li><strong>DynamoDB</strong> — AWS's own</li>
+</ul>
+<p>Different shapes for different jobs — <strong>not better or worse.</strong> Our app lives in the relational world.</p>
+<h2 id="why-postgres">Why Postgres</h2>
+<ul>
+<li><strong>Free and open source</strong> — no license to buy; you can run it tonight, on any server</li>
+<li><strong>Production-common</strong> — what serious production teams commonly run</li>
+<li><strong>Skills transfer</strong> — all five speak SQL; everything learned here works across the family</li>
+</ul>
+<p>One line of honesty: <strong>MySQL would also have been a fine choice</strong> — the skills are the same.</p>
+<h2 id="install-from-scratch-on-a-clean-server">Install From Scratch — on a Clean Server</h2>
+<pre><code class="language-bash">sudo dnf install postgresql16-server              # dnf — the machine's software installer
+sudo postgresql-setup --initdb                    # creates the data folder — on the EBS disk, where else
+sudo systemctl enable --now postgresql            # the starter — from now on it survives reboots
+sudo ss -tlnp | grep 5432                         # listening — the exact port from the firewall topic
+echo 'host all all 127.0.0.1/32 md5' | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
+                                                  # let a password log in — the step that bites everyone
+sudo systemctl restart postgresql                 # re-read that file
+</code></pre>
+<p>Born with nothing in it: no tables, no records, empty. <strong>Remember this empty server.</strong></p>
+<h2 id="step-inside-as-the-admin">Step Inside — as the Admin</h2>
+<p>A fresh Postgres lets exactly <strong>one</strong> user in: an admin account named <code>postgres</code>, made by the install.</p>
+<pre><code class="language-bash">sudo -u postgres psql
+postgres=#           # the prompt changed — you're inside now, as the admin
+</code></pre>
+<p><code>sudo</code> = as the machine's admin · <code>-u postgres</code> = acting as "postgres" account · <code>psql</code> = open the database terminal</p>
+<p>Inside once, as the admin — to make <strong>two decisions</strong>: who may talk to this database, and where the app's tables will live.</p>
+<h2 id="the-two-decisions-a-user-and-its-database">The Two Decisions: a User, and Its Database</h2>
+<p><strong>database user</strong> — a name + password <strong>the database itself</strong> checks — separate from the machine's users.</p>
+<pre><code class="language-sql">-- at the postgres=# prompt:
+CREATE USER app_user WITH PASSWORD '...';       -- who may talk (password typed live, never on slides)
+CREATE DATABASE investapp OWNER app_user;       -- named database INSIDE Postgres, owned by that user
+</code></pre>
+<p>One word, two meanings — hold this one: <code>Postgres</code> = the database <strong>program</strong> (one, running on the server). <code>investapp</code> = a named database <strong>inside</strong> it, where the tables live. Your app names both when it connects.</p>
+<h2 id="set-up-your-access-on-the-apps-server">Set Up Your Access — on the App's Server</h2>
+<p>The app's server was built by the vibe build — it has the data, but no user for you yet.</p>
+<pre><code class="language-bash"># turn on password logins, then restart
+echo 'host all all 127.0.0.1/32 md5' | sudo tee -a &lt;pg_hba.conf&gt;
+sudo systemctl restart postgresql
+sudo -u postgres psql -d investapp
+CREATE USER app_user WITH PASSWORD '...';
+GRANT USAGE ON SCHEMA public TO app_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;   -- sequences too, or pg_dump fails
+</code></pre>
+<p>Here your user <strong>owns nothing</strong> — so you <strong>grant</strong> it what it needs: read the data, nothing more.</p>
+<h2 id="psql-talk-to-the-database-from-the-terminal">psql — Talk to the Database From the Terminal</h2>
+<p><strong>psql</strong> — the terminal client for Postgres: what the terminal is to the machine, psql is to the database.</p>
+<pre><code class="language-bash">psql -U app_user -d investapp      # connect: which user, which database
+investapp=&gt;                        # prompt changed — talking to the database now, not the shell
+\dt                                # list the tables
+# ledger | quote_cache             ← YOUR build's names may differ
+</code></pre>
+<p>The clean server answered <code>\dt</code> with <strong>nothing</strong>. This one has <strong>a history</strong> — the tables the vibe build made.</p>
+<h2 id="columns-and-types-the-tables-own-plan">Columns and Types — the Table's Own Plan</h2>
+<p>Every table declares its columns. Ask with <code>\d</code>:</p>
+<pre><code>\d companies
+Column | Type
+-------+--------
+id     | integer
+symbol | text
+name   | text
+price  | numeric
+</code></pre>
+<p><strong>column</strong> — one detail every row has, declared up front with a name (<code>price</code>) and what it holds (<code>numeric</code>).</p>
+<p>Column types, mapped to Python:</p>
+<table>
+<thead>
+<tr>
+<th>\d says</th>
+<th>Python said</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code></td>
+<td><code>str</code></td>
+<td>words — a symbol, a name</td>
+</tr>
+<tr>
+<td><code>integer</code></td>
+<td><code>int</code></td>
+<td>whole numbers — an id, a count</td>
+</tr>
+<tr>
+<td><code>numeric</code></td>
+<td>(no float!)</td>
+<td>money — exact decimals, no missing fractions</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>—</td>
+<td>a date-and-time — when the trade happened</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why money never goes in a float:</strong> A float stores decimals only <em>approximately</em>. <code>0.1 + 0.2</code> in Python prints <code>0.30000000000000004</code> — not 0.3, but 0.3 plus a tiny error. Tiny errors on money are missing cents. <code>numeric</code> stores decimals exactly — that's why money lives there.</p>
+<h2 id="the-schema-the-databases-whole-plan">The Schema — the Database's Whole Plan</h2>
+<p>Run <code>\d</code> on every table. The full picture of what this database keeps is its <strong>schema</strong>:</p>
+<ul>
+<li><strong>companies</strong>: <code>id · symbol · name · price</code></li>
+<li><strong>transactions</strong>: <code>id · company_id · shares · amount</code></li>
+</ul>
+<p><strong>schema</strong> — the written plan of the whole database: which tables exist, which columns each one has, what type each column holds.</p>
+<p>It is a <strong>contract the database enforces</strong>: a row that doesn't fit the plan is refused — not quietly saved wrong.</p>
+<h2 id="primary-key-every-row-has-a-number">Primary Key — Every Row Has a Number</h2>
+<p><strong>primary key</strong> — the row's permanent number: how the database (and the app) point at exactly one fact and no other.</p>
+<pre><code>transactions:
+ID    | COMPANY_ID      | SHARES | AMOUNT
+4183  | 1 → (NVDA's id) |   2    | -262.52
+</code></pre>
+<p>The trade's <code>company_id</code> holds <code>1</code> — and 1 is NVIDIA's id. <strong>That is how a trade names its company: by number, never by copying.</strong></p>
+<h2 id="sql-ask-the-database-a-question">SQL — Ask the Database a Question</h2>
+<p><strong>SQL</strong> — the program's fourth language: English → bash → Python → <strong>SQL</strong> — the language of questions about records.</p>
+<p><code>SELECT</code> — ask the database a question. "Show me every company — first five." In SQL:</p>
+<pre><code class="language-sql">SELECT * FROM companies LIMIT 5;
+</code></pre>
+<ul>
+<li><code>SELECT *</code> = show what (every column)</li>
+<li><code>FROM companies</code> = which table</li>
+<li><code>LIMIT 5;</code> = how many (first five); <code>;</code> is SQL's full stop — the sentence isn't sent without it</li>
+</ul>
+<h2 id="where-filter-the-results">WHERE — Filter the Results</h2>
+<p><code>WHERE</code> — the <code>if</code> you already wrote in Python:</p>
+<pre><code class="language-sql">SELECT * FROM companies WHERE price &lt; 100;
+</code></pre>
+<ul>
+<li>The test: <code>price &lt; 100</code> — comparison works exactly as in Python</li>
+<li>What WHERE does: keeps <strong>only the rows where the test is true</strong> — the rest never leave the database</li>
+</ul>
+<p>The database does it where the data lives, without shipping every row to you first.</p>
+<h2 id="text-wears-quotes">Text Wears Quotes</h2>
+<p>Numbers compare bare. Text goes in <strong>single quotes</strong>:</p>
+<pre><code class="language-sql">SELECT * FROM companies WHERE symbol = 'NVDA';
+</code></pre>
+<p><code>'quotes'</code> — single quotes tell the database "this is text, not a column name or a number."</p>
+<p>This exact line runs on PostgreSQL, MySQL, SQLite, SQL Server, Oracle — <strong>unchanged.</strong> Rule: <strong>numbers bare, text in quotes.</strong></p>
+<h2 id="your-buy-on-the-screen-and-in-the-database">Your Buy — On the Screen and in the Database</h2>
+<pre><code>App's page:                    psql — same server:
+NVDA · NVIDIA                  SELECT * FROM transactions WHERE symbol = 'NVDA';
+2 shares · $262.52             id   | symbol | shares | amount
+bought yesterday               4183 | NVDA   | 2      | -262.52
+</code></pre>
+<p>The screen and the row are <strong>the same fact</strong> — everything the app shows you is an answer it got from the database.</p>
+<p>Opening question answered: "Your app remembers every trade — where do they live?" <strong>That row — right there — is where.</strong></p>
+<h2 id="the-backup-question-what-if-you-lost-it">The Backup Question: What If You Lost It?</h2>
+<p>Imagine your bank lost its database tonight: every balance, every transfer — <strong>gone, with no way back.</strong> Banks survive because they prepare for exactly that day. So will we.</p>
+<p>Which single table, if lost, kills the app?</p>
+<ul>
+<li><strong>companies — recoverable</strong>: app can ask the price service for the full list again</li>
+<li><strong>prices — recoverable</strong>: go stale within minutes anyway; the app refetches them all day long</li>
+<li><strong>transactions — gone is gone</strong>: the app's book of every buy and sell — its <strong>ledger</strong>. Your trades exist <strong>nowhere else on earth</strong>; there is nowhere to ask for them again</li>
+</ul>
+<p><strong>backup</strong> — a copy of the facts that exist nowhere else — kept <strong>somewhere else</strong>.</p>
+<h2 id="pg_dump-the-whole-database-as-one-readable-file">pg_dump — The Whole Database as One Readable File</h2>
+<p><strong>pg_dump</strong> — the program that writes the whole database out as one <code>.sql</code> text file.</p>
+<pre><code class="language-bash">pg_dump -U app_user investapp &gt; backup.sql    # the whole database, into one file (&gt; redirect you know)
+less backup.sql                               # your tables, your rows — readable text you could email
+</code></pre>
+<p>Where should that file live? <strong>The storage topic already answered it: a bucket</strong> — never the same disk it's saving.</p>
+<h2 id="restore-into-the-server-born-empty">Restore — Into the Server Born Empty</h2>
+<p><strong>restore</strong> — feeding the dump file back in — the records, rebuilt from text.</p>
+<p>A plain <code>pg_dump</code> carries tables + rows, but <strong>NOT users/roles</strong> — so first re-make them:</p>
+<pre><code class="language-bash">echo 'host investapp app_user 127.0.0.1/32 md5' | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
+sudo systemctl reload postgresql
+psql -U app_user -d investapp &lt; backup.sql    # feed the dump back in
+\dt    # before: nothing → after: companies | transactions
+</code></pre>
+<p>To carry users/roles too: <code>pg_dumpall --globals-only &gt; roles.sql</code></p>
+<p><strong>Two proofs at once: the install was real, and the backup is real.</strong></p>
+<h2 id="self-managed-vs-managed">Self-Managed vs Managed</h2>
+<p>We run our own Postgres on our own EC2 <strong>deliberately</strong> — hands dirty, learning what a database actually is.</p>
+<ul>
+<li><strong>Self-managed (us, today)</strong>: install, back up, patch — we saw every piece. Nothing is magic now.</li>
+<li><strong>Managed (AWS RDS)</strong>: someone else installs, backs up, patches. That's the Scale course — and by then you'll know exactly what it's managing for you.</li>
+</ul>
+<p><strong>You now know what "managed" manages.</strong></p>
+<h2 id="after-class_1">After Class</h2>
+<ul>
+<li><strong>The full build</strong>: install Postgres on a server → create the user → connect → <code>\dt</code>, <code>\d</code> → run the SELECTs → find your own transactions</li>
+<li><strong>One new question</strong>: write ONE new SELECT about your own trading — "how much have I spent on NVDA in total?" — with Claude as tutor, not author. Bring the query and the number.</li>
+</ul>
+<p><strong>What you own now:</strong> what a database is, the field it comes from, a from-scratch install, its user, SQL questions about your own money — and a backup you proved by restoring it.</p>
 </main>
 </body>
 </html>

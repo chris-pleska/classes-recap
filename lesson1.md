@@ -1740,3 +1740,610 @@ After class: find your two addresses on the instance page and with `ip addr`; do
 
 Optional: reading CIDR is the main line. Want to *calculate* any block by hand — odd masks like `/21` or `/27`, or splitting a VPC into equal subnets? Use a visual subnet calculator (linked in #class-26a) or just ask Claude.
 
+
+---
+
+# Lesson 20 — Data Storage: Where Your Bytes Live
+
+## All Data is Bytes
+
+A photo, a song, your app's code — to the computer, it's all just bytes.
+
+| Unit | How Big | Feels Like |
+|------|---------|------------|
+| bit | a single 0 or 1 | the smallest piece of data there is |
+| byte | 8 bits | one letter — "A" |
+| kilobyte (KB) | ~1,000 bytes | a paragraph of text |
+| megabyte (MB) | ~1,000 KB | a phone photo is a few MB |
+| gigabyte (GB) | ~1,000 MB | a movie is 1–2 GB |
+| terabyte (TB) | ~1,000 GB | hundreds of movies |
+
+Today's whole question: **where is your data kept?**
+
+## Today in Two Parts
+
+**Part 1 — EBS (your server's disk):** what a disk actually is, moving one between servers, backups (snapshots) and restores, what happens when it fills.
+
+**Part 2 — S3:** files kept by AWS, each with a web address; what real apps keep there; how pricing differs.
+
+You already know: RAM vs disk · `df -h` · `sudo`. New today: EBS volumes · snapshots · S3.
+
+The thread held the whole way: **you press Buy on a share in the investment app — where does that fact live when the power goes out?**
+
+## RAM vs The Disk
+
+- **RAM** — the working space. Fast, wiped clean on every reboot. Anything that lives only in RAM is gone when the power goes.
+- **The disk** — the keeping space. Slower, and it stays. Files survive the reboot.
+
+## What a Disk Actually Is
+
+A disk is a real, physical object — a device that keeps bytes even with the power off.
+
+- **HDD (hard disk drive)** — spinning metal platter; a little arm writes and reads bytes. Slower, big, cheap.
+- **SSD** — chips only, nothing moves. Much faster. What's inside your laptop and inside AWS's data centers.
+
+Every file you've ever saved landed on a device like these. Your AWS server writes to a disk too — the question is where that disk actually sits.
+
+## EBS — Your Disk Is Outside the Server
+
+**EBS volume** — the disk your server uses. It sits on separate storage hardware, attached to your server over the network.
+
+```
+YOUR VM — YOUR SERVER          SEPARATE STORAGE HARDWARE
+  /dev/nvme0n1 — 8 GB   ←— attached over the network —→   your EBS volume — 8 GB
+  "a disk," as far as                                        (other customers' volumes)
+   anything inside can tell
+```
+
+It behaves exactly like a disk inside the server — it has never been inside it. The `df -h` from the machine topic was reading this exact disk the whole time.
+
+Inside AWS's data center: two kinds of racks — the **server rack** (computers, including yours) and the **storage rack** (shelves of disks — your volume is here). AWS reserved 8 GB on a storage rack, a network cable away from your server.
+
+## Attaching a Second Disk Live
+
+Three steps: **create** a second 8 GB disk in the AWS console → **attach** it to the server → **write a file** on it. The server never stops running.
+
+Key commands:
+
+| Command | What it does |
+|---------|-------------|
+| `lsblk` | list the disks the server can see (not the space inside them — that's `df -h`) |
+| `mkfs` | put an empty filesystem on a blank disk — format it, like a new USB stick |
+| `mount` | plug a disk's contents into a folder, so the server can read them |
+| `sudo` | as the machine's admin |
+
+**The demo sequence:**
+
+```bash
+lsblk                                    # one disk: nvme0n1 — the 8 GB root volume
+# console: Volumes → Create volume (8 GB) → Attach → this server
+lsblk                                    # second disk appeared: nvme1n1 — blank
+sudo mkfs -t ext4 /dev/nvme1n1           # format it (put empty filesystem on it)
+sudo mount /dev/nvme1n1 /mnt/spare       # plug its contents into a folder
+sudo vi /mnt/spare/survivor.txt          # write a file (i · type · Esc · :wq)
+cat /mnt/spare/survivor.txt              # read it straight back off the disk
+# 312 — this byte survives.
+```
+
+Nobody plugged anything in. AWS reserved another slice on a storage rack and connected it over the network — that's all "creating a disk" means in the cloud. And the server never stopped running.
+
+## A Server and Its Storage Are Two Separate Things
+
+- **The server** — CPU + RAM. It does the work. Kill it, and the computer is gone.
+- **The storage** — a separate disk on a storage rack. It keeps the bytes — whether your server is alive or not.
+
+Kill the server — the disk is fine. It survives because it's on separate hardware; your bytes were never inside the server.
+
+## The Root Disk Exception
+
+Your server boots from its **root disk** — the OS and your app live on it. At launch, a checkbox decides its fate: **"delete this disk when the server is deleted" — checked by default.**
+
+- The **root disk** — deleted with the server by default
+- A **spare disk** (like the one from the demo) — no checkbox touches it, survives on its own
+
+So the spare disk survives the server — but the disk your app lives on, by default, does not. Which is why you need a **backup**.
+
+## Backup
+
+**backup** — a copy of your data stored in a **different place** than the original, so that one accident can't destroy both.
+
+Three ordinary accidents:
+- **A wrong click** — the volume is deleted in the console; every byte on it, gone
+- **A bad command** — one mistyped command wipes the disk; it happens to real engineers
+- **The server dies** — and takes its root disk with it (the default you just saw)
+
+The one rule: **a copy on the same disk is not a backup.** If the disk dies, both copies die together. The copy has to live somewhere else.
+
+## Snapshot — AWS's Built-In Backup
+
+**snapshot** — a backup of the whole disk at one moment, one click; AWS keeps the copy **away from your server**.
+
+```
+EC2 → Volumes → the volume you just wrote to → Actions → Create snapshot
+Snapshots → snap-... · the volume's size
+# finishes in the background over a couple minutes — the server never pauses
+```
+
+A kept snapshot is the first thing that costs money: cents per month, and only for bytes actually written.
+
+## The Snapshot Survives Everything
+
+- The server — gone (terminated, nothing left to connect to)
+- The volume — wiped (one wrong click, one bad command — bytes are gone)
+- The snapshot — **safe** (the copy AWS keeps, away from any server; it survived both)
+
+A backup only counts if you can get the data back. That's the restore.
+
+## Restore: From Snapshot Back to Your Files
+
+```
+THE SNAPSHOT → "Create volume from snapshot" → A NEW VOLUME → attach → mount → cat → your files
+```
+
+**Live steps:**
+```bash
+# Snapshots → the one you watched get taken → Create volume from snapshot → attach
+sudo mount /dev/nvme1n1 /mnt/spare
+cat /mnt/spare/survivor.txt
+# 312 — this byte survives.   ← the line you watched being written, back off a disk that didn't exist a minute ago
+```
+
+**A broken disk is not lost data — if a backup exists.**
+
+## The Disk Fills Up
+
+The volume is 8 GB only. Three things keep writing to it: the operating system, your app, and the database's files (Postgres).
+
+```bash
+df -h /
+# Filesystem      Size  Used  Avail  Use%  Mounted on
+# /dev/nvme0n1p1  8.0G  4.2G  3.9G   52%  /
+```
+
+At **100% full**, programs that need to write — including the database — start failing. Check it occasionally; it's one command.
+
+```bash
+sudo du -sh /* | sort -h    # shows what's eating the disk, biggest last
+```
+
+## S3 — Storage That Isn't a Disk at All
+
+The disk is 8 GB and serves one server. Some things outgrow that: backups, logs, images — files that grow forever and belong to no one server.
+
+**S3** — you hand AWS a file and a name. AWS keeps the file and hands it back to anyone allowed to ask for it by that name. No disk of yours, no server of yours, no `df -h`, no size to pick. You reach S3 over the network — like a website.
+
+S3 doesn't replace the disk — it sits **beside** it.
+
+## Bucket and Object — S3's Two Words
+
+- **bucket** — a named container in AWS's storage service; you make one, it holds your files
+- **object** — one file in a bucket; fetched by name, and **replaced whole, never edited in place** (S3 keeps files; it doesn't open them)
+
+Every object gets a **web address:**
+
+```
+https://312school-storage-demo.s3.us-east-1.amazonaws.com/312-logo.png
+         ↑ bucket                ↑ S3 service + region             ↑ object
+```
+
+The disk serves **YOUR server**. S3 serves **anyone you allow**.
+
+## S3 Demo — Make a Bucket, Put a File In, Fetch It by Name
+
+**Three acts:**
+1. **Create + upload** — a new bucket, one logo image into it
+2. **Locked, by default** — its URL answers `AccessDenied`: new buckets are private; nothing is public unless you decide it
+3. **The unlock** — a decision, never a default; the URL then fetches clean
+
+**The whole class proves it:** the same URL loads on every phone at once, wherever each student is sitting. The disk needs your server running to serve anything — S3 served the whole class with **no server of yours involved at all**.
+
+## What S3 Is Actually Used For
+
+- **Backups** — a database backup file must live somewhere safer than the disk it backs up
+- **Logs** — they pile up forever and belong to no one server
+- **Images & video** — files every visitor fetches by name (delivery photos, logos)
+- **Entire static websites** — page files fetched by name, no server of yours involved
+
+Four different jobs, one shape every time: **files that grow forever, served by name.**
+
+## Pricing: Renting a Disk vs Paying for Bytes
+
+| | EBS Volume (rented disk) | S3 Bucket (bottomless) |
+|--|--------------------------|------------------------|
+| Size | You pick up front (8 GB) | No size to pick, ever |
+| Cost | Pay for all of it — full or empty | Pay for exactly what you store — cents per GB/month |
+
+Big, ever-growing things — backups, logs, media — **end up in buckets, not on disks.**
+
+## The Disk and S3 Side by Side
+
+| | EBS — The Disk | S3 — Buckets of Files |
+|--|----------------|----------------------|
+| Serves | one server: yours | anyone you allow, by web address |
+| Size | fixed (8 GB, full or empty) | no size — just grows; pay per GB stored |
+| Holds | OS, your app, the database's files | backups, logs, images, whole websites |
+| Needs your server? | yes — needs server running to serve anything | no — AWS runs it all |
+| Backup | the snapshot | AWS keeps the copies itself |
+
+**Files for your server → the disk. Files that grow forever, served to the world → S3.**
+
+## The Full Map: Where Your Bytes Live
+
+**Memory (working space — emptied when the power goes):**
+- RAM — what programs are using right now; fast, and gone on every reboot
+
+**Storage (keeping space — it stays):**
+- The disk (EBS) — the server's own disk; the OS, your app, Postgres's files. Its backup: **the snapshot**
+- S3 — files with web addresses; backups, logs, images; served to **anyone allowed**
+
+Postgres isn't a fourth place — it's a **program** whose files live on the disk.
+
+## The Answer: You Pressed Buy — Where Does That Share Live?
+
+The question from the start: in the investment app, you press Buy on a share. The app must remember that fact forever — through reboots, power cuts, even a dead server.
+
+```
+The share you bought  →  a row in Postgres  →  bytes in files  →  on the EBS volume  →  outside the server
+(the fact, as the DB     (Postgres keeps its    (your server's      (on a storage rack —
+ keeps it)               data as regular        disk — all 8 GB     where it survives
+                         files, in a folder)    of it)              the server)
+```
+
+Postgres is a **program using the disk** — not a third kind of storage. So reboot, even kill the server: **the share you bought is still out there, on the volume.** That was the whole question.
+
+## After Class
+
+- **The full round trip:** billing alarm first → snapshot your disk → create a volume FROM the snapshot → attach it → see it in `lsblk` → clean up
+- **A bucket with one file:** fetch its URL, hit the default AccessDenied, follow the unlock click-path, fetch again — then send your URL to someone
+- **Your drawing grows:** add the storage layer (volume drawn outside the server; S3 off to the side)
+
+**Next topic: The database, for real** — the program sitting on that disk; what it is, and how your app talks to it.
+
+---
+
+# Lesson 21 — The Database, for Real
+
+## The Problem: Never Lose a Fact
+
+Your app remembers every trade you ever made. Close it. Restart the server. Open it again — still there. You never wrote the code that saves them. So where do they live?
+
+Yesterday you bought 2 NVIDIA shares. That one fact has to be there tomorrow, next month, next year — through every restart, every crash, every reboot. The app has to keep: every buy and every sell since the beginning, your cash, the companies and their prices. Money facts, kept for years, correct to the cent.
+
+## Why a File Won't Work
+
+You could write every trade into `trades.txt`, one line per trade. Three days later that file will meet:
+
+- **The power dies mid-write** — app is halfway through writing a buy when the server reboots. What's in the file now? Half a line — half a money fact.
+- **Find one line in a million** — one trade, somewhere in a million-line file. Reading the whole file every single time — how long, at line 999,999?
+- **Two saves, same instant** — two people buy at the same moment; both write the file. Whose write wins — and whose is gone? The day an app has more than one user, this day comes.
+
+A file answers none of these. Keeping records safe is a **full-time job** — and there is a kind of program built for exactly that job.
+
+## What a Database Is
+
+**database** — a separate program whose only job is records: keep them safe, answer questions about them fast, and serve many programs and people at once — without ever losing a fact.
+
+Two programs talking: your app asks → the database answers — the records. Stop the app, crash it, rebuild it — **the records sit safe in the other program.**
+
+Every real app has one behind it:
+- **Bank's app** — holds accounts, transfers, card payments; your balance is read from it, never guessed
+- **Instagram** — holds photo links, comments, likes, follows; pictures sit in storage, the database keeps the facts about them
+- **Your investment app** — database on your own server, holding companies and trades; yesterday's buy is in there right now
+
+## Records Sit in Tables
+
+A database is not one big pile of everything. Records are sorted into **tables** — a grid that holds **one kind of fact**.
+
+Your app's companies table:
+
+| SYMBOL | NAME | PRICE |
+|--------|------|-------|
+| NVDA | NVIDIA | 131.26 |
+| AMD | Advanced Micro Devices | 117.53 |
+| TSM | Taiwan Semiconductor | 184.10 |
+
+One row = one fact. One column = one detail. **A table is that simple** — and a database keeps many of them.
+
+## Two Kinds of Facts — Two Tables
+
+Companies are one kind of fact. Trades are another — they get their own table. But the trade has to say **which company** was bought.
+
+How should a trade name its company — copy all its details in, or point at it?
+
+## Relational — Point, Don't Copy
+
+The trade stores one small thing: the company's number. Row #1 is NVIDIA, so the trade says "company 1" — it points, and nothing is written twice:
+
+```
+transactions:                    companies:
+ID    | COMPANY_ID | SHARES | AMOUNT    ID | SYMBOL | NAME
+4183  |     1      |   2    | -262.52    1 | NVDA   | NVIDIA
+                   points at ──────────→  2 | AMD    | Advanced Micro Devices
+```
+
+**relational database** — records kept in tables, and the tables point at each other.
+
+Tables that point at each other are **related** tables. That one word describes how nearly every serious app on earth keeps its facts.
+
+## Postgres — The Database on Your Server
+
+**PostgreSQL** (Postgres for short) is a particular database program — real software. The vibe build installed it on your server.
+
+1. **Installed** — put on the server with `dnf` (the same installer as any other program)
+2. **Running** — started once, then on day and night, waiting (not run-and-exit like your scripts)
+3. **On duty** — holding every trade since the vibe build
+
+```bash
+systemctl status postgresql
+# ● postgresql.service — active (running)   ← on since the vibe build — you just never looked
+```
+
+You never installed it and never started it — **the Claude Code agents did both during the vibe build.**
+
+## How Your App Talks to Postgres
+
+Postgres runs as a **server program**: always on, waiting for questions on **port 5432** (the port from the firewall topic). Any program that connects and asks is a **client**. Two clients today:
+
+- **psql** — the client you type into, from the terminal
+- **your app** — the other client, connected since the vibe build
+
+Both connect to port 5432. Postgres holds tables: companies, transactions.
+
+## The Database Landscape
+
+Databases are a field of products. Five big names:
+
+| Database | What it is |
+|----------|-----------|
+| **PostgreSQL** | serious open-source default — the one on your server right now |
+| **MySQL** | the classic of the web |
+| **SQLite** | the tiny one hiding inside phones and apps |
+| **SQL Server** | Microsoft's big corporate one |
+| **Oracle** | the other big corporate one |
+
+All five keep records the same way: tables that point at each other — **relational** databases, all of them. And **all five speak the same language — SQL.** Learn it once, it works on all five.
+
+## NoSQL — The Other Family
+
+Not every database keeps tables. The other family is **NoSQL** (non-relational):
+
+- **MongoDB** — keeps documents, not tables
+- **Redis** — works out of RAM, very fast; can still save to disk
+- **DynamoDB** — AWS's own
+
+Different shapes for different jobs — **not better or worse.** Our app lives in the relational world.
+
+## Why Postgres
+
+- **Free and open source** — no license to buy; you can run it tonight, on any server
+- **Production-common** — what serious production teams commonly run
+- **Skills transfer** — all five speak SQL; everything learned here works across the family
+
+One line of honesty: **MySQL would also have been a fine choice** — the skills are the same.
+
+## Install From Scratch — on a Clean Server
+
+```bash
+sudo dnf install postgresql16-server              # dnf — the machine's software installer
+sudo postgresql-setup --initdb                    # creates the data folder — on the EBS disk, where else
+sudo systemctl enable --now postgresql            # the starter — from now on it survives reboots
+sudo ss -tlnp | grep 5432                         # listening — the exact port from the firewall topic
+echo 'host all all 127.0.0.1/32 md5' | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
+                                                  # let a password log in — the step that bites everyone
+sudo systemctl restart postgresql                 # re-read that file
+```
+
+Born with nothing in it: no tables, no records, empty. **Remember this empty server.**
+
+## Step Inside — as the Admin
+
+A fresh Postgres lets exactly **one** user in: an admin account named `postgres`, made by the install.
+
+```bash
+sudo -u postgres psql
+postgres=#           # the prompt changed — you're inside now, as the admin
+```
+
+`sudo` = as the machine's admin · `-u postgres` = acting as "postgres" account · `psql` = open the database terminal
+
+Inside once, as the admin — to make **two decisions**: who may talk to this database, and where the app's tables will live.
+
+## The Two Decisions: a User, and Its Database
+
+**database user** — a name + password **the database itself** checks — separate from the machine's users.
+
+```sql
+-- at the postgres=# prompt:
+CREATE USER app_user WITH PASSWORD '...';       -- who may talk (password typed live, never on slides)
+CREATE DATABASE investapp OWNER app_user;       -- named database INSIDE Postgres, owned by that user
+```
+
+One word, two meanings — hold this one: `Postgres` = the database **program** (one, running on the server). `investapp` = a named database **inside** it, where the tables live. Your app names both when it connects.
+
+## Set Up Your Access — on the App's Server
+
+The app's server was built by the vibe build — it has the data, but no user for you yet.
+
+```bash
+# turn on password logins, then restart
+echo 'host all all 127.0.0.1/32 md5' | sudo tee -a <pg_hba.conf>
+sudo systemctl restart postgresql
+sudo -u postgres psql -d investapp
+CREATE USER app_user WITH PASSWORD '...';
+GRANT USAGE ON SCHEMA public TO app_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;   -- sequences too, or pg_dump fails
+```
+
+Here your user **owns nothing** — so you **grant** it what it needs: read the data, nothing more.
+
+## psql — Talk to the Database From the Terminal
+
+**psql** — the terminal client for Postgres: what the terminal is to the machine, psql is to the database.
+
+```bash
+psql -U app_user -d investapp      # connect: which user, which database
+investapp=>                        # prompt changed — talking to the database now, not the shell
+\dt                                # list the tables
+# ledger | quote_cache             ← YOUR build's names may differ
+```
+
+The clean server answered `\dt` with **nothing**. This one has **a history** — the tables the vibe build made.
+
+## Columns and Types — the Table's Own Plan
+
+Every table declares its columns. Ask with `\d`:
+
+```
+\d companies
+Column | Type
+-------+--------
+id     | integer
+symbol | text
+name   | text
+price  | numeric
+```
+
+**column** — one detail every row has, declared up front with a name (`price`) and what it holds (`numeric`).
+
+Column types, mapped to Python:
+
+| \d says | Python said | What it holds |
+|---------|------------|---------------|
+| `text` | `str` | words — a symbol, a name |
+| `integer` | `int` | whole numbers — an id, a count |
+| `numeric` | (no float!) | money — exact decimals, no missing fractions |
+| `timestamp` | — | a date-and-time — when the trade happened |
+
+**Why money never goes in a float:** A float stores decimals only *approximately*. `0.1 + 0.2` in Python prints `0.30000000000000004` — not 0.3, but 0.3 plus a tiny error. Tiny errors on money are missing cents. `numeric` stores decimals exactly — that's why money lives there.
+
+## The Schema — the Database's Whole Plan
+
+Run `\d` on every table. The full picture of what this database keeps is its **schema**:
+
+- **companies**: `id · symbol · name · price`
+- **transactions**: `id · company_id · shares · amount`
+
+**schema** — the written plan of the whole database: which tables exist, which columns each one has, what type each column holds.
+
+It is a **contract the database enforces**: a row that doesn't fit the plan is refused — not quietly saved wrong.
+
+## Primary Key — Every Row Has a Number
+
+**primary key** — the row's permanent number: how the database (and the app) point at exactly one fact and no other.
+
+```
+transactions:
+ID    | COMPANY_ID      | SHARES | AMOUNT
+4183  | 1 → (NVDA's id) |   2    | -262.52
+```
+
+The trade's `company_id` holds `1` — and 1 is NVIDIA's id. **That is how a trade names its company: by number, never by copying.**
+
+## SQL — Ask the Database a Question
+
+**SQL** — the program's fourth language: English → bash → Python → **SQL** — the language of questions about records.
+
+`SELECT` — ask the database a question. "Show me every company — first five." In SQL:
+
+```sql
+SELECT * FROM companies LIMIT 5;
+```
+
+- `SELECT *` = show what (every column)
+- `FROM companies` = which table
+- `LIMIT 5;` = how many (first five); `;` is SQL's full stop — the sentence isn't sent without it
+
+## WHERE — Filter the Results
+
+`WHERE` — the `if` you already wrote in Python:
+
+```sql
+SELECT * FROM companies WHERE price < 100;
+```
+
+- The test: `price < 100` — comparison works exactly as in Python
+- What WHERE does: keeps **only the rows where the test is true** — the rest never leave the database
+
+The database does it where the data lives, without shipping every row to you first.
+
+## Text Wears Quotes
+
+Numbers compare bare. Text goes in **single quotes**:
+
+```sql
+SELECT * FROM companies WHERE symbol = 'NVDA';
+```
+
+`'quotes'` — single quotes tell the database "this is text, not a column name or a number."
+
+This exact line runs on PostgreSQL, MySQL, SQLite, SQL Server, Oracle — **unchanged.** Rule: **numbers bare, text in quotes.**
+
+## Your Buy — On the Screen and in the Database
+
+```
+App's page:                    psql — same server:
+NVDA · NVIDIA                  SELECT * FROM transactions WHERE symbol = 'NVDA';
+2 shares · $262.52             id   | symbol | shares | amount
+bought yesterday               4183 | NVDA   | 2      | -262.52
+```
+
+The screen and the row are **the same fact** — everything the app shows you is an answer it got from the database.
+
+Opening question answered: "Your app remembers every trade — where do they live?" **That row — right there — is where.**
+
+## The Backup Question: What If You Lost It?
+
+Imagine your bank lost its database tonight: every balance, every transfer — **gone, with no way back.** Banks survive because they prepare for exactly that day. So will we.
+
+Which single table, if lost, kills the app?
+
+- **companies — recoverable**: app can ask the price service for the full list again
+- **prices — recoverable**: go stale within minutes anyway; the app refetches them all day long
+- **transactions — gone is gone**: the app's book of every buy and sell — its **ledger**. Your trades exist **nowhere else on earth**; there is nowhere to ask for them again
+
+**backup** — a copy of the facts that exist nowhere else — kept **somewhere else**.
+
+## pg_dump — The Whole Database as One Readable File
+
+**pg_dump** — the program that writes the whole database out as one `.sql` text file.
+
+```bash
+pg_dump -U app_user investapp > backup.sql    # the whole database, into one file (> redirect you know)
+less backup.sql                               # your tables, your rows — readable text you could email
+```
+
+Where should that file live? **The storage topic already answered it: a bucket** — never the same disk it's saving.
+
+## Restore — Into the Server Born Empty
+
+**restore** — feeding the dump file back in — the records, rebuilt from text.
+
+A plain `pg_dump` carries tables + rows, but **NOT users/roles** — so first re-make them:
+
+```bash
+echo 'host investapp app_user 127.0.0.1/32 md5' | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
+sudo systemctl reload postgresql
+psql -U app_user -d investapp < backup.sql    # feed the dump back in
+\dt    # before: nothing → after: companies | transactions
+```
+
+To carry users/roles too: `pg_dumpall --globals-only > roles.sql`
+
+**Two proofs at once: the install was real, and the backup is real.**
+
+## Self-Managed vs Managed
+
+We run our own Postgres on our own EC2 **deliberately** — hands dirty, learning what a database actually is.
+
+- **Self-managed (us, today)**: install, back up, patch — we saw every piece. Nothing is magic now.
+- **Managed (AWS RDS)**: someone else installs, backs up, patches. That's the Scale course — and by then you'll know exactly what it's managing for you.
+
+**You now know what "managed" manages.**
+
+## After Class
+
+- **The full build**: install Postgres on a server → create the user → connect → `\dt`, `\d` → run the SELECTs → find your own transactions
+- **One new question**: write ONE new SELECT about your own trading — "how much have I spent on NVDA in total?" — with Claude as tutor, not author. Bring the query and the number.
+
+**What you own now:** what a database is, the field it comes from, a from-scratch install, its user, SQL questions about your own money — and a backup you proved by restoring it.
