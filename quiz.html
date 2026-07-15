@@ -326,14 +326,14 @@
 
   <div class="header">
     <h1>DTC / 312</h1>
-    <p>Study Quiz — Lessons 1 – 21</p>
+    <p>Study Quiz — Lessons 1 – 22</p>
   </div>
 
   <!-- Start screen -->
   <div class="card start-screen" id="startScreen">
     <div class="big">🧠</div>
     <h2>Ready to test yourself?</h2>
-    <p>93 questions across all 21 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
+    <p>98 questions across all 22 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
     <button class="start-btn" onclick="startQuiz('all')">Start full quiz</button>
     <button class="mode-btn" onclick="startQuiz('random20')">Quick — 20 random</button>
   </div>
@@ -513,6 +513,13 @@ const ALL_QUESTIONS = [
   { lesson: "Lesson 21", q: "What does `pg_dump` produce and where should it live?", answers: ["A readable .sql text file — should live in an S3 bucket, never on the same disk it's backing up", "A binary snapshot — stored on the same server for fast restore", "An encrypted archive — emailed to the team", "A Postgres binary dump — stored on a second EBS volume on the same instance"], correct: 0, explain: "pg_dump -U app_user investapp > backup.sql. A copy on the same disk is not a backup." },
   { lesson: "Lesson 21", q: "Which table in the investment app, if lost, cannot be recovered?", answers: ["transactions (the ledger) — your trades exist nowhere else on earth", "companies — recoverable from any price API", "prices — refetched every few minutes anyway", "quote_cache — rebuilt on next price poll"], correct: 0, explain: "Companies and prices can be re-fetched. Your personal trade history lives only in your database — gone is gone." },
   { lesson: "Lesson 21", q: "What is the difference between self-managed Postgres and AWS RDS?", answers: ["Self-managed: you install, back up, patch. RDS: AWS does all that for you.", "RDS uses MySQL; self-managed uses Postgres.", "Self-managed is free; RDS always costs.", "RDS stores data in S3; self-managed uses EBS."], correct: 0, explain: "We ran self-managed deliberately — hands dirty, nothing magic. You now know exactly what RDS is managing for you." },
+
+  // ── Lesson 22: The Page ──
+  { lesson: "Lesson 22", q: "What is HTML?", answers: ["A markup language — its statements label content; it describes and cannot compute", "A programming language with variables and loops", "A database query language", "A compiled binary format browsers execute"], correct: 0, explain: "No variables, no ifs, no loops — on purpose. HTML says what things ARE, and nothing else." },
+  { lesson: "Lesson 22", q: "What does it mean to say a browser 'renders' a page?", answers: ["It reads the labeled text and turns it into the on-screen page", "It compiles the HTML into machine code", "It executes the HTML as instructions", "It compresses the file for faster download"], correct: 0, explain: "Labels in, pixels out. Chrome reads h1 and draws a heading, reads p and draws a paragraph — that's rendering." },
+  { lesson: "Lesson 22", q: "In HTML, what is a reference?", answers: ["One file pointing at another by path — like img src=, a href=, link href=, and script src=", "A variable that stores a value for later use", "A copy of another file's content pasted inline", "A comment explaining what a tag does"], correct: 0, explain: "The photo, the stylesheet, the linked page, and the script all stay their own files — the browser follows the pointer and renders each." },
+  { lesson: "Lesson 22", q: "What happens when an HTML page has one broken image reference?", answers: ["The rest of the page renders fine; only that one part shows a broken-image icon", "The whole page fails to load", "The browser substitutes a blank white page", "All other images on the page also break"], correct: 0, explain: "A page is assembled from parts, and each part can fail separately — the browser renders everything else anyway." },
+  { lesson: "Lesson 22", q: "What is the difference between HTML, CSS, and JavaScript?", answers: ["HTML says what things ARE (rendered); CSS says how they LOOK (rendered); JavaScript says what to DO (executed)", "They are three names for the same markup language", "HTML and CSS are executed; JavaScript is rendered", "CSS defines structure; HTML defines styling; JavaScript defines both"], correct: 0, explain: "HTML and CSS are rendered by the browser's rendering engine (Blink); JavaScript is executed by its JavaScript engine (V8)." },
 ];
 
 let questions = [];

@@ -58,6 +58,7 @@
 <li><a href="#lesson-19-the-neighborhood-where-your-server-lives">Lesson 19 — The Neighborhood: Where Your Server Lives</a></li>
 <li><a href="#lesson-20-data-storage-where-your-bytes-live">Lesson 20 — Data Storage: Where Your Bytes Live</a></li>
 <li><a href="#lesson-21-the-database-for-real">Lesson 21 — The Database, for Real</a></li>
+<li><a href="#lesson-22-the-page-html-css-javascript">Lesson 22 — The Page: HTML, CSS &amp; JavaScript</a></li>
   </ul>
 </nav>
 <main>
@@ -2451,6 +2452,406 @@ psql -U app_user -d investapp &lt; backup.sql    # feed the dump back in
 <li><strong>One new question</strong>: write ONE new SELECT about your own trading — "how much have I spent on NVDA in total?" — with Claude as tutor, not author. Bring the query and the number.</li>
 </ul>
 <p><strong>What you own now:</strong> what a database is, the field it comes from, a from-scratch install, its user, SQL questions about your own money — and a backup you proved by restoring it.</p>
+<hr />
+<h1 id="lesson-22-the-page-html-css-javascript">Lesson 22 — The Page: HTML, CSS &amp; JavaScript</h1>
+<h2 id="the-problem-what-arrives-is-not-what-you-see">The Problem: What Arrives Is Not What You See</h2>
+<p>You have opened thousands of web pages in your life. Today, for the first time, you read one.</p>
+<p>Every page you've ever visited works the same way: what <strong>arrives</strong> over the network is text — a wall of it. What you <strong>see</strong> is that text, rendered. The gap between the two is the whole topic.</p>
+<h2 id="a-label-marks-what-each-part-is">A Label Marks What Each Part IS</h2>
+<p>Take a heading and a paragraph — plain text:</p>
+<pre><code>Plov House
+Plov — rice, carrots, lamb.
+</code></pre>
+<p>Wrap each in a label that says what it <strong>is</strong>:</p>
+<pre><code class="language-html">&lt;h1&gt;Plov House&lt;/h1&gt;
+&lt;p&gt;Plov — rice, carrots, lamb.&lt;/p&gt;
+</code></pre>
+<p>The labels mark what each part IS — this is a heading, this is a paragraph — <strong>so that a program can render it.</strong> That is the whole idea. Two labels are enough to start; the rest arrive when a need arrives.</p>
+<h2 id="the-one-page-shape">The One Page Shape</h2>
+<p>The labeled text doesn't float loose — it sits inside a shape every page on earth shares:</p>
+<pre><code class="language-html">&lt;html&gt;                            &lt;!-- the page, whole — everything lives inside --&gt;
+  &lt;head&gt;                          &lt;!-- about the page — the browser reads this part --&gt;
+    &lt;title&gt;Plov House&lt;/title&gt;     &lt;!-- what the browser tab shows --&gt;
+  &lt;/head&gt;
+  &lt;body&gt;                          &lt;!-- the page itself — what the visitor sees --&gt;
+    ...your labeled text...
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Four labels, nested one inside another: <code>html</code> holds everything, <code>head</code> is about the page, <code>body</code> is the page. Learn this shape once — it returns in every topic ahead.</p>
+<h2 id="html-a-markup-language">HTML — a Markup Language</h2>
+<p><strong>HTML (HyperText Markup Language)</strong> — a markup language: a language whose statements <strong>label</strong> content. It describes — it cannot compute.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Python — a programming language</strong></td>
+<td>Variables, <code>if</code>, loops — it <strong>computes</strong>. You give it steps; it carries them out.</td>
+</tr>
+<tr>
+<td><strong>HTML — a markup language</strong></td>
+<td>Labels only. No variables, no <code>if</code>, no loops — on purpose. It says what things ARE, and nothing else.</td>
+</tr>
+</tbody>
+</table>
+<p>Deliberately <strong>not</strong> a programming language. A label only describes — it cannot crash.</p>
+<p>The "HyperText" part: text that can point at other text — the founding idea of the web. That idea gets cashed in below, once files start pointing at each other.</p>
+<h2 id="the-element">The Element</h2>
+<p>Opening tag + content + closing tag = an <strong>element</strong>:</p>
+<pre><code>&lt;h1&gt;  Plov House  &lt;/h1&gt;
+ ↑         ↑          ↑
+opening   content   closing
+ tag      (what a    tag —
+(the      visitor    same word,
+label,    reads)     a slash
+opened)              closes it
+</code></pre>
+<p>Say it like an engineer: HTML is a markup language — its statements label content. It describes and cannot compute — no variables, no ifs, no loops. Every piece of it is an <strong>element</strong>: opening tag, content, closing tag.</p>
+<h2 id="one-standard-three-decades">One Standard, Three Decades</h2>
+<table>
+<thead>
+<tr>
+<th>When</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1991</strong></td>
+<td>CERN. Tim Berners-Lee invents the web — and HTML with it</td>
+</tr>
+<tr>
+<td><strong>1990s</strong></td>
+<td>standardized — every browser maker agrees to read the same labels</td>
+</tr>
+<tr>
+<td><strong>2014</strong></td>
+<td>HTML5 — the version the modern web runs on</td>
+</tr>
+<tr>
+<td><strong>today</strong></td>
+<td>a living standard, maintained by WHATWG — the browser makers, jointly</td>
+</tr>
+</tbody>
+</table>
+<p>The world's first website, from 1991, is written with labels you already know — a title, headings, links. Thirty-five years old, and you can read it. That is what a standard buys.</p>
+<p>That agreement means any three strangers can work together without ever meeting:</p>
+<ul>
+<li><strong>Any author</strong> — anyone can write a page: a physicist in 1991, an AI in 2026, you, in twenty minutes.</li>
+<li><strong>Any server</strong> — any machine can hand the page over; it's just text, and the server doesn't need to understand it.</li>
+<li><strong>Any browser</strong> — Chrome, Safari, Firefox all render the same labels the same way. A page written in 1996 still opens today.</li>
+</ul>
+<p>Every website you have ever used — your bank, Instagram, your own app — is this <strong>one format</strong>. That is what "HTML is the standard for websites" means.</p>
+<h2 id="type-one-by-hand">Type One By Hand</h2>
+<p>Your first page is a fundamental, so it gets typed, not pasted — the same way your first <code>.py</code> did.</p>
+<pre><code class="language-bash">mkdir ~/code/menu                 # a product folder, like ~/code/quiz-bot — not a class folder
+code ~/code/menu                  # opens VS Code on it
+# New File → index.html           # index — the traditional name for a site's first page
+</code></pre>
+<p>Filled with the one page shape:</p>
+<pre><code class="language-html">&lt;html&gt;
+  &lt;head&gt;
+    &lt;title&gt;Plov House&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Plov House&lt;/h1&gt;
+    &lt;p&gt;Plov — rice, carrots, lamb. $12&lt;/p&gt;
+    &lt;p&gt;Lagman — hand-pulled noodles. $10&lt;/p&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<pre><code class="language-bash">open ~/code/menu/index.html       # Chrome opens — and it's YOUR page
+</code></pre>
+<p>No internet involved. A file on your disk, and a program that renders it. <strong>That is a web page.</strong></p>
+<h2 id="render">Render</h2>
+<p><strong>render</strong> — to turn labeled text into the on-screen page. The browser reads the labels and renders the content — that is the word engineers use.</p>
+<p>Your ten lines arrived as text. Chrome read <code>h1</code> and drew a big heading, read <code>p</code> and drew paragraphs, read <code>title</code> and wrote the tab. Labels in — pixels out.</p>
+<p>Every browser carries a <strong>rendering engine</strong> for this job — Chrome's is named <strong>Blink</strong>. You never talk to it; you just know it's there.</p>
+<h2 id="references-pointing-at-what-text-cant-hold">References: Pointing at What Text Can't Hold</h2>
+<p>A menu needs a photo, and a photo is not text — you cannot paste it into a text file. So HTML does the only honest thing: <strong>it points at it.</strong></p>
+<pre><code>&lt;img src="images/plov.png"&gt;
+</code></pre>
+<p><strong>reference</strong> — one file pointing at another, by path. The photo stays its own file — the browser follows the pointer and renders both.</p>
+<p>Notice: <code>img</code> has no closing tag. It wraps no text — there is nothing to put content around. A few labels are like that; their information rides inside the tag itself.</p>
+<p>The pointer can aim at a URL too — <code>src="https://…/plov.png"</code> — but you don't own that file: if it moves or is deleted, your image breaks. Keep your own copy.</p>
+<h2 id="the-attribute-and-the-path">The Attribute and the Path</h2>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Role</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;img …&gt;</code></td>
+<td>the tag</td>
+<td>"a picture goes here"</td>
+</tr>
+<tr>
+<td><code>src=</code></td>
+<td>an attribute</td>
+<td>a named setting written inside the tag — the element just grew one more part</td>
+</tr>
+<tr>
+<td><code>"images/plov.png"</code></td>
+<td>the path</td>
+<td>the same relative paths you've typed since week one — <code>images/…</code>, <code>../</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">mkdir ~/code/menu/images              # a folder for pictures
+# &lt;img src="images/plov.png"&gt;         # the new line, in index.html — right after the h1
+# reload                              # the photo appears on your page
+</code></pre>
+<p>Paths that start with <code>/</code> are absolute — to what? That question gets its real answer once a site moves onto a server. Today, everything stays relative.</p>
+<h2 id="one-broken-reference-the-rest-survives">One Broken Reference — the Rest Survives</h2>
+<pre><code class="language-bash">mv images/plov.png images/plov2.png   # rename the photo — the pointer now points at nothing
+# reload the page                     # the page is fine; the photo is the broken-image icon
+mv images/plov2.png images/plov.png   # name it back → reload → whole again
+</code></pre>
+<ul>
+<li><strong>Nothing crashed</strong> — the browser rendered everything else anyway: headings, paragraphs, all of it.</li>
+<li><strong>One pointer failed</strong> — one reference pointed at nothing, so one part is missing, and only that part.</li>
+<li><strong>You can see WHICH</strong> — the broken-image icon marks the exact spot. Diagnosis by eye, no tooling needed.</li>
+</ul>
+<p>The instinct to keep: <strong>a page is assembled from parts; each part can fail separately.</strong></p>
+<h2 id="a-link-is-a-reference-to-another-page">A Link Is a Reference to Another Page</h2>
+<pre><code>&lt;a href="drinks.html"&gt;Drinks&lt;/a&gt;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;a&gt; … &lt;/a&gt;</code></td>
+<td>the tag — a link. Its content ("Drinks") is what the visitor clicks</td>
+</tr>
+<tr>
+<td><code>href=</code></td>
+<td>another attribute — where the link points</td>
+</tr>
+<tr>
+<td><code>"drinks.html"</code></td>
+<td>the path — a file, found the same way the photo was</td>
+</tr>
+</tbody>
+</table>
+<p>A click opens THAT file instead — rendered, same as always. With a link back on the drinks page, you can walk between them forever.</p>
+<h2 id="a-website-is-files-pointing-at-files">A Website Is Files Pointing at Files</h2>
+<pre><code>index.html                          drinks.html
+&lt;h1&gt;Plov House&lt;/h1&gt;                 &lt;h1&gt;Drinks&lt;/h1&gt;
+&lt;img src="images/plov.png"&gt;         &lt;p&gt;Green tea — by the pot. $3&lt;/p&gt;
+&lt;a href="drinks.html"&gt;Drinks&lt;/a&gt;    &lt;a href="index.html"&gt;Back to the menu&lt;/a&gt;
+</code></pre>
+<p>The held word, cashed in: <strong>HyperText</strong> — text that points at other text. Two pages, two pointers, one site. Every website you have ever used is this, scaled up.</p>
+<h2 id="markdown-a-different-markup-not-for-web-pages">Markdown — a Different Markup, NOT for Web Pages</h2>
+<p>Said up front: Markdown is not for web pages — the browser never gets it. It is the markup for notes, and you've written it since week one: the lab README, the quiz decks your bot fed to <code>claude -p</code>.</p>
+<pre><code>Code (raw text)                    Preview (rendered)
+# My lab                           My lab
+Setting up my server, step by      Setting up my server, step by
+step.                              step.
+- launch EC2                       • launch EC2
+- connect over SSH                 • connect over SSH
+</code></pre>
+<p>The same two-sided idea as the wall you opened at the start of today — raw text on one side, rendered on the other. Markdown is <em>also</em> a markup language; GitHub renders it. <code>#</code> is a heading the way <code>&lt;h1&gt;</code> is — no closing tags, no page shape. Lighter, on purpose.</p>
+<h2 id="markdowns-job-notes-for-humans-and-now-for-ai">Markdown's Job: Notes for Humans — and Now for AI</h2>
+<p>Markdown was invented in 2004 so the <em>raw</em> text reads like a normal document — no wall, no labels in the way.</p>
+<ul>
+<li><strong>For humans writing to humans</strong> — documentation, READMEs in a repository, instructions: readable before any rendering happens.</li>
+<li><strong>And today: the format AI reads and writes best</strong> — your own quiz bot already proved it: markdown decks in, quizzes out.</li>
+</ul>
+<p>One line to keep them apart, forever: <strong>HTML is rendered by browsers for visitors; Markdown is read by people and AI where it lives.</strong></p>
+<h2 id="the-ai-grows-the-site-and-explains-it-back">The AI Grows the Site — and Explains It Back</h2>
+<p>You typed the fundamental. Growing it into a real site is a lot of typing — exactly what the AI is for. Claude Code, in <code>~/code/menu</code>, with one prompt:</p>
+<pre><code>Grow this into a small restaurant site for the restaurant already in
+index.html. Three pages, photos, prices, and a reserve-a-table form.
+Plain HTML and one CSS file (style.css) — no frameworks, no JavaScript
+beyond what the form strictly needs (prefer none). Keep my hand-typed
+index.html content recognizable. AND write MENU.md explaining every file
+and what each part of the HTML does, one to one — so I can verify the
+whole site by reading MENU.md first.
+</code></pre>
+<p>Back comes the site — pages, photos, one <code>style.css</code> — and <code>MENU.md</code>, the explanation you asked for up front. <strong>Always ask for both: the work, and the explanation you will check it against.</strong></p>
+<h2 id="read-the-map-first-then-verify">Read the Map First, Then Verify</h2>
+<ol>
+<li><strong>The map</strong> — <code>MENU.md</code>: the AI's explanation, written in the markup you write yourselves</li>
+<li><strong>The files</strong> — each <code>.html</code> file, read against the map: <code>h1</code>, <code>p</code>, <code>img</code>, <code>a</code> — you know every one of these</li>
+<li><strong>The verdict</strong> — does it match? Every claim in the map, checked against the file it describes</li>
+</ol>
+<p>The standing practice, from here on: <strong>the AI builds. The AI explains back. You verify.</strong></p>
+<h2 id="css-the-looks-live-in-a-second-language">CSS — the Looks Live in a Second Language</h2>
+<p>Where did the colors and fonts come from? Not from the HTML. The AI's pages carry one more reference — pointing at a second language:</p>
+<pre><code>&lt;link rel="stylesheet" href="style.css"&gt;
+</code></pre>
+<p><strong>CSS (Cascading Style Sheets)</strong> — the language of looks. <strong>HTML says what things ARE; CSS says how they LOOK.</strong></p>
+<pre><code class="language-bash"># open style.css → change one color word → reload
+# the whole site changes; the HTML never moved
+</code></pre>
+<p>Recognizing that line is the whole job today. CSS is a world of its own — writing it is not this program's path.</p>
+<h2 id="your-whole-site-is-files-pointing-at-files">Your Whole Site Is Files Pointing at Files</h2>
+<table>
+<thead>
+<tr>
+<th>Tag / attribute</th>
+<th>Points at</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>link href=</code></td>
+<td><code>style.css</code></td>
+<td>the looks</td>
+</tr>
+<tr>
+<td><code>img src=</code></td>
+<td><code>images/plov.png</code></td>
+<td>a picture</td>
+</tr>
+<tr>
+<td><code>a href=</code></td>
+<td><code>drinks.html</code></td>
+<td>another page</td>
+</tr>
+</tbody>
+</table>
+<p>One idea, three payments: <strong>a tag holding a path.</strong> <code>MENU.md</code> sits alongside, pointed at by nobody — it's for people and AI, not the browser.</p>
+<h2 id="frozen-until-something-executes">Frozen — Until Something Executes</h2>
+<p>Render the menu and it sits there — every pixel fixed until you reload. But the pages you use every day change <strong>without reloading</strong>:</p>
+<ul>
+<li><strong>A menu folds open</strong> — tap the three-line menu button; it unfolds. No reload happened.</li>
+<li><strong>A form complains</strong> — "You forgot your name" — before anything was sent anywhere.</li>
+<li><strong>A feed keeps growing</strong> — scroll Instagram; more arrives, the page never reloads.</li>
+</ul>
+<p>So something must be <strong>executing instructions</strong> — right there, in the browser, after the render. You know what a program is; you wrote them: instructions in a file, carried out step by step.</p>
+<h2 id="javascript-the-third-language">JavaScript — the Third Language</h2>
+<p><strong>JavaScript</strong> — the third language a page carries: instructions, brought along with the labels and the looks — and the browser <strong>executes</strong> them, step by step, after the render.</p>
+<table>
+<thead>
+<tr>
+<th>Language</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HTML</strong></td>
+<td>what things ARE — rendered</td>
+</tr>
+<tr>
+<td><strong>CSS</strong></td>
+<td>how they LOOK — rendered</td>
+</tr>
+<tr>
+<td><strong>JavaScript</strong></td>
+<td>what to DO — executed</td>
+</tr>
+</tbody>
+</table>
+<p>The folding menu, the complaining form, the growing feed — all JavaScript, executed by the browser you're using right now.</p>
+<h2 id="one-browser-two-engines-two-verbs">One Browser, Two Engines, Two Verbs</h2>
+<pre><code>index.html (HTML)    style.css (CSS)         menu.js (JavaScript)
+      \                    /                        |
+       \                  /                         |
+    rendering engine (Blink)              JavaScript engine (V8)
+    reads labels + looks,                 carries out instructions
+    draws the page                        step by step, after the render
+         |                                          |
+      RENDERS                                  EXECUTES
+         |                                          |
+    the page you see                    the page changing — a menu
+                                         folds open, a feed keeps
+                                         growing, no reload
+</code></pre>
+<p>HTML and CSS are <strong>rendered</strong>; JavaScript is <strong>executed</strong> — an engine for each. Chrome's pair: Blink and V8.</p>
+<h2 id="where-pages-carry-their-instructions">Where Pages Carry Their Instructions</h2>
+<p>Not pasted into the page — <strong>pointed at</strong>, like everything else. When a page carries instructions, its head holds one more reference:</p>
+<pre><code>&lt;script src="menu.js"&gt;&lt;/script&gt;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Reference</th>
+<th>Points at</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>link href=</code></td>
+<td><code>style.css</code></td>
+<td>the looks</td>
+</tr>
+<tr>
+<td><code>img src=</code></td>
+<td><code>images/plov.png</code></td>
+<td>a picture</td>
+</tr>
+<tr>
+<td><code>a href=</code></td>
+<td><code>drinks.html</code></td>
+<td>another page</td>
+</tr>
+<tr>
+<td><code>script src=</code></td>
+<td><code>menu.js</code></td>
+<td>instructions</td>
+</tr>
+</tbody>
+</table>
+<p>One idea, four payments: <strong>a tag holding a path.</strong> You can now read every kind of pointer a page carries.</p>
+<p>The honest boundary: JavaScript is a real language, deep enough for a whole course. Today you recognize it and say what it does — writing it is not this program's path. And <em>where</em> code runs — this machine, or the server — has its own topic ahead.</p>
+<h2 id="read-your-own-apps-page">Read Your Own App's Page</h2>
+<pre><code>&lt;!doctype html&gt;                          ← one bookkeeping line: "this is HTML" — read it, move on
+&lt;html&gt; &lt;head&gt;                            ← ✓ the shape you typed today
+  &lt;title&gt;Invest — portfolio&lt;/title&gt;      ← ✓ yours to read
+  &lt;link rel="stylesheet" href=…&gt;         ← ✓ a reference — the looks
+  &lt;script src=…&gt;&lt;/script&gt;                ← ✓ a reference — instructions
+&lt;/head&gt; &lt;body&gt;
+  &lt;h1&gt;Portfolio&lt;/h1&gt;                     ← ✓ an element — you know its anatomy
+  &lt;p&gt;Cash: $10,000.00&lt;/p&gt; …&lt;img…&gt; …&lt;a…&gt;  ← ✓ ✓ ✓
+  &lt;form&gt; … &lt;button&gt;Buy&lt;/button&gt; …&lt;/form&gt; ← wait. what are THESE?
+&lt;/body&gt; &lt;/html&gt;
+</code></pre>
+<p>When class started, this was a wall. Now you read most of it — as promised. Except the Buy button lives in a tag too: <code>form</code> and <code>button</code> — the tags a page uses to <em>send data back</em>. Today, just their names.</p>
+<h2 id="the-click-needs-a-program-to-receive-it">The Click Needs a Program to Receive It</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The menu site</strong> — Reserve-a-table, pressed</td>
+<td>Nothing happens. A local file is just text — there is no program behind it to receive the click.</td>
+</tr>
+<tr>
+<td><strong>Your app</strong> — Buy, pressed</td>
+<td>The buy lands; prices update. A running program received that click and acted on it.</td>
+</tr>
+</tbody>
+</table>
+<p>How a click travels from the page to that program — and how the answer comes back — <strong>is the rest of true engineering.</strong></p>
+<h2 id="after-class_2">After Class</h2>
+<ul>
+<li><strong>Push <code>~/code/menu</code> to GitHub</strong> — the git moves you know. Then open <code>MENU.md</code> on the repo page: it renders, the Code ↔ Preview toggle, on your own repo.</li>
+<li><strong>Grow it by hand</strong> — one more page, <code>desserts.html</code>, typed yourself, linked from index and back. No AI: ten lines, your hands.</li>
+<li><strong>Read the web</strong> — view-source three sites you use every day. Count what you can read now: <code>h1, p, img, a, link, script</code> — and notice the form tags waiting for us.</li>
+</ul>
+<p><strong>What you know now:</strong> a page is labeled text, and you typed one. References assemble a site — pictures, pages, looks, instructions, all files pointing at files. The browser renders HTML and CSS and executes JavaScript. And one question stays open on purpose: how does a click reach the program behind your app?</p>
 </main>
 </body>
 </html>
