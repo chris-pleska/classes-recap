@@ -2,3 +2,5 @@
 .localized
 decks/
 .DS_Store
+__pycache__/
+study.db

@@ -2,10 +2,13 @@
 """
 Pulls new sessions from the 312school decks repo and uses Claude to
 append matching content to recap.md, lesson1.md + lesson1.html, and quiz.html.
+Also records each new session into study.db so it's searchable.
 Run from inside ~/code/class_recap.
 """
 
-import glob, os, subprocess, json, sys
+import glob, os, re, subprocess, json, sys
+
+from study_db import insert_session
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DECKS_DIR = os.path.join(BASE, "decks")
@@ -51,6 +54,65 @@ def pending_sessions(sessions, last_done):
     return [s for s in sessions if session_number(s) > last_done]
 
 
+# ---------------------------------------------------------------------------
+# study.db recording helpers
+# ---------------------------------------------------------------------------
+
+def extract_section(text, pattern, n):
+    """
+    Finds the chunk of `text` belonging to lesson/session number `n`, using
+    `pattern` to locate headers. Returns (title, body) or ("", "") if not found.
+    """
+    matches = list(re.finditer(pattern, text))
+    for i, m in enumerate(matches):
+        if int(m.group(1)) == n:
+            title = m.group(2).strip() if m.lastindex and m.lastindex >= 2 else ""
+            start = m.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            return title, text[start:end].strip()
+    return "", ""
+
+
+def record_recap(n):
+    path = os.path.join(BASE, "recap.md")
+    if not os.path.exists(path):
+        return
+    text = open(path, encoding="utf-8").read()
+    title, body = extract_section(text, r"#+\s*Lesson\s+(\d+)[:\-]?\s*(.*)", n)
+    if body:
+        insert_session(n, "recap", body, title=title)
+        print(f"[recap] session-{n} recorded in study.db")
+
+
+def record_notes(n):
+    path = os.path.join(BASE, "lesson1.md")
+    if not os.path.exists(path):
+        return
+    text = open(path, encoding="utf-8").read()
+    title, body = extract_section(text, r"#+\s*Lesson\s+(\d+)[:\-]?\s*(.*)", n)
+    if body:
+        insert_session(n, "notes", body, title=title)
+        print(f"[notes] session-{n} recorded in study.db")
+
+
+def record_quiz(n):
+    path = os.path.join(BASE, "quiz.html")
+    if not os.path.exists(path):
+        return
+    text = open(path, encoding="utf-8").read()
+    title, body = extract_section(text, r"//\s*──\s*Lesson\s+(\d+):\s*(.*?)\s*──", n)
+    if body:
+        insert_session(n, "quiz", body, title=title)
+        print(f"[quiz] session-{n} recorded in study.db")
+
+
+DB_RECORDERS = {
+    "recap": record_recap,
+    "notes": record_notes,
+    "quiz": record_quiz,
+}
+
+
 def process_target(name, sessions, state, build_prompt):
     for folder in pending_sessions(sessions, state[name]):
         n = session_number(folder)
@@ -61,6 +123,9 @@ def process_target(name, sessions, state, build_prompt):
         state[name] = n
         save_state(state)
         print(f"[{name}] session-{n} done")
+
+        # Record the newly written section into study.db
+        DB_RECORDERS[name](n)
 
 
 def recap_prompt(folder, n):
