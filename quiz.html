@@ -326,14 +326,14 @@
 
   <div class="header">
     <h1>DTC / 312</h1>
-    <p>Study Quiz — Lessons 1 – 22</p>
+    <p>Study Quiz — Lessons 1 – 24</p>
   </div>
 
   <!-- Start screen -->
   <div class="card start-screen" id="startScreen">
     <div class="big">🧠</div>
     <h2>Ready to test yourself?</h2>
-    <p>98 questions across all 22 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
+    <p>104 questions across all 24 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
     <button class="start-btn" onclick="startQuiz('all')">Start full quiz</button>
     <button class="mode-btn" onclick="startQuiz('random20')">Quick — 20 random</button>
   </div>
@@ -520,6 +520,16 @@ const ALL_QUESTIONS = [
   { lesson: "Lesson 22", q: "In HTML, what is a reference?", answers: ["One file pointing at another by path — like img src=, a href=, link href=, and script src=", "A variable that stores a value for later use", "A copy of another file's content pasted inline", "A comment explaining what a tag does"], correct: 0, explain: "The photo, the stylesheet, the linked page, and the script all stay their own files — the browser follows the pointer and renders each." },
   { lesson: "Lesson 22", q: "What happens when an HTML page has one broken image reference?", answers: ["The rest of the page renders fine; only that one part shows a broken-image icon", "The whole page fails to load", "The browser substitutes a blank white page", "All other images on the page also break"], correct: 0, explain: "A page is assembled from parts, and each part can fail separately — the browser renders everything else anyway." },
   { lesson: "Lesson 22", q: "What is the difference between HTML, CSS, and JavaScript?", answers: ["HTML says what things ARE (rendered); CSS says how they LOOK (rendered); JavaScript says what to DO (executed)", "They are three names for the same markup language", "HTML and CSS are executed; JavaScript is rendered", "CSS defines structure; HTML defines styling; JavaScript defines both"], correct: 0, explain: "HTML and CSS are rendered by the browser's rendering engine (Blink); JavaScript is executed by its JavaScript engine (V8)." },
+
+  // ── Lesson 23: HTTP ──
+  { lesson: "Lesson 23", q: "What is a protocol?", answers: ["An agreed set of rules two programs follow to talk to each other", "A type of encryption used only by HTTPS", "A file format for web pages", "A physical cable standard"], correct: 0, explain: "Protocols let programs that have never met still understand each other — SSH, DNS, and HTTP are all examples." },
+  { lesson: "Lesson 23", q: "In an HTTP request like `GET /portfolio HTTP/1.1`, what does `GET` represent?", answers: ["The verb — what kind of request this is", "The path — which thing is being requested", "The version — which edition of the rules is used", "The domain — which machine to contact"], correct: 0, explain: "GET means \"give me.\" The path (/portfolio) says which thing, and HTTP/1.1 says which version of the rules." },
+  { lesson: "Lesson 23", q: "What does an HTTP status code in the 4xx range mean?", answers: ["The request is wrong — e.g. 404 Not Found", "The request worked", "The answer lives at another address", "The server itself failed"], correct: 0, explain: "2xx = it worked, 3xx = go elsewhere, 4xx = the request is wrong, 5xx = the server broke." },
+
+  // ── Lesson 24: Static Hosting ──
+  { lesson: "Lesson 24", q: "What three things must a machine do to host a website?", answers: ["Be always on, have a public IP address, and run a program listening on a port that answers requests", "Have a fast CPU, lots of RAM, and a large hard drive", "Run Linux, have a domain name, and use HTTPS", "Have an IAM role, a security group, and an Elastic IP"], correct: 0, explain: "Always on, publicly addressed, and a program that reads each request's path, finds the file, and answers — that's hosting." },
+  { lesson: "Lesson 24", q: "In nginx's config file, what does the `root` directive control?", answers: ["The folder on disk that every request path is resolved under", "The port nginx listens on", "The default page returned for `/`", "The user account nginx runs as"], correct: 0, explain: "`root /usr/share/nginx/html;` means every path — like /drinks.html — is looked up under that folder. `index` picks the file for `/` specifically." },
+  { lesson: "Lesson 24", q: "What makes a site a \"static\" site?", answers: ["Every answer already existed as a file before the request came in, and is handed back unchanged", "It never changes its CSS styling", "It has no images or JavaScript", "It can only be hosted on S3, not a server"], correct: 0, explain: "Same address, same bytes, for everyone, every time — that's static hosting, whether served by nginx or by S3." },
 ];
 
 let questions = [];

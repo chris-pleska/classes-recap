@@ -59,6 +59,8 @@
 <li><a href="#lesson-20-data-storage-where-your-bytes-live">Lesson 20 — Data Storage: Where Your Bytes Live</a></li>
 <li><a href="#lesson-21-the-database-for-real">Lesson 21 — The Database, for Real</a></li>
 <li><a href="#lesson-22-the-page-html-css-javascript">Lesson 22 — The Page: HTML, CSS &amp; JavaScript</a></li>
+<li><a href="#lesson-23-http-the-conversation-your-browser-is-having">Lesson 23 — HTTP: the Conversation Your Browser Is Having</a></li>
+<li><a href="#lesson-24-static-hosting-your-menu-site-goes-on-the-internet">Lesson 24 — Static Hosting: Your Menu Site Goes on the Internet</a></li>
   </ul>
 </nav>
 <main>
@@ -2852,6 +2854,647 @@ whole site by reading MENU.md first.
 <li><strong>Read the web</strong> — view-source three sites you use every day. Count what you can read now: <code>h1, p, img, a, link, script</code> — and notice the form tags waiting for us.</li>
 </ul>
 <p><strong>What you know now:</strong> a page is labeled text, and you typed one. References assemble a site — pictures, pages, looks, instructions, all files pointing at files. The browser renders HTML and CSS and executes JavaScript. And one question stays open on purpose: how does a click reach the program behind your app?</p>
+<h1 id="lesson-23-http-the-conversation-your-browser-is-having">Lesson 23 — HTTP: the Conversation Your Browser Is Having</h1>
+<h2 id="the-problem-a-click-needs-a-program-to-receive-it">The Problem: A Click Needs a Program to Receive It</h2>
+<p>Last lesson ended on a question. Reserve-a-table on the menu site, pressed — nothing. A file on a disk has no program behind it. A stock buy on your app, pressed — the buy lands, prices update: <strong>a running program received that click and acted.</strong></p>
+<p>How the click travels there, and how the answer comes back, is the rest of true engineering. Today: the request and the response — and by the end, you read both raw.</p>
+<h2 id="the-network-tab-opened">The Network Tab, Opened</h2>
+<p>Chrome ships a set of tools for engineers — <strong>dev tools</strong> — a troubleshooting surface, opened when something is broken. One tab of it matters here: <strong>Network</strong>. Opened with <code>right-click the page → Inspect → Network</code>, or <code>⌥⌘I</code> then Network.</p>
+<p>Reload your app with it open, and rows fill in: <code>portfolio</code>, <code>style.css</code>, <code>app.js</code>, <code>logo.png</code> — each with a status, a type, a size, a time.</p>
+<p><strong>Each row is one request sent, one response received.</strong> Learning to read these rows is this whole lesson.</p>
+<h2 id="protocol-the-term-behind-they-just-understand-each-other">Protocol — the Term Behind "They Just Understand Each Other"</h2>
+<p>Your browser was written at Google. The program answering on your EC2 was written by different people entirely. They have never met — yet the page arrives and renders, every time. The only way that works: both sides follow <strong>the same agreed format</strong> for every message — what the first line says, where the address goes, how the answer starts.</p>
+<p><strong>protocol</strong> — an agreed set of rules two programs follow to talk to each other, so programs that have never met can still understand each other.</p>
+<p>Not a new idea — you've used protocols for weeks:</p>
+<table>
+<thead>
+<tr>
+<th>Protocol</th>
+<th>What it's the rules for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SSH</strong></td>
+<td>a remote terminal — your Mac and your EC2 speak it every time you connect, on port 22</td>
+</tr>
+<tr>
+<td><strong>DNS</strong></td>
+<td>turning a name into an address — spoken every time your domain finds your server</td>
+</tr>
+<tr>
+<td><strong>HTTP</strong></td>
+<td>asking for pages and answering — this lesson's protocol</td>
+</tr>
+</tbody>
+</table>
+<h2 id="client-and-server">Client and Server</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Who plays it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>client — the one asking</strong></td>
+<td>Your browser, asking for the page. <code>curl</code>, asking without a browser. Whoever <strong>sends the request</strong> is the client.</td>
+</tr>
+<tr>
+<td><strong>server — the one answering</strong></td>
+<td>Your EC2, answering with the page. Whoever <strong>sends the response</strong> is the server — the word literally means "the one that serves."</td>
+</tr>
+</tbody>
+</table>
+<p>The same machine can play either part: when you SSH in, your Mac is the client and your EC2 is the server — the same two roles, a different protocol.</p>
+<h2 id="http-hypertext-transfer-protocol">HTTP — HyperText Transfer Protocol</h2>
+<p>Unpack the name on the address bar:</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What it names</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HyperText</strong></td>
+<td>what travels — pages that point at other pages, the HTML you already read</td>
+</tr>
+<tr>
+<td><strong>Transfer</strong></td>
+<td>what happens to it — moving it from one machine to another</td>
+</tr>
+<tr>
+<td><strong>Protocol</strong></td>
+<td>how — agreed rules both sides follow</td>
+</tr>
+</tbody>
+</table>
+<p><strong>HTTP (HyperText Transfer Protocol)</strong> — the agreed shape of the request a client sends and the response a server answers with. Every browser and every web server on earth speaks it. Designed together with HTML, by the same person, in the same year.</p>
+<table>
+<thead>
+<tr>
+<th>When</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1991</strong></td>
+<td>CERN. Tim Berners-Lee invents the web: HTML the page, HTTP the way it travels</td>
+</tr>
+<tr>
+<td><strong>1997</strong></td>
+<td>HTTP/1.1 — standardized by the IETF, the internet's standards body. Plain text, readable</td>
+</tr>
+<tr>
+<td><strong>2015+</strong></td>
+<td>HTTP/2, HTTP/3 — faster carriers for the same conversation. Names to recognize</td>
+</tr>
+<tr>
+<td><strong>today</strong></td>
+<td>every browser, every server — request-then-response, never changed</td>
+</tr>
+</tbody>
+</table>
+<p>We read HTTP/1.1 today because it is plain text — your eyes can read every character of it. The newer versions carry the same conversation, packed tighter for speed.</p>
+<h2 id="the-url-read-left-to-right">The URL, Read Left to Right</h2>
+<pre><code>http://server.aigul.click/portfolio
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Says</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http://</code></td>
+<td>which protocol — which rules this request follows</td>
+</tr>
+<tr>
+<td><code>server.aigul.click</code></td>
+<td>which machine — the domain, the name that finds the server</td>
+</tr>
+<tr>
+<td><code>/portfolio</code></td>
+<td>which thing — the path, what you want from that machine</td>
+</tr>
+</tbody>
+</table>
+<p>The menu site's bar, read the same way: <code>file:///Users/you/code/menu/index.html</code> — no machine, no request. <strong><code>file://</code> reads your own disk; <code>http://</code> asks another machine.</strong></p>
+<h2 id="name-machine-port-refreshed">Name → Machine → Port, Refreshed</h2>
+<pre><code>your domain (server.aigul.click)
+        │  DNS looks it up
+        ▼
+   the machine's IP address
+        │  arrives at a port
+        ▼
+http → port 80 · https → port 443 · (SSH stays on 22)
+</code></pre>
+<p>Requests get in at all because of the port-80 rule you added to your security group — the checkpoint in front of the machine — which is exactly what admits these requests.</p>
+<p>If your domain has gone stale after a stop/start, the IP still works directly: <code>http://&lt;your-public-ip&gt;/portfolio</code> — no DNS involved.</p>
+<h2 id="the-request-raw">The Request, Raw</h2>
+<pre><code>GET /portfolio HTTP/1.1          # the request line — verb, path, version
+Host: &lt;their-domain&gt;             # a header — a labeled fact: which site this request is for
+User-Agent: ...                  # another header — who is asking (the browser names itself)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td>the verb — "give me." Other verbs exist; they wait for a later lesson</td>
+</tr>
+<tr>
+<td><code>/portfolio</code></td>
+<td>the path — the same path from the address bar</td>
+</tr>
+<tr>
+<td><code>HTTP/1.1</code></td>
+<td>the version — which edition of the rules both sides speak</td>
+</tr>
+</tbody>
+</table>
+<p>Headers are labeled facts about the request — real requests carry a dozen more, and nobody reads them all.</p>
+<h2 id="the-response-raw">The Response, Raw</h2>
+<p>The answer comes back in four parts: <strong>the status line</strong> (how it went), <strong>headers</strong>, <strong>one empty line</strong>, then <strong>the body</strong> — the same HTML you already learned to read.</p>
+<pre><code>HTTP/1.1 200 OK                  # the status line — 200 is the number every answer carries
+Content-Type: text/html          # a header
+
+&lt;!DOCTYPE html&gt;                  # the empty line above ends the headers — this is the body
+&lt;html&gt;...
+</code></pre>
+<p>One ask, one answer — you can read every character of both.</p>
+<h2 id="curl-the-raw-answer-in-the-terminal">curl — the Raw Answer, in the Terminal</h2>
+<p><strong>curl</strong> — fetches a page from the command line. It shows you the answer raw, nothing rendered.</p>
+<pre><code class="language-bash">curl http://&lt;their-domain&gt;/portfolio      # the body fills the terminal — HTML, and you can read it
+curl -i http://&lt;their-domain&gt;/portfolio   # -i: the status line and headers appear above the body
+</code></pre>
+<p>Domain stale? The IP works directly: <code>curl http://&lt;your-public-ip&gt;/portfolio</code>.</p>
+<p>Status line, headers, empty line, body — the exact shape you just read raw, arriving for real.</p>
+<h2 id="curl-vs-chrome-what-you-get-vs-what-you-see">curl vs Chrome: What You Get vs What You See</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>curl</strong></td>
+<td>prints what arrives, and stops</td>
+</tr>
+<tr>
+<td><strong>Chrome</strong></td>
+<td>renders it, then keeps going — it requests every reference it finds, by itself</td>
+</tr>
+</tbody>
+</table>
+<p>curl made <strong>one</strong> request and stopped. Chrome made <strong>four</strong> — and the Network tab from the start of the lesson shows exactly that: <strong>one row per request.</strong></p>
+<h2 id="the-number-every-answer-carries">The Number Every Answer Carries</h2>
+<p>Last lesson we said a browser's report of a missing part has a name and a number. Here it is: the <strong>status code</strong> — the number on every status line. Four families:</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>2xx</strong></td>
+<td>it worked — <code>200 OK</code>, the one you've been seeing all day</td>
+</tr>
+<tr>
+<td><strong>3xx</strong></td>
+<td>go elsewhere — the answer lives at another address</td>
+</tr>
+<tr>
+<td><strong>4xx</strong></td>
+<td>the request is wrong — <code>404 Not Found</code>: no such thing here</td>
+</tr>
+<tr>
+<td><strong>5xx</strong></td>
+<td>the answering side broke — the server failed to build an answer</td>
+</tr>
+</tbody>
+</table>
+<p>The engineer's reading: <strong>4xx — check the request; 5xx — check the server.</strong> The number tells you which side to check first.</p>
+<p>The honest note: the menu site's broken image had no number — a file opened from disk has no response to carry one. The name-and-number exists only on the web.</p>
+<h2 id="a-thing-that-isnt-there-the-answer-is-404">A Thing That Isn't There — the Answer Is 404</h2>
+<pre><code class="language-bash">curl -i http://&lt;their-domain&gt;/no-such-thing
+HTTP/1.1 404 NOT FOUND           # the status line: the request was wrong — no such thing here
+</code></pre>
+<p>The same path in Chrome: the Network row turns red, status 404.</p>
+<ul>
+<li><strong>The server did its job</strong> — it read the request, found nothing at that path, and answered properly: status line, headers, a small body.</li>
+<li><strong>The number named the problem</strong> — 404, the request is wrong, not the server. The same number a broken image reference produces on the web.</li>
+</ul>
+<p>Nothing crashed — <strong>the answer is "no such thing."</strong></p>
+<h2 id="one-stock-buy-the-answer-is-a-redirect">One Stock Buy — the Answer Is a Redirect</h2>
+<p>Network tab open, Preserve log <strong>ON</strong> — without it the first row vanishes. Press Buy — two rows appear:</p>
+<table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Answered</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 — the stock buy's request</td>
+<td><strong>302</strong> — a redirect</td>
+<td>"done — now ask over there." A 3xx: go elsewhere. The answer names the new address.</td>
+</tr>
+<tr>
+<td>2 — the browser obeyed</td>
+<td><strong>200</strong></td>
+<td>the browser read the number and made the second request by itself — the fresh portfolio page.</td>
+</tr>
+</tbody>
+</table>
+<p>Builds vary — some don't redirect at all. Read yours. What the stock buy carried — the ticker, the amount — is its own lesson ahead.</p>
+<p><strong>Some status codes are instructions the browser follows.</strong></p>
+<h2 id="one-click-many-rows">One Click, Many Rows</h2>
+<p>Back to the first look at the Network tab, now readable:</p>
+<ol>
+<li><strong>You asked for one page</strong> — the first row is the HTML itself</li>
+<li><strong>Chrome read that HTML and found every reference</strong> — <code>style.css</code>, <code>app.js</code>, <code>logo.png</code></li>
+<li><strong>It requested each one, by itself</strong></li>
+</ol>
+<p><strong>The first row is the page. Every other row is a reference Chrome requested by itself.</strong></p>
+<h2 id="a-reference-can-point-at-another-machine">A Reference Can Point at Another Machine</h2>
+<p>Every <code>src</code> you've read so far held a path on the same site. But <code>src</code> can hold a full URL — and then Chrome's follow-up request goes to <em>that</em> machine:</p>
+<pre><code class="language-html">&lt;img src="https://…s3.amazonaws.com/logo.png"&gt;
+</code></pre>
+<p>On a real site, one row often comes from elsewhere — an image or video answered by <strong>S3</strong>, object storage, fetched by name. Its row shows a different domain.</p>
+<p><strong>A page assembles from many servers.</strong> One EC2 sent the HTML; S3 sent the logo — one page, two machines. Your own build most likely serves its logo from its own disk — read your logo row's domain to see whose machine answered.</p>
+<p>A site you use every day, reloaded with the tab open, shows the difference in scale:</p>
+<table>
+<thead>
+<tr>
+<th>Site</th>
+<th>Rows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>your app</strong></td>
+<td>4 rows — one page, three references, two machines</td>
+</tr>
+<tr>
+<td><strong>a bank homepage</strong></td>
+<td>dozens to hundreds of rows — pictures, styles, scripts, fonts — from many machines</td>
+</tr>
+</tbody>
+</table>
+<p>Any row reads the same way: <strong>name · status · type · size · time</strong> — the same five columns, the same request and response underneath.</p>
+<h2 id="under-http-tcp-and-ip">Under HTTP: TCP and IP</h2>
+<p>Before any text moves, the two machines <strong>open a connection</strong> — TCP, the Transmission Control Protocol. A quick <strong>three-way handshake</strong> — hi, hi back, got it — then every byte arrives, in order, both directions. Your request rides it through machines you will never see.</p>
+<pre><code>Your Mac (client, its IP)  ──── TCP connection ────  Your EC2 (server, its IP, port 80)
+                             (one open channel;
+                          every byte, in order,
+                            both directions)
+                                   │
+                       inside it rides the readable
+                          HTTP request text
+</code></pre>
+<p>Plain http is a postcard: <strong>every machine that passes it along could read it.</strong></p>
+<p><strong>IP finds the machine · TCP carries the bytes · HTTP gives them meaning.</strong></p>
+<p>TCP's sibling — <strong>UDP</strong>: no handshake, no confirmation, just broadcast. Right for video and live games, where a dropped frame beats waiting. The application picks: web, SSH, and databases run on TCP; streaming leans on UDP.</p>
+<h2 id="https-the-same-conversation-sealed">HTTPS — the Same Conversation, Sealed</h2>
+<p>The same text, <strong>encrypted before it leaves</strong> — only the two ends can read it. The address on the outside stays readable: delivery still needs it.</p>
+<pre><code>Your Mac  ──── TCP connection (port 443) ────  Your EC2
+             inside: the HTTP text, sealed —
+             gibberish to anyone in between
+</code></pre>
+<p>The machines in between still deliver it; they just can't read it anymore — only the two ends can.</p>
+<p><strong>HTTPS is just a secure HTTP</strong> — same request, same response, sealed on the way.</p>
+<p>The padlock proves the address, not the owner: it means no one in between can read your data and the page really is at that address — not that whoever holds the address is honest. A look-alike domain can carry a padlock too.</p>
+<p>Week 5, recalled: <code>certbot</code> fetched your certificate from Let's Encrypt — what a server needs before browsers will seal a conversation with it. The padlock in the address bar means it worked.</p>
+<h2 id="whats-next">What's Next</h2>
+<p>Your menu site is still a file on one Mac. Nobody can send it a request.</p>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file://</code> — your disk, no machine, no request — only you can open it</td>
+<td><code>http://</code> — a server listens, waits for these requests, and answers each one with the right file — <strong>that is hosting</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_3">After Class</h2>
+<ul>
+<li><strong>curl your app</strong> — <code>curl</code>, then <code>curl -i</code> — find the status line, the headers, the empty line, the body.</li>
+<li><strong>Find your stock buy's answer</strong> — Network tab, Preserve log ON, one stock buy. Does your build answer with a redirect like the instructor's, or another shape? Read the rows either way.</li>
+<li><strong>Count your page's rows</strong> — reload with the tab open. First row: the page; match the rest to lines in the source. One extra row like <code>favicon.ico</code> (the tab icon — Chrome asks by itself) is normal.</li>
+<li><strong>Whose machine answered your logo?</strong> — read your logo row's domain. Most builds: your own EC2, from its disk. On a big site: often S3 or a CDN — a different machine.</li>
+</ul>
+<p><strong>What you know now:</strong> every page is an answer to a request, and you can read both raw — the verb, the path, the status line, the number. The Network tab shows every request a page makes. TCP carries the bytes; HTTP gives them meaning; HTTPS is the same conversation, sealed.</p>
+<h1 id="lesson-24-static-hosting-your-menu-site-goes-on-the-internet">Lesson 24 — Static Hosting: Your Menu Site Goes on the Internet</h1>
+<h2 id="the-problem-an-html-file-opens-two-ways">The Problem: An HTML File Opens Two Ways</h2>
+<p>The menu site is still files on your Mac, opened only by you. An HTML file needs a program to open it — so far that program has been Chrome, reading a file off your own disk. The address bar shows it: <code>file:///Users/you/code/menu/index.html</code> — nothing left the machine, and it only works on this Mac.</p>
+<p>To open it <strong>from the internet</strong>, the address starts with <code>http://</code>, and the file must be <strong>on a machine that answers HTTP requests</strong>. Today the menu site goes live, two ways: your own server running nginx, then S3.</p>
+<h2 id="what-a-machine-needs-to-answer-for-a-site">What a Machine Needs, to Answer for a Site</h2>
+<p>Three things, in words you already own from the HTTP lesson:</p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Always on</strong></td>
+<td>Awake and reachable at any hour — a request can arrive at 3 a.m. and must still be answered</td>
+</tr>
+<tr>
+<td><strong>A public IP address</strong></td>
+<td>An address the whole internet can reach — the way a request finds the machine at all</td>
+</tr>
+<tr>
+<td><strong>A program listening on port 80</strong></td>
+<td>A program that reads each request's path, finds the file, and sends it back in the response</td>
+</tr>
+</tbody>
+</table>
+<p><strong>hosting</strong> — keeping your files on a machine that does exactly this: always on, publicly addressed, a program answering requests for them.</p>
+<p>Not your Mac: home wifi gives it a private address the internet can't reach, and a laptop sleeps the moment you close it — a host can never sleep.</p>
+<h2 id="we-have-done-this-before-week-5-refreshed">We Have Done This Before — Week 5, Refreshed</h2>
+<p>Back in week 5 you put a page on the web with three moves, copied without the ideas behind them:</p>
+<ol>
+<li><strong>Install a web server</strong> — one command on your first server, and a program appeared and started answering</li>
+<li><strong>Put a page in a folder</strong> — a file dropped into one specific place on the machine</li>
+<li><strong>The site was live</strong> — an address, and the page came back</li>
+</ol>
+<p>Every one of those steps has a name and a reason. This lesson does it again — and this time you can read each line.</p>
+<h2 id="nginx-a-web-server-named">nginx — a Web Server, Named</h2>
+<p><strong>a web server</strong> — a program that listens on a port, reads the request's path, finds the file, and answers with it. <strong>nginx</strong> (say "engine-x") is the one we run.</p>
+<table>
+<tbody>
+<tr>
+<td><strong>2004</strong></td>
+<td>written by Igor Sysoev — to answer huge numbers of requests at once</td>
+</tr>
+<tr>
+<td><strong>open source</strong></td>
+<td>free to read and run — anyone can see exactly how it works</td>
+</tr>
+<tr>
+<td><strong>today</strong></td>
+<td>the most-used web server on the internet</td>
+</tr>
+<tr>
+<td><strong>yours</strong></td>
+<td>it served your week-5 site — and much of what you browse daily</td>
+</tr>
+</tbody>
+</table>
+<p>The other big name is <strong>Apache</strong> — it ran most of the early web, and you'll hear it named beside nginx for the rest of your career. We run nginx; that's all you need of Apache today.</p>
+<h2 id="a-server-of-its-own">A Server of Its Own</h2>
+<p>Port 80 on your app's server is already taken — by whatever answers your app. Two programs can't listen on the same port on the same machine. So the menu site gets its own fresh, small server, launched the same way as the app's:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AMI</strong></td>
+<td>Amazon Linux 2023 — the operating system for the machine</td>
+</tr>
+<tr>
+<td><strong>type</strong></td>
+<td><code>t3.micro</code> — small and cheap; a static site needs little</td>
+</tr>
+<tr>
+<td><strong>key pair</strong></td>
+<td>the key that lets you SSH in — same as the app's server</td>
+</tr>
+<tr>
+<td><strong>security group</strong></td>
+<td>open port 22 (SSH) and port 80 (HTTP)</td>
+</tr>
+</tbody>
+</table>
+<p>The security group is the checkpoint in front of the machine — opening port 80 there is what lets HTTP requests reach it at all, the rule you first added in week 5.</p>
+<h2 id="launched-reachable-and-silent">Launched, Reachable — and Silent</h2>
+<p>The new server is up: a public IP, port 80 open in the security group, SSH'd in. But no web server is installed on it yet. Ask it for a page from your Mac:</p>
+<pre><code class="language-bash">curl http://&lt;public-ip&gt;
+# → curl: (7) Failed to connect to &lt;public-ip&gt; port 80: Connection refused
+</code></pre>
+<p>Port 80 is <strong>open</strong>, but empty. <strong>Connection refused</strong> means the connection reached the machine — and nothing was listening to answer.</p>
+<p>You may see <code>connection timed out</code> instead of <code>refused</code>. <strong>Refused</strong> = the packet reached the machine and nobody answered (port open, no listener). <strong>Timed out</strong> = it never got there — a security-group or routing gap. Either way, nginx isn't up yet.</p>
+<h2 id="install-nginx-the-same-request-now-answers-200">Install nginx — the Same Request Now Answers 200</h2>
+<pre><code class="language-bash"># on the server
+sudo dnf install nginx                  # dnf: the AL2023 package installer
+sudo systemctl enable --now nginx       # start it now, and keep it started on every reboot
+</code></pre>
+<p>Run the same request again — same address, new answer:</p>
+<pre><code class="language-bash"># from your Mac — same request, new answer
+curl -i http://&lt;public-ip&gt;
+# → HTTP/1.1 200 OK
+#   Server: nginx
+#   Content-Type: text/html
+#   ...&lt;!DOCTYPE html&gt; ... Welcome to nginx! ...
+</code></pre>
+<p>The same <code>curl -i</code>, now <strong>200 OK</strong> — status line, headers, an HTML body: the exact shape you read raw last lesson. In Chrome: the nginx welcome page.</p>
+<h2 id="the-one-rule-this-whole-lesson-rests-on">The One Rule This Whole Lesson Rests On</h2>
+<p>That welcome page is a file on the server's disk. nginx's rule is simple: <strong>the request's path names a file under one folder — the root.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>File served</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /</code></td>
+<td><code>index.html</code> — by convention, <code>/</code> means <code>index.html</code></td>
+</tr>
+<tr>
+<td><code>GET /drinks.html</code></td>
+<td><code>drinks.html</code></td>
+</tr>
+<tr>
+<td><code>GET /nothing.html</code></td>
+<td>no matching file → <code>404 Not Found</code></td>
+</tr>
+</tbody>
+</table>
+<p>Own this sentence: <strong>this address → this file</strong>. Every file nginx hands back lives under the root folder — nginx serves nothing outside it. <code>404</code> means it looked and found none.</p>
+<h2 id="where-the-rule-is-written">Where the Rule Is Written</h2>
+<p>nginx reads its settings from <code>/etc/nginx/nginx.conf</code>. Most of it we skip today — but three settings carry the whole static story:</p>
+<pre><code>http {
+  server {
+    listen 80;                    # answer on port 80 — IPv4
+    listen [::]:80;               # the same port 80 — IPv6
+    root /usr/share/nginx/html;   # the folder every path is found under
+    index index.html;             # for /, hand back index.html
+    ...                           # the rest — skipped on purpose
+  }
+}
+</code></pre>
+<p><strong>listen</strong> the port, <strong>root</strong> the folder, <strong>index</strong> the page for <code>/</code>. (<code>listen</code> twice = port 80 for IPv4 + IPv6.)</p>
+<h2 id="put-the-menu-where-nginx-looks">Put the Menu Where nginx Looks</h2>
+<p>The menu site — three pages, <code>style.css</code>, the images — has lived at <code>~/code/menu</code> on your Mac since the page lesson, and its take-home pushed it to GitHub. The server can't see your Mac's disk — so it takes the files from GitHub:</p>
+<pre><code class="language-bash"># on the server — clone the menu, copy it into the root folder
+git clone https://github.com/&lt;instructor&gt;/menu.git
+sudo cp -r menu/* /usr/share/nginx/html/
+</code></pre>
+<p>Open <code>http://&lt;the-ip&gt;/</code> — the menu site, live on the internet, reachable from any laptop or phone, anywhere.</p>
+<p>Copy into the default root, <code>/usr/share/nginx/html</code>. Pointing nginx at a home folder answers <strong>403 Forbidden</strong> instead — a classic permissions trap.</p>
+<h2 id="the-live-site-read-in-the-network-tab">The Live Site, Read in the Network Tab</h2>
+<p>Reload the live menu with the Network tab open — one row per file: <code>&lt;public-ip&gt;</code> (document), <code>style.css</code> (stylesheet), <code>plov.png</code> (png) — each <code>200</code>. Click <strong>Drinks</strong> → a new row, <code>GET /drinks.html</code> → <code>200</code>.</p>
+<p>Ask for something that isn't there:</p>
+<pre><code class="language-bash">curl -i http://&lt;public-ip&gt;/no-such-thing
+# → HTTP/1.1 404 Not Found
+</code></pre>
+<p>A 404 means nginx looked under its root, found no file at that path, and said so. Nothing crashed — the server did its job.</p>
+<h2 id="absolute-paths-answered">Absolute Paths, Answered</h2>
+<p>The menu already uses a path that starts with <code>/</code> — <code>&lt;img src="/images/plov.png"&gt;</code>. Absolute, we said — but absolute to <em>what?</em></p>
+<table>
+<tbody>
+<tr>
+<td><strong>Absolute to the root folder</strong></td>
+<td>the path is counted from the root folder — on this server, <code>/images/plov.png</code> is the file <code>/usr/share/nginx/html/images/plov.png</code></td>
+</tr>
+<tr>
+<td><strong>The root folder is also the boundary</strong></td>
+<td>nginx serves only what's under it. The server's keys and configs sit elsewhere on the disk — a request through this rule can't reach them</td>
+</tr>
+</tbody>
+</table>
+<h2 id="static-the-real-term">Static — the Real Term</h2>
+<p>Every answer this server gives <strong>existed as a file before the request came</strong> — same address, same bytes, for everyone, every time.</p>
+<p><strong>a static site · static hosting</strong> — a site whose files are written ahead of time and handed back unchanged; serving one this way is static hosting.</p>
+<h2 id="s3-recalled-before-we-host-on-it">S3, Recalled — Before We Host on It</h2>
+<p>From the storage lesson — the second way to host lives here, so recall what S3 is:</p>
+<table>
+<tbody>
+<tr>
+<td><strong>A bucket holds files</strong></td>
+<td>you create a bucket in the S3 console and put files in it. S3 calls each stored file an object</td>
+</tr>
+<tr>
+<td><strong>Every file has a name</strong></td>
+<td>you get a file back by asking for it by name. No disk, no machine of yours — AWS's machines keep it stored</td>
+</tr>
+<tr>
+<td><strong>The asking is HTTP</strong></td>
+<td>fetching a file from S3 is a plain GET request — the same kind of request you've been reading for two lessons</td>
+</tr>
+</tbody>
+</table>
+<p>You've already watched S3 answer one: in the HTTP lesson, an app logo can arrive from an S3 domain — its own row in the Network tab, status 200.</p>
+<h2 id="why-s3-can-host-the-menu">Why S3 Can Host the Menu</h2>
+<p>Hosting took three things — always on, a public address, a program that finds the file and answers. Check S3 against that list:</p>
+<table>
+<tbody>
+<tr>
+<td><strong>Always on</strong></td>
+<td>the machines behind the bucket are AWS's — they never sleep, and they're AWS's to patch and keep awake, not yours</td>
+</tr>
+<tr>
+<td><strong>A public address</strong></td>
+<td>a bucket can be given a website address — an endpoint any browser can reach</td>
+</tr>
+<tr>
+<td><strong>This address → this file</strong></td>
+<td>ask for a file by name, get it back. The menu site <em>is</em> files — pages, <code>style.css</code>, images — so S3 can serve every one of them</td>
+</tr>
+</tbody>
+</table>
+<p>The same rule nginx follows — <strong>this address → this file</strong> — with no server of yours behind it.</p>
+<h2 id="host-the-menu-on-s3">Host the Menu on S3</h2>
+<p>All in the S3 console — no SSH, nothing to keep running. Pick your <strong>own</strong> bucket name; names are global, so everyone would collide on one.</p>
+<ol>
+<li>Create a bucket, and <strong>upload the menu files</strong> into it.</li>
+<li>Turn <strong>OFF</strong> "Block public access" — a master override that keeps private buckets (medical records, backups) off the internet no matter what the policy says. This bucket is public on purpose, so we turn it off; AWS shows scary red warnings — expected here.</li>
+<li>Add a <strong>bucket policy</strong> allowing public <code>s3:GetObject</code> — switching off the block does not by itself make objects public. (<code>GetObject</code> = read/download only, not write or delete.)</li>
+<li>Properties → <strong>Static website hosting</strong> → on; index document <code>index.html</code>.</li>
+<li>Open the <strong>website endpoint URL</strong> — the same menu site, served by AWS.</li>
+</ol>
+<pre><code>http://&lt;bucket&gt;.s3-website-&lt;region&gt;.amazonaws.com
+</code></pre>
+<p>The endpoint starts with <code>http://</code> — expected here, not a mistake. Nothing to SSH into, nothing to keep alive. Open the <strong>website endpoint</strong>, not a plain object URL (<code>.s3.amazonaws.com/...</code>) — only the website endpoint serves <code>index.html</code> for <code>/</code>.</p>
+<p>On the school AWS account, steps 2–3 can fail "not authorized" even as admin — an org-level rule (SCP) can block making buckets public. If your take-home hits this, that's why — ask in Slack.</p>
+<h2 id="your-own-server-or-s3-the-honest-trade-off">Your Own Server, or S3 — the Honest Trade-Off</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Your own server</th>
+<th>S3 static hosting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>What runs it</strong></td>
+<td>nginx on an EC2 machine you keep alive</td>
+<td>a bucket where AWS runs the listeners</td>
+</tr>
+<tr>
+<td><strong>Control</strong></td>
+<td>full control, HTTPS is possible (the week-5 certbot steps)</td>
+<td>you live by AWS's rules</td>
+</tr>
+<tr>
+<td><strong>Cost</strong></td>
+<td>≈ $108/yr — a machine to keep alive, patch, and pay for</td>
+<td>≈ $10/yr — no machine, scales with no server of yours to overload</td>
+</tr>
+<tr>
+<td><strong>HTTPS</strong></td>
+<td>yes, with certbot</td>
+<td>no — the piece that adds it (CloudFront) is a name for later</td>
+</tr>
+</tbody>
+</table>
+<p>Both are real choices — an app can use both at once: its pages from its own server, its logo from S3.</p>
+<h2 id="whats-next_1">What's Next</h2>
+<p>The menu site is on the web, two ways — but every answer it gives was written before the request came.</p>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A static site — every file exists before you ask for it</td>
+<td>A price that changes since this morning — no file written in advance can be that answer. Something has to build the answer at the moment you ask</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_4">After Class</h2>
+<ul>
+<li><strong>Redo the server</strong> — launch a fresh small server, install nginx, put the menu in the root — your site on your own IP.</li>
+<li><strong>Redo it on S3</strong> — the five bucket steps. Bucket names are global — pick your own name, don't reuse the demo's.</li>
+<li><strong>Optional: a real name</strong> — point <code>menu.&lt;your-domain&gt;</code> at the server, using the week-5 DNS steps.</li>
+</ul>
+<p><strong>What you know now:</strong> hosting means files on an always-on, public machine. nginx is the web server, listening on port 80. This address → this file — the root folder and the index.html convention. Static means every answer written in advance. S3 hosts the same site with no server of yours.</p>
 </main>
 </body>
 </html>

@@ -620,3 +620,78 @@ A website is just files pointing at files. Break one reference (rename the image
 Chrome's rendering engine is **Blink**; its JavaScript engine is **V8**.
 
 **Markdown** is a different markup — not for browsers. It's for humans (and AI) reading docs/READMEs directly; GitHub renders it, but no browser ever does.
+
+---
+
+## Lesson 22: HTTP — Requests, Responses & the Network Tab
+A **protocol** is an agreed set of rules two programs follow so they can talk without ever having met — SSH, DNS, and HTTP are all protocols already in use. **HTTP** (HyperText Transfer Protocol) is the protocol pages travel by: a **client** sends a request, a **server** sends back a response. Whoever asks is the client, whoever answers is the server — the same machine can be either, depending on the protocol (your Mac is the client over SSH into your EC2, but the server for HTTP requests it answers).
+
+**A URL, left to right:** `http://server.aigul.click/portfolio` — protocol, then domain (DNS turns it into an IP), then path. HTTP arrives at **port 80**, HTTPS at **443**, beside SSH's **22**.
+
+**The request, raw — a request line then headers (labeled facts):**
+```
+GET /portfolio HTTP/1.1
+Host: server.aigul.click
+User-Agent: ...
+```
+
+**The response, raw — status line, headers, one empty line, then the body (the HTML itself):**
+```bash
+curl http://<domain>/portfolio      # prints just the body
+curl -i http://<domain>/portfolio   # -i: status line + headers too
+```
+
+**Status code families:**
+- `2xx` = it worked (200 OK)
+- `3xx` = go elsewhere — a redirect the browser follows on its own
+- `4xx` = the request is wrong (404 Not Found)
+- `5xx` = the server broke
+
+Chrome's **Network tab** (`⌥⌘I` → Network) shows one row per request/response. Loading one page is rarely one row: Chrome parses the HTML, finds every `<link>`/`<script>`/`<img>` reference, and requests each on its own — sometimes from a different machine entirely (e.g. a logo served from S3, not your EC2).
+
+**Under the hood:** TCP opens a connection first (a three-way handshake), then carries the HTTP text in order, both directions. Plain HTTP is a postcard — any machine in between can read it. HTTPS is the same conversation, encrypted before it leaves — same shape, port 443 instead of 80.
+
+---
+
+## Lesson 23: Static Hosting — nginx & S3
+**Hosting** = files on a machine that is always on, has a public IP, and runs a program listening on port 80 that reads each request's path, finds the file, and answers. Your Mac fails this: private IP, sleeps when closed.
+
+**nginx** (say "engine-x") is the web server — a program whose whole job is that list. Install and start it:
+```bash
+sudo dnf install nginx
+sudo systemctl enable --now nginx   # start now + on every reboot
+```
+Before install: `curl http://<ip>` → *connection refused* (port open, nobody listening). After: `curl -i http://<ip>` → `200 OK`.
+
+**The one rule everything rests on: this address → this file.** The request's path names a file under one root folder — nothing outside it is reachable. Three settings in `/etc/nginx/nginx.conf` carry the whole story:
+```
+listen 80;                    # answer on port 80 (IPv4)
+listen [::]:80;               # same port, IPv6
+root /usr/share/nginx/html;   # every path is found under here
+index index.html;             # for /, hand back index.html
+```
+A path starting with `/` in an `<img src="/images/x.png">` is absolute to that root folder, e.g. `/usr/share/nginx/html/images/x.png` — not the filesystem root.
+
+**Deploy files onto the server:**
+```bash
+git clone https://github.com/<user>/menu.git
+sudo cp -r menu/* /usr/share/nginx/html/
+```
+Copy into the default root, not a home folder — nginx can't read a home folder's permissions, and you'll get `403 Forbidden`.
+
+**Static site** = every answer already existed as a file before the request came — same bytes, every time, for everyone.
+
+**S3 as a second way to host — no server at all.** A bucket already satisfies hosting's three requirements: AWS's machines are always on, a bucket gets a public website endpoint, and "ask for a file by name, get it back" is the same this-address-to-this-file rule.
+1. Create a bucket, upload the files.
+2. Turn **off** "Block public access" (a master override — expected here, since this bucket is public on purpose).
+3. Add a bucket policy allowing public `s3:GetObject` (read-only).
+4. Properties → Static website hosting → on, index document `index.html`.
+5. Open the website endpoint URL.
+
+**Your own server vs S3:**
+| | own EC2 + nginx | S3 static |
+|---|---|---|
+| control | full | limited to AWS's rules |
+| HTTPS | possible (certbot) | no — needs CloudFront |
+| cost (small site) | ~$108/yr | ~$10/yr |
+| upkeep | patch/keep the machine alive | nothing to run |
