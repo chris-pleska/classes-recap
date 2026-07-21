@@ -333,7 +333,7 @@
   <div class="card start-screen" id="startScreen">
     <div class="big">🧠</div>
     <h2>Ready to test yourself?</h2>
-    <p>104 questions across all 24 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
+    <p>132 questions across all 24 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
     <button class="start-btn" onclick="startQuiz('all')">Start full quiz</button>
     <button class="mode-btn" onclick="startQuiz('random20')">Quick — 20 random</button>
   </div>
@@ -520,16 +520,44 @@ const ALL_QUESTIONS = [
   { lesson: "Lesson 22", q: "In HTML, what is a reference?", answers: ["One file pointing at another by path — like img src=, a href=, link href=, and script src=", "A variable that stores a value for later use", "A copy of another file's content pasted inline", "A comment explaining what a tag does"], correct: 0, explain: "The photo, the stylesheet, the linked page, and the script all stay their own files — the browser follows the pointer and renders each." },
   { lesson: "Lesson 22", q: "What happens when an HTML page has one broken image reference?", answers: ["The rest of the page renders fine; only that one part shows a broken-image icon", "The whole page fails to load", "The browser substitutes a blank white page", "All other images on the page also break"], correct: 0, explain: "A page is assembled from parts, and each part can fail separately — the browser renders everything else anyway." },
   { lesson: "Lesson 22", q: "What is the difference between HTML, CSS, and JavaScript?", answers: ["HTML says what things ARE (rendered); CSS says how they LOOK (rendered); JavaScript says what to DO (executed)", "They are three names for the same markup language", "HTML and CSS are executed; JavaScript is rendered", "CSS defines structure; HTML defines styling; JavaScript defines both"], correct: 0, explain: "HTML and CSS are rendered by the browser's rendering engine (Blink); JavaScript is executed by its JavaScript engine (V8)." },
+  { lesson: "Lesson 22", q: "What does \"HyperText\" mean in HTML's name?", answers: ["Text that can point at other text — pages linking to other pages", "Text that renders faster than plain text", "Text formatted with bold and italics", "Text that updates without reloading the page"], correct: 0, explain: "The idea Tim Berners-Lee built the web on: files pointing at other files. A link cashes it in directly." },
+  { lesson: "Lesson 22", q: "What is an HTML element?", answers: ["An opening tag, its content, and a closing tag", "Just the opening tag by itself", "A file that holds only images", "A named setting written inside a tag"], correct: 0, explain: "`<h1>Plov House</h1>` — opening tag, content, closing tag. Every piece of HTML is built this way." },
+  { lesson: "Lesson 22", q: "Why does `<img src=\"...\">` have no closing tag?", answers: ["It wraps no text — there's nothing to put content around", "Images are rendered by CSS instead of HTML", "Closing tags are optional for every element", "It's a markdown tag, not an HTML tag"], correct: 0, explain: "A handful of elements ride entirely inside the opening tag — img is one of them." },
+  { lesson: "Lesson 22", q: "In `<img src=\"images/plov.png\">`, what is `src`?", answers: ["An attribute — a named setting written inside the tag", "The element itself", "The rendered output", "A separate reference file"], correct: 0, explain: "The tag says what it is (`img`); the attribute (`src=`) adds a setting — here, where to find the picture." },
+  { lesson: "Lesson 22", q: "How is Markdown different from HTML?", answers: ["Markdown is read by people and AI where it lives; HTML is rendered by browsers for visitors", "Markdown is a newer replacement for HTML", "Browsers render Markdown the same way they render HTML", "Markdown requires a closing tag for every element"], correct: 0, explain: "Two different markup languages, two different audiences. GitHub renders Markdown for readability, not for websites." },
+  { lesson: "Lesson 22", q: "What happens when one image reference on a page is broken?", answers: ["The rest of the page renders fine — only that one part shows a broken-image icon", "The entire page fails to load", "The browser skips rendering the whole body", "Every image on the page breaks"], correct: 0, explain: "A page is assembled from parts, and each part can fail separately — that's the instinct to keep." },
+  { lesson: "Lesson 22", q: "What does the line `<link rel=\"stylesheet\" href=\"style.css\">` do?", answers: ["Points the page at its CSS file — the looks", "Loads a JavaScript file", "Links to another HTML page", "Loads an image reference"], correct: 0, explain: "HTML says what things ARE; this reference is how a page pulls in CSS, which says how they LOOK." },
+  { lesson: "Lesson 22", q: "Why does a page need JavaScript if HTML and CSS already render it?", answers: ["Because things that change without a reload — a menu folding open, a form validating — require executed instructions, not just rendered labels", "Because HTML cannot display images without JavaScript", "Because CSS cannot load without a script tag", "Because JavaScript is required to make a page mobile-friendly"], correct: 0, explain: "HTML and CSS are rendered once; JavaScript is executed step by step afterward — that's what makes a page interactive." },
 
   // ── Lesson 23: HTTP ──
   { lesson: "Lesson 23", q: "What is a protocol?", answers: ["An agreed set of rules two programs follow to talk to each other", "A type of encryption used only by HTTPS", "A file format for web pages", "A physical cable standard"], correct: 0, explain: "Protocols let programs that have never met still understand each other — SSH, DNS, and HTTP are all examples." },
   { lesson: "Lesson 23", q: "In an HTTP request like `GET /portfolio HTTP/1.1`, what does `GET` represent?", answers: ["The verb — what kind of request this is", "The path — which thing is being requested", "The version — which edition of the rules is used", "The domain — which machine to contact"], correct: 0, explain: "GET means \"give me.\" The path (/portfolio) says which thing, and HTTP/1.1 says which version of the rules." },
   { lesson: "Lesson 23", q: "What does an HTTP status code in the 4xx range mean?", answers: ["The request is wrong — e.g. 404 Not Found", "The request worked", "The answer lives at another address", "The server itself failed"], correct: 0, explain: "2xx = it worked, 3xx = go elsewhere, 4xx = the request is wrong, 5xx = the server broke." },
+  { lesson: "Lesson 23", q: "What is the difference between a client and a server?", answers: ["The client sends the request; the server sends the response", "The client always runs on a phone; the server always runs on AWS", "The client is the domain name; the server is the IP address", "The client encrypts traffic; the server decrypts it"], correct: 0, explain: "Whoever asks is the client; whoever answers is the server. The same machine can play either role depending on the connection." },
+  { lesson: "Lesson 23", q: "In the URL `http://server.aigul.click/portfolio`, what does `/portfolio` represent?", answers: ["The path — which specific thing you want from that machine", "The protocol — which rules the request follows", "The domain — which machine to contact", "The port number in disguise"], correct: 0, explain: "Protocol says which rules, domain says which machine, path says which thing on that machine." },
+  { lesson: "Lesson 23", q: "What are the four parts of a raw HTTP response, in order?", answers: ["Status line, headers, one empty line, then the body", "Body, headers, status line, empty line", "Headers, body, status line, empty line", "Status line, body, headers, empty line"], correct: 0, explain: "The empty line is the signal: everything above is headers, everything below is the body." },
+  { lesson: "Lesson 23", q: "How does curl differ from Chrome when fetching a page?", answers: ["curl prints what arrives and stops; Chrome renders it and requests every reference it finds", "curl renders the page visually; Chrome only shows raw text", "They behave identically — both make one request", "curl only works over HTTPS; Chrome supports both HTTP and HTTPS"], correct: 0, explain: "One page load in Chrome can trigger several requests — the HTML, then every image, stylesheet, and script it references." },
+  { lesson: "Lesson 23", q: "What roles do IP, TCP, and HTTP each play in a web request?", answers: ["IP finds the machine, TCP carries the bytes in order, HTTP gives them meaning", "IP carries the bytes, TCP finds the machine, HTTP encrypts them", "HTTP finds the machine, IP carries the bytes, TCP gives them meaning", "They all do the same job at different layers of encryption"], correct: 0, explain: "Three protocols stacked: addressing, delivery, and meaning — each solving a different part of getting a page to you." },
+  { lesson: "Lesson 23", q: "What does a 302 status code mean?", answers: ["A redirect — 'done, now ask over there'", "The request succeeded with no content", "The server encountered an error", "The requested resource doesn't exist"], correct: 0, explain: "3xx means go elsewhere. The browser reads the new address and automatically makes a second request." },
+  { lesson: "Lesson 23", q: "Why is plain HTTP described as sending a 'postcard'?", answers: ["Every machine that passes the message along the way could read its contents", "It's slower than HTTPS", "It only carries short messages", "It can't carry images or files"], correct: 0, explain: "No encryption means anyone relaying the request in between can read it in plain text." },
+  { lesson: "Lesson 23", q: "What does the padlock icon in the browser actually prove?", answers: ["No one in between can read the data, and the page really is at that address — not that whoever holds the address is honest", "The website's owner has been verified as trustworthy", "The site cannot contain malware", "The site is hosted in the same country as the visitor"], correct: 0, explain: "A look-alike scam domain can carry a padlock too. HTTPS proves the channel is sealed, not that the destination is safe." },
+  { lesson: "Lesson 23", q: "What is the difference between TCP and UDP?", answers: ["TCP opens a handshake and guarantees ordered delivery; UDP just broadcasts with no handshake or confirmation", "TCP is for video and games; UDP is for web pages", "UDP is encrypted by default; TCP is not", "TCP and UDP are two names for the same protocol"], correct: 0, explain: "Web, SSH, and databases run on TCP for reliability. Streaming and live games lean on UDP because a dropped frame beats waiting." },
+  { lesson: "Lesson 23", q: "On the static menu site, why does pressing 'Reserve a table' do nothing?", answers: ["The file lives only on disk — there's no running program behind it to receive the click", "The button's HTML is missing a closing tag", "JavaScript is disabled in the browser", "The form requires HTTPS to submit"], correct: 0, explain: "Compare to the investment app's Buy button: a running server-side program receives that click and acts on it." },
 
   // ── Lesson 24: Static Hosting ──
   { lesson: "Lesson 24", q: "What three things must a machine do to host a website?", answers: ["Be always on, have a public IP address, and run a program listening on a port that answers requests", "Have a fast CPU, lots of RAM, and a large hard drive", "Run Linux, have a domain name, and use HTTPS", "Have an IAM role, a security group, and an Elastic IP"], correct: 0, explain: "Always on, publicly addressed, and a program that reads each request's path, finds the file, and answers — that's hosting." },
   { lesson: "Lesson 24", q: "In nginx's config file, what does the `root` directive control?", answers: ["The folder on disk that every request path is resolved under", "The port nginx listens on", "The default page returned for `/`", "The user account nginx runs as"], correct: 0, explain: "`root /usr/share/nginx/html;` means every path — like /drinks.html — is looked up under that folder. `index` picks the file for `/` specifically." },
   { lesson: "Lesson 24", q: "What makes a site a \"static\" site?", answers: ["Every answer already existed as a file before the request came in, and is handed back unchanged", "It never changes its CSS styling", "It has no images or JavaScript", "It can only be hosted on S3, not a server"], correct: 0, explain: "Same address, same bytes, for everyone, every time — that's static hosting, whether served by nginx or by S3." },
+  { lesson: "Lesson 24", q: "What is nginx?", answers: ["A web server — a program that listens on a port, reads the request's path, finds the file, and answers with it", "A database used for storing website content", "A DNS provider for domain names", "An AWS service for issuing TLS certificates"], correct: 0, explain: "Written in 2004 by Igor Sysoev to handle huge numbers of requests at once — now the most-used web server on the internet." },
+  { lesson: "Lesson 24", q: "When you curl a freshly launched server before installing a web server, what does 'Connection refused' mean?", answers: ["The packet reached the machine, but nothing was listening on that port to answer", "The request never reached the machine at all", "The server rejected the request due to a bad password", "The domain name failed to resolve"], correct: 0, explain: "Refused = port open, no listener. Timed out = it never got there — usually a security-group or routing gap." },
+  { lesson: "Lesson 24", q: "In nginx.conf, what does the `root` directive control?", answers: ["The folder on disk that every request path is resolved under", "The port nginx listens on", "Which file is served for the `/` path specifically", "The domain name nginx responds to"], correct: 0, explain: "`root /usr/share/nginx/html;` — every path like /drinks.html is looked up under that folder. `index` handles the `/` case specifically." },
+  { lesson: "Lesson 24", q: "What does nginx return when a request's path has no matching file under its root?", answers: ["404 Not Found", "403 Forbidden", "500 Internal Server Error", "302 redirect to the homepage"], correct: 0, explain: "Nginx looked under its root, found nothing at that path, and said so honestly. Nothing crashed." },
+  { lesson: "Lesson 24", q: "Why can't you host a website from your own Mac at home?", answers: ["Home wifi gives it a private address the internet can't reach, and it sleeps when the lid closes", "Macs don't support running a web server", "Home internet plans block port 80 by law", "HTML files can only be served from Linux machines"], correct: 0, explain: "Hosting needs always-on and a public address — a laptop on home wifi has neither." },
+  { lesson: "Lesson 24", q: "What does turning off 'Block public access' on an S3 bucket do by itself?", answers: ["Nothing makes objects public automatically — a bucket policy allowing `s3:GetObject` is still required", "It immediately makes every object in the bucket publicly readable", "It deletes any existing public access restrictions permanently", "It enables static website hosting automatically"], correct: 0, explain: "Block public access is just the master override removed. You still need a policy explicitly granting public GetObject." },
+  { lesson: "Lesson 24", q: "Why must you use S3's 'website endpoint' URL rather than the plain object URL to view a hosted site?", answers: ["Only the website endpoint serves index.html automatically for the `/` path", "The plain object URL requires HTTPS", "The website endpoint is faster to load", "The plain object URL only works for images, not HTML"], correct: 0, explain: "`bucket.s3-website-region.amazonaws.com` behaves like a real host; a plain `.s3.amazonaws.com/...` URL does not resolve `/` to index.html." },
+  { lesson: "Lesson 24", q: "What's the honest trade-off between hosting on your own nginx server vs. S3 static hosting?", answers: ["Your own server gives full control and HTTPS via certbot but costs more and must be kept alive; S3 is cheaper and maintenance-free but you live by AWS's rules and lack built-in HTTPS", "S3 is always more expensive but offers more control", "Your own server can't serve HTML, only images", "There is no meaningful difference between the two"], correct: 0, explain: "Roughly $108/yr for a self-managed EC2 server vs. about $10/yr for S3 — control and HTTPS vs. cost and simplicity." },
+  { lesson: "Lesson 24", q: "Why does copying the menu site into a home folder instead of `/usr/share/nginx/html` cause a 403 Forbidden?", answers: ["nginx only serves files under its configured root — files placed anywhere else are outside the boundary it's allowed to answer from", "Home folders are always owned by root and can never be read", "403 means the files themselves are corrupted", "nginx requires files to be renamed to index.html specifically"], correct: 0, explain: "The root folder is nginx's boundary — files elsewhere on the disk (SSH keys, configs) stay unreachable through this rule, which is the point." },
+  { lesson: "Lesson 24", q: "In nginx.conf, why does the server block contain both `listen 80;` and `listen [::]:80;`?", answers: ["To answer on port 80 for both IPv4 and IPv6 traffic", "To listen on two different ports simultaneously", "One line is for HTTP, the other for HTTPS", "To allow both nginx and Apache to run at once"], correct: 0, explain: "Same port, two address families — one config line per IP version nginx should accept connections on." },
 ];
 
 let questions = [];
@@ -537,6 +565,8 @@ let current = 0;
 let score = 0;
 let missed = [];
 let answered = false;
+
+const BAG_KEY = 'dtc312_quiz_bag';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -547,12 +577,37 @@ function shuffle(arr) {
   return a;
 }
 
+// Draws `count` questions with no repeats until the entire question bank
+// has been served once. Progress persists in localStorage, so running
+// "Quick — 20 random" back to back surfaces fresh questions each time
+// instead of re-picking ones you just saw.
+function drawFromBag(count) {
+  let bag = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(BAG_KEY));
+    if (Array.isArray(saved) && saved.every(i => Number.isInteger(i) && i >= 0 && i < ALL_QUESTIONS.length)) {
+      bag = saved;
+    }
+  } catch (e) { /* ignore corrupt/missing data */ }
+
+  const drawn = [];
+  while (drawn.length < count && drawn.length < ALL_QUESTIONS.length) {
+    if (bag.length === 0) {
+      bag = shuffle([...Array(ALL_QUESTIONS.length).keys()]);
+    }
+    drawn.push(bag.shift());
+  }
+
+  localStorage.setItem(BAG_KEY, JSON.stringify(bag));
+  return drawn.map(i => ALL_QUESTIONS[i]);
+}
+
 function startQuiz(mode) {
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('quizSection').classList.add('show');
 
   if (mode === 'random20') {
-    questions = shuffle(ALL_QUESTIONS).slice(0, 20);
+    questions = drawFromBag(20);
   } else {
     questions = shuffle(ALL_QUESTIONS);
   }
