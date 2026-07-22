@@ -326,14 +326,14 @@
 
   <div class="header">
     <h1>DTC / 312</h1>
-    <p>Study Quiz — Lessons 1 – 24</p>
+    <p>Study Quiz — Lessons 1 – 25</p>
   </div>
 
   <!-- Start screen -->
   <div class="card start-screen" id="startScreen">
     <div class="big">🧠</div>
     <h2>Ready to test yourself?</h2>
-    <p>132 questions across all 24 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
+    <p>135 questions across all 25 lessons.<br>Terminal · Git · SSH · DNS · Python · Servers · Firewall · Networking</p>
     <button class="start-btn" onclick="startQuiz('all')">Start full quiz</button>
     <button class="mode-btn" onclick="startQuiz('random20')">Quick — 20 random</button>
   </div>
@@ -558,6 +558,11 @@ const ALL_QUESTIONS = [
   { lesson: "Lesson 24", q: "What's the honest trade-off between hosting on your own nginx server vs. S3 static hosting?", answers: ["Your own server gives full control and HTTPS via certbot but costs more and must be kept alive; S3 is cheaper and maintenance-free but you live by AWS's rules and lack built-in HTTPS", "S3 is always more expensive but offers more control", "Your own server can't serve HTML, only images", "There is no meaningful difference between the two"], correct: 0, explain: "Roughly $108/yr for a self-managed EC2 server vs. about $10/yr for S3 — control and HTTPS vs. cost and simplicity." },
   { lesson: "Lesson 24", q: "Why does copying the menu site into a home folder instead of `/usr/share/nginx/html` cause a 403 Forbidden?", answers: ["nginx only serves files under its configured root — files placed anywhere else are outside the boundary it's allowed to answer from", "Home folders are always owned by root and can never be read", "403 means the files themselves are corrupted", "nginx requires files to be renamed to index.html specifically"], correct: 0, explain: "The root folder is nginx's boundary — files elsewhere on the disk (SSH keys, configs) stay unreachable through this rule, which is the point." },
   { lesson: "Lesson 24", q: "In nginx.conf, why does the server block contain both `listen 80;` and `listen [::]:80;`?", answers: ["To answer on port 80 for both IPv4 and IPv6 traffic", "To listen on two different ports simultaneously", "One line is for HTTP, the other for HTTPS", "To allow both nginx and Apache to run at once"], correct: 0, explain: "Same port, two address families — one config line per IP version nginx should accept connections on." },
+
+  // ── Lesson 25: Dynamic and the API ──
+  { lesson: "Lesson 25", q: "What does \"dynamic\" mean, as distinct from \"static\"?", answers: ["The response is composed at the moment of asking, from what is true right then", "The page uses JavaScript instead of plain HTML", "The site is hosted on a server instead of S3", "The content changes color based on a CSS animation"], correct: 0, explain: "Static: the answer already existed as a file. Dynamic: a program writes it fresh from the database, for this request." },
+  { lesson: "Lesson 25", q: "On the investment app's server, what is the difference between Flask and gunicorn?", answers: ["Flask is ready-made code the app is built from; gunicorn is the always-on program that runs that code for every request", "Flask runs the code; gunicorn is the web plumbing library", "They are two names for the same program", "Flask holds port 80; gunicorn only handles the database"], correct: 0, explain: "Like you typing `python3` to run your quiz bot — but gunicorn never stops, so it's ready the instant a request arrives." },
+  { lesson: "Lesson 25", q: "What is an API?", answers: ["The agreed list of requests a program offers other programs", "A file format for exchanging data between databases", "The visual layout of a website's frontend", "A type of firewall rule for inbound traffic"], correct: 0, explain: "Humans get screens and buttons; programs get an API — an agreed list of requests. Making one request from that list is an API call." },
 ];
 
 let questions = [];

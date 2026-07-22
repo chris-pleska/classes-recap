@@ -61,6 +61,7 @@
 <li><a href="#lesson-22-the-page-html-css-javascript">Lesson 22 — The Page: HTML, CSS &amp; JavaScript</a></li>
 <li><a href="#lesson-23-http-the-conversation-your-browser-is-having">Lesson 23 — HTTP: the Conversation Your Browser Is Having</a></li>
 <li><a href="#lesson-24-static-hosting-your-menu-site-goes-on-the-internet">Lesson 24 — Static Hosting: Your Menu Site Goes on the Internet</a></li>
+<li><a href="#lesson-25-dynamic-and-the-api-when-static-hosting-cant-be-the-answer">Lesson 25 — Dynamic and the API: When Static Hosting Can't Be the Answer</a></li>
   </ul>
 </nav>
 <main>
@@ -3495,6 +3496,344 @@ sudo cp -r menu/* /usr/share/nginx/html/
 <li><strong>Optional: a real name</strong> — point <code>menu.&lt;your-domain&gt;</code> at the server, using the week-5 DNS steps.</li>
 </ul>
 <p><strong>What you know now:</strong> hosting means files on an always-on, public machine. nginx is the web server, listening on port 80. This address → this file — the root folder and the index.html convention. Static means every answer written in advance. S3 hosts the same site with no server of yours.</p>
+<h1 id="lesson-25-dynamic-and-the-api-when-static-hosting-cant-be-the-answer">Lesson 25 — Dynamic and the API: When Static Hosting Can't Be the Answer</h1>
+<h2 id="the-dead-end-could-nginx-serve-the-app">The Dead End: Could nginx Serve the App?</h2>
+<p>The menu site sits still: same files, same bytes, for everyone, every time. The investment app can't work that way — three reasons nginx alone can't be the answer:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Why a saved file fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The price moves</strong></td>
+<td>A saved page is stale within minutes — the market doesn't wait for you to re-save a file</td>
+</tr>
+<tr>
+<td><strong>Every stock buy changes the page</strong></td>
+<td>Rewrite the file after every click, forever? No process does that</td>
+</tr>
+<tr>
+<td><strong>A stock buy isn't a page at all</strong></td>
+<td>It's work to <strong>do</strong> — check the price, move the cash, record the trade — not a file to hand back</td>
+</tr>
+</tbody>
+</table>
+<p>Static — <strong>every answer already existed as a file.</strong> The app needs answers that don't exist yet, at the moment you ask for them.</p>
+<h2 id="dynamic-the-answer-composed-when-you-ask">Dynamic: The Answer Composed When You Ask</h2>
+<p><strong>dynamic</strong> — the response is made at the moment of asking, from what is true at that moment. Static's mirror: that answer existed before the question.</p>
+<p>Think of a print stand versus a street artist. The print stand sells copies finished before you came — <strong>static: the answer existed before the question.</strong> The artist starts sketching when you sit down — <strong>dynamic: the answer is made because the question arrived.</strong></p>
+<h2 id="the-same-get-answered-two-ways">The Same GET, Answered Two Ways</h2>
+<p>Same request, two different machines behind it:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>The menu server (static)</th>
+<th>The app's server (dynamic)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Request arrives</strong></td>
+<td><code>GET /</code> reaches nginx</td>
+<td><code>GET /</code> wakes the app's program</td>
+</tr>
+<tr>
+<td><strong>What it does</strong></td>
+<td>Reads the path, finds <code>index.html</code> on disk</td>
+<td>Reads the database — cash, holdings, prices, as they are right now — and does the math</td>
+</tr>
+<tr>
+<td><strong>What it sends</strong></td>
+<td>The same bytes, unchanged</td>
+<td>HTML written fresh, composed for this moment</td>
+</tr>
+<tr>
+<td><strong>Label</strong></td>
+<td><strong>found</strong></td>
+<td><strong>composed</strong></td>
+</tr>
+</tbody>
+</table>
+<p>No file existed for the dynamic answer — it was written just now.</p>
+<h2 id="live-same-address-asked-twice">Live: Same Address, Asked Twice</h2>
+<p>Three steps, on the instructor's real app:</p>
+<pre><code class="language-bash"># Step 1 — read cash and holdings
+curl http://&lt;the-ip&gt;/
+# → Cash: $10,000.00   NVDA: 0 shares
+
+# Step 2 — one stock buy, in the browser (between the two curls)
+
+# Step 3 — same address, a few minutes later
+curl http://&lt;the-ip&gt;/
+# → Cash: $9,814.80   NVDA: 1 share
+</code></pre>
+<p>Same address, different answer — nobody edited any file. The database changed between the two curls, so the program wrote different bytes the second time.</p>
+<h2 id="what-came-back-is-still-html">What Came Back Is Still HTML</h2>
+<p>Read what the second curl actually printed — ordinary HTML, the same tags you already own:</p>
+<pre><code class="language-html">&lt;html&gt;
+  &lt;head&gt; &lt;title&gt;Invest — portfolio&lt;/title&gt; &lt;link rel="stylesheet" …&gt; &lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Portfolio&lt;/h1&gt;
+    &lt;p&gt;Cash: $9,814.80&lt;/p&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Written fresh — from what? The code keeps a <strong>template</strong>: the tags, with blanks where numbers go. Each request, it fills the blanks. The template is a file — the finished page never is.</p>
+<h2 id="dynamic-names-the-answering-nothing-else">"Dynamic" Names the Answering — Nothing Else</h2>
+<p>Three things sit in this picture. Only one of them moves:</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Still or dynamic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The code</strong></td>
+<td>Still — a file on disk, sitting there</td>
+</tr>
+<tr>
+<td><strong>The page</strong></td>
+<td>Still — plain HTML, finished by the time it reaches you</td>
+</tr>
+<tr>
+<td><strong>The answering</strong></td>
+<td><strong>Dynamic</strong> — same address, different answer, depending on what's true right now</td>
+</tr>
+</tbody>
+</table>
+<p>"Dynamic" doesn't mean the code changes, or the HTML is some new kind of tag. It means the <em>answering</em> happens live.</p>
+<h2 id="who-runs-the-apps-code-found-on-port-80">Who Runs the App's Code — Found on Port 80</h2>
+<p>You ran this in assignment 11. In English: list every program listening, and on which port:</p>
+<pre><code class="language-bash">sudo ss -tlnp
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-t</code></td>
+<td>TCP connections — the kind the web and SSH use</td>
+</tr>
+<tr>
+<td><code>-l</code></td>
+<td>only ports being listened on</td>
+</tr>
+<tr>
+<td><code>-n</code></td>
+<td>show numbers, not names</td>
+</tr>
+<tr>
+<td><code>-p</code></td>
+<td>show the program</td>
+</tr>
+</tbody>
+</table>
+<pre><code>LISTEN  0.0.0.0:80      users:(("gunicorn",…))   # the app's own program — not nginx
+LISTEN  0.0.0.0:22      users:(("sshd",…))       # how your terminal comes in
+LISTEN  127.0.0.1:5432  users:(("postgres",…))   # the database chapter's program
+</code></pre>
+<p>Port 80: <strong>gunicorn</strong> — running since the vibe build. Yours might differ: some builds show nginx on <code>:80</code> instead, forwarding to gunicorn on an internal port — a <strong>reverse proxy</strong>. Same job as nginx at the door, gunicorn cooking inside — one extra hop.</p>
+<h2 id="code-doesnt-run-itself">Code Doesn't Run Itself</h2>
+<p>Your quiz bot sat on disk doing nothing — until you ran it with <code>python3</code>. The app's code is Python too. But on the app's server, nobody is at a keyboard. So what runs your app's code, day and night, with nobody there to type the command?</p>
+<h2 id="flask-is-in-the-code-gunicorn-runs-the-code">Flask Is in the Code — gunicorn Runs the Code</h2>
+<p>Two names, two jobs:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>gunicorn</strong></td>
+<td><strong>The runner.</strong> Like you typing <code>python3</code> — but always on. It holds port 80 and runs your code for every request, day and night.</td>
+</tr>
+<tr>
+<td><strong>Flask</strong></td>
+<td><strong>Inside the code.</strong> Ready-made Python parts the code is built from — the web plumbing came ready; your code adds the stocks and the cash.</td>
+</tr>
+</tbody>
+</table>
+<p>Nobody writes "receive a request over the network" from zero — you take ready parts (Flask) and something to run them (gunicorn). Every language has its own pair.</p>
+<h2 id="gunicorn-runs-copies-nobody-waits">gunicorn Runs Copies — Nobody Waits</h2>
+<p>Requests — <code>GET /</code>, a stock buy, <code>GET /</code> again — all arrive at port 80. gunicorn is the container holding the port; inside it, it runs several copies of your code at once: one answering a request, another at the same time, a third — nobody waits in line. Same code, several times over, written with Flask. Each copy sends back a fresh page.</p>
+<h2 id="gunicorn-is-a-choice-not-a-standard">gunicorn Is a Choice, Not a Standard</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Standards — every website shares</strong></td>
+<td>HTTP · ports · HTML. That's why one browser can talk to all of them.</td>
+</tr>
+<tr>
+<td><strong>Choices — what this build picked</strong></td>
+<td>Python · Flask · gunicorn · Postgres. Other apps pick other languages — and other runners.</td>
+</tr>
+</tbody>
+</table>
+<p>Meet any new app: expect the standards to be there — and the choices to be different.</p>
+<h2 id="server-now-names-a-program-too">"Server" Now Names a Program Too</h2>
+<p>First the machine was "the server." Then nginx — a program — was too. Now the app's program is one more:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>The menu server</th>
+<th>The app's server</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>What listens on :80</strong></td>
+<td>nginx — a program you installed</td>
+<td>gunicorn — the app's own program</td>
+</tr>
+<tr>
+<td><strong>How it answers</strong></td>
+<td>Hands back files, unchanged</td>
+<td>Composes every answer fresh</td>
+</tr>
+</tbody>
+</table>
+<p><strong>"The server answered"</strong> usually means the program — which one, you read from context.</p>
+<h2 id="the-backend-the-half-nobody-sees">The Backend — The Half Nobody Sees</h2>
+<p><strong>backend</strong> — the half of your app that runs on the server: your Flask code, run by gunicorn. No screen, no buttons, never seen. It composes every answer from the database beside it — call it <strong>the brain of the application</strong>.</p>
+<h2 id="the-database-the-backends-memory">The Database — The Backend's Memory</h2>
+<p>You sat inside one this week with <code>psql</code>. Everything a backend says, it reads from here first:</p>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Yours</strong></td>
+<td>cash · holdings · prices — every number the dashboard shows</td>
+</tr>
+<tr>
+<td><strong>Your bank's</strong></td>
+<td>every balance, every transfer ever made</td>
+</tr>
+<tr>
+<td><strong>Instagram's</strong></td>
+<td>every post, every like, every follower</td>
+</tr>
+</tbody>
+</table>
+<p>Everything that matters is in there. So why can't your browser ask it directly?</p>
+<h2 id="you-cant-query-the-database-directly-on-purpose">You Can't Query the Database Directly — On Purpose</h2>
+<p>Requests from anyone on the internet — your browser, anyone else's, any program — all land on the backend, which alone decides what can be asked and holds the only path to Postgres. There is no path straight from the internet to the database — none exists, on purpose. Your own <code>psql</code> moment was a separate, controlled path: you, over SSH with your key, then <code>psql</code> from inside the server. The app's users have no such path.</p>
+<h2 id="frontend-what-the-browser-shows">Frontend — What the Browser Shows</h2>
+<p><strong>frontend</strong> — HTML, CSS and JavaScript, rendered in your browser, on your machine. Engineers say <strong>client-side</strong>. The frontend asks, the backend answers — HTTP, the same conversation from the last two lessons. Some code runs in your browser, some runs on the server.</p>
+<h2 id="frontend-backend-database-a-three-tier-setup">Frontend, Backend, Database — a Three-Tier Setup</h2>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Tier one — the frontend</strong></td>
+<td>The dashboard rendered in your browser</td>
+</tr>
+<tr>
+<td><strong>Tier two — the backend</strong></td>
+<td>Your Flask code, run by gunicorn, holding port 80</td>
+</tr>
+<tr>
+<td><strong>Tier three — the data tier</strong></td>
+<td>Postgres, reachable only through the backend</td>
+</tr>
+</tbody>
+</table>
+<p>Today, tiers two and three share one machine. Say it like a system designer: <strong>ours is a three-tier setup</strong> — three parts. (Your <code>psql</code> moment, talking straight to the database, was <strong>two-tier</strong> — no backend standing between you and the data.)</p>
+<h2 id="the-api-how-programs-ask-programs">The API — How Programs Ask Programs</h2>
+<p>Your news bot, weeks ago, asked two programs for help — no browser, no screen, no clicks, and it worked every morning: request #1 asked Claude ("find today's news, write the post" — the key said which account was asking), request #2 asked Telegram's bot service ("post this into my channel" — the token said which bot), and your phone buzzed. Programs asked programs. No human clicked anything.</p>
+<p><strong>API — Application Programming Interface</strong> — the agreed list of requests a program offers other programs. Making one request from the list is <strong>an API call</strong>.</p>
+<p>Humans get screens and buttons. Programs get an agreed list of requests. <code>ANTHROPIC_API_KEY</code> names <em>which account</em> is calling the Anthropic API — Claude's list of requests. <code>TELEGRAM_BOT_TOKEN</code> names <em>which bot</em> is calling the Telegram Bot API — Telegram's list. Two keys, finally explained.</p>
+<p>A taxi ride is the same shape: your phone and the driver's phone are both frontends; the taxi company's backend matches you, computes the fare, and composes what each phone shows — and it in turn calls a maps company's API and a payments company's API. DoorDash, checkouts, maps — same shape everywhere. The web runs on programs asking programs.</p>
+<h2 id="your-apps-api-the-requests-it-answers">Your App's API — the Requests It Answers</h2>
+<p>Same shape, your size. Your backend holds its own agreed list — what you can ask me: check the portfolio (<code>GET /</code>), buy a stock, sell a stock. The frontend asks all three. One request runs the other way: when a saved price is stale, the backend asks the price service for a fresh one — on that request, <strong>your backend is the client</strong>. Every request has the same shape: a verb (do what) and a path (to what). Paths differ per build — the shape is shared.</p>
+<h2 id="the-api-watched-in-the-network-tab">The API, Watched in the Network Tab</h2>
+<p>One dashboard load, one stock buy — <strong>Preserve log ON first</strong>, or the buy row vanishes on the redirect. Sort the rows into two kinds:</p>
+<table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Status</th>
+<th>Kind</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the buy</td>
+<td><code>302</code></td>
+<td>API call — answered by the backend, composed</td>
+</tr>
+<tr>
+<td>the portfolio reload</td>
+<td><code>200</code></td>
+<td>API call — answered by the backend, composed</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td><code>200</code></td>
+<td>plain file fetch — a finished file</td>
+</tr>
+<tr>
+<td><code>logo.png</code></td>
+<td><code>200</code></td>
+<td>plain file fetch — a finished file, from S3</td>
+</tr>
+</tbody>
+</table>
+<p>The 302's meaning, at last: the stock buy changed things, then sent the browser for the fresh page.</p>
+<h2 id="login-skipped-on-purpose">Login — Skipped on Purpose</h2>
+<p><strong>login · authentication</strong> — the backend's check of <em>who</em> sends each request, before it answers. "Login" is the everyday word; <strong>authentication</strong> is the engineer's.</p>
+<p>A bank's backend checks every request: whose balance is this? Yours skips this on purpose — one server, one owner. Anyone who reaches it sees the same one portfolio. A real app adds this check first.</p>
+<h2 id="whats-next_2">What's Next</h2>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend asks, backend answers — a request with just a verb and a path</td>
+<td>The stock buy told the backend <strong>which</strong> stock and <strong>how many</strong>. How does a click carry data into the request, and into your app's own code?</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_5">After Class</h2>
+<ul>
+<li><strong>curl twice around a stock buy</strong> — on your own app. If the two curls match, nothing is broken — your build may hold data a different way; a later lesson names it.</li>
+<li><strong>Find what holds port 80 on yours</strong> — <code>sudo ss -tlnp</code> on your own server. Builds vary — read what <strong>yours</strong> says.</li>
+<li><strong>Sort your app's rows</strong> — Network tab, Preserve log ON, one stock buy. API calls — or plain file fetches?</li>
+</ul>
+<p><strong>What you know now:</strong> dynamic means the answer is composed at the moment you ask, from what's true right now. gunicorn runs your Flask code on port 80; Flask is the ready-made parts, gunicorn is the always-on runner. The backend is the half nobody sees, holding the only path to the database. The frontend is what the browser renders — frontend, backend, database make a three-tier setup. An API is the agreed list of requests a program offers other programs — and your app's API is a small list of its own.</p>
+
 </main>
 </body>
 </html>

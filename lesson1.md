@@ -3224,3 +3224,227 @@ The menu site is on the web, two ways — but every answer it gives was written 
 - **Optional: a real name** — point `menu.<your-domain>` at the server, using the week-5 DNS steps.
 
 **What you know now:** hosting means files on an always-on, public machine. nginx is the web server, listening on port 80. This address → this file — the root folder and the index.html convention. Static means every answer written in advance. S3 hosts the same site with no server of yours.
+
+---
+
+# Lesson 25 — Dynamic and the API: When Static Hosting Can't Be the Answer
+
+## The Dead End: Could nginx Serve the App?
+
+The menu site sits still: same files, same bytes, for everyone, every time. The investment app can't work that way — three reasons nginx alone can't be the answer:
+
+| Reason | Why a saved file fails |
+|---|---|
+| **The price moves** | A saved page is stale within minutes — the market doesn't wait for you to re-save a file |
+| **Every stock buy changes the page** | Rewrite the file after every click, forever? No process does that |
+| **A stock buy isn't a page at all** | It's work to **do** — check the price, move the cash, record the trade — not a file to hand back |
+
+Static — **every answer already existed as a file.** The app needs answers that don't exist yet, at the moment you ask for them.
+
+## Dynamic: The Answer Composed When You Ask
+
+**dynamic** — the response is made at the moment of asking, from what is true at that moment. Static's mirror: that answer existed before the question.
+
+Think of a print stand versus a street artist. The print stand sells copies finished before you came — **static: the answer existed before the question.** The artist starts sketching when you sit down — **dynamic: the answer is made because the question arrived.**
+
+## The Same GET, Answered Two Ways
+
+Same request, two different machines behind it:
+
+| | The menu server (static) | The app's server (dynamic) |
+|---|---|---|
+| **Request arrives** | `GET /` reaches nginx | `GET /` wakes the app's program |
+| **What it does** | Reads the path, finds `index.html` on disk | Reads the database — cash, holdings, prices, as they are right now — and does the math |
+| **What it sends** | The same bytes, unchanged | HTML written fresh, composed for this moment |
+| **Label** | **found** | **composed** |
+
+No file existed for the dynamic answer — it was written just now.
+
+## Live: Same Address, Asked Twice
+
+Three steps, on the instructor's real app:
+
+```bash
+# Step 1 — read cash and holdings
+curl http://<the-ip>/
+# → Cash: $10,000.00   NVDA: 0 shares
+
+# Step 2 — one stock buy, in the browser (between the two curls)
+
+# Step 3 — same address, a few minutes later
+curl http://<the-ip>/
+# → Cash: $9,814.80   NVDA: 1 share
+```
+
+Same address, different answer — nobody edited any file. The database changed between the two curls, so the program wrote different bytes the second time.
+
+## What Came Back Is Still HTML
+
+Read what the second curl actually printed — ordinary HTML, the same tags you already own:
+
+```html
+<html>
+  <head> <title>Invest — portfolio</title> <link rel="stylesheet" …> </head>
+  <body>
+    <h1>Portfolio</h1>
+    <p>Cash: $9,814.80</p>
+  </body>
+</html>
+```
+
+Written fresh — from what? The code keeps a **template**: the tags, with blanks where numbers go. Each request, it fills the blanks. The template is a file — the finished page never is.
+
+## "Dynamic" Names the Answering — Nothing Else
+
+Three things sit in this picture. Only one of them moves:
+
+| Part | Still or dynamic |
+|---|---|
+| **The code** | Still — a file on disk, sitting there |
+| **The page** | Still — plain HTML, finished by the time it reaches you |
+| **The answering** | **Dynamic** — same address, different answer, depending on what's true right now |
+
+"Dynamic" doesn't mean the code changes, or the HTML is some new kind of tag. It means the *answering* happens live.
+
+## Who Runs the App's Code — Found on Port 80
+
+You ran this in assignment 11. In English: list every program listening, and on which port:
+
+```bash
+sudo ss -tlnp
+```
+
+| Flag | Meaning |
+|---|---|
+| `-t` | TCP connections — the kind the web and SSH use |
+| `-l` | only ports being listened on |
+| `-n` | show numbers, not names |
+| `-p` | show the program |
+
+```
+LISTEN  0.0.0.0:80      users:(("gunicorn",…))   # the app's own program — not nginx
+LISTEN  0.0.0.0:22      users:(("sshd",…))       # how your terminal comes in
+LISTEN  127.0.0.1:5432  users:(("postgres",…))   # the database chapter's program
+```
+
+Port 80: **gunicorn** — running since the vibe build. Yours might differ: some builds show nginx on `:80` instead, forwarding to gunicorn on an internal port — a **reverse proxy**. Same job as nginx at the door, gunicorn cooking inside — one extra hop.
+
+## Code Doesn't Run Itself
+
+Your quiz bot sat on disk doing nothing — until you ran it with `python3`. The app's code is Python too. But on the app's server, nobody is at a keyboard. So what runs your app's code, day and night, with nobody there to type the command?
+
+## Flask Is in the Code — gunicorn Runs the Code
+
+Two names, two jobs:
+
+| | Job |
+|---|---|
+| **gunicorn** | **The runner.** Like you typing `python3` — but always on. It holds port 80 and runs your code for every request, day and night. |
+| **Flask** | **Inside the code.** Ready-made Python parts the code is built from — the web plumbing came ready; your code adds the stocks and the cash. |
+
+Nobody writes "receive a request over the network" from zero — you take ready parts (Flask) and something to run them (gunicorn). Every language has its own pair.
+
+## gunicorn Runs Copies — Nobody Waits
+
+Requests — `GET /`, a stock buy, `GET /` again — all arrive at port 80. gunicorn is the container holding the port; inside it, it runs several copies of your code at once: one answering a request, another at the same time, a third — nobody waits in line. Same code, several times over, written with Flask. Each copy sends back a fresh page.
+
+## gunicorn Is a Choice, Not a Standard
+
+| | What it means |
+|---|---|
+| **Standards — every website shares** | HTTP · ports · HTML. That's why one browser can talk to all of them. |
+| **Choices — what this build picked** | Python · Flask · gunicorn · Postgres. Other apps pick other languages — and other runners. |
+
+Meet any new app: expect the standards to be there — and the choices to be different.
+
+## "Server" Now Names a Program Too
+
+First the machine was "the server." Then nginx — a program — was too. Now the app's program is one more:
+
+| | The menu server | The app's server |
+|---|---|---|
+| **What listens on :80** | nginx — a program you installed | gunicorn — the app's own program |
+| **How it answers** | Hands back files, unchanged | Composes every answer fresh |
+
+**"The server answered"** usually means the program — which one, you read from context.
+
+## The Backend — The Half Nobody Sees
+
+**backend** — the half of your app that runs on the server: your Flask code, run by gunicorn. No screen, no buttons, never seen. It composes every answer from the database beside it — call it **the brain of the application**.
+
+## The Database — The Backend's Memory
+
+You sat inside one this week with `psql`. Everything a backend says, it reads from here first:
+
+| Database | What it holds |
+|---|---|
+| **Yours** | cash · holdings · prices — every number the dashboard shows |
+| **Your bank's** | every balance, every transfer ever made |
+| **Instagram's** | every post, every like, every follower |
+
+Everything that matters is in there. So why can't your browser ask it directly?
+
+## You Can't Query the Database Directly — On Purpose
+
+Requests from anyone on the internet — your browser, anyone else's, any program — all land on the backend, which alone decides what can be asked and holds the only path to Postgres. There is no path straight from the internet to the database — none exists, on purpose. Your own `psql` moment was a separate, controlled path: you, over SSH with your key, then `psql` from inside the server. The app's users have no such path.
+
+## Frontend — What the Browser Shows
+
+**frontend** — HTML, CSS and JavaScript, rendered in your browser, on your machine. Engineers say **client-side**. The frontend asks, the backend answers — HTTP, the same conversation from the last two lessons. Some code runs in your browser, some runs on the server.
+
+## Frontend, Backend, Database — a Three-Tier Setup
+
+| Tier | What it is |
+|---|---|
+| **Tier one — the frontend** | The dashboard rendered in your browser |
+| **Tier two — the backend** | Your Flask code, run by gunicorn, holding port 80 |
+| **Tier three — the data tier** | Postgres, reachable only through the backend |
+
+Today, tiers two and three share one machine. Say it like a system designer: **ours is a three-tier setup** — three parts. (Your `psql` moment, talking straight to the database, was **two-tier** — no backend standing between you and the data.)
+
+## The API — How Programs Ask Programs
+
+Your news bot, weeks ago, asked two programs for help — no browser, no screen, no clicks, and it worked every morning: request #1 asked Claude ("find today's news, write the post" — the key said which account was asking), request #2 asked Telegram's bot service ("post this into my channel" — the token said which bot), and your phone buzzed. Programs asked programs. No human clicked anything.
+
+**API — Application Programming Interface** — the agreed list of requests a program offers other programs. Making one request from the list is **an API call**.
+
+Humans get screens and buttons. Programs get an agreed list of requests. `ANTHROPIC_API_KEY` names *which account* is calling the Anthropic API — Claude's list of requests. `TELEGRAM_BOT_TOKEN` names *which bot* is calling the Telegram Bot API — Telegram's list. Two keys, finally explained.
+
+A taxi ride is the same shape: your phone and the driver's phone are both frontends; the taxi company's backend matches you, computes the fare, and composes what each phone shows — and it in turn calls a maps company's API and a payments company's API. DoorDash, checkouts, maps — same shape everywhere. The web runs on programs asking programs.
+
+## Your App's API — the Requests It Answers
+
+Same shape, your size. Your backend holds its own agreed list — what you can ask me: check the portfolio (`GET /`), buy a stock, sell a stock. The frontend asks all three. One request runs the other way: when a saved price is stale, the backend asks the price service for a fresh one — on that request, **your backend is the client**. Every request has the same shape: a verb (do what) and a path (to what). Paths differ per build — the shape is shared.
+
+## The API, Watched in the Network Tab
+
+One dashboard load, one stock buy — **Preserve log ON first**, or the buy row vanishes on the redirect. Sort the rows into two kinds:
+
+| Row | Status | Kind |
+|---|---|---|
+| the buy | `302` | API call — answered by the backend, composed |
+| the portfolio reload | `200` | API call — answered by the backend, composed |
+| `style.css` | `200` | plain file fetch — a finished file |
+| `logo.png` | `200` | plain file fetch — a finished file, from S3 |
+
+The 302's meaning, at last: the stock buy changed things, then sent the browser for the fresh page.
+
+## Login — Skipped on Purpose
+
+**login · authentication** — the backend's check of *who* sends each request, before it answers. "Login" is the everyday word; **authentication** is the engineer's.
+
+A bank's backend checks every request: whose balance is this? Yours skips this on purpose — one server, one owner. Anyone who reaches it sees the same one portfolio. A real app adds this check first.
+
+## What's Next
+
+| Today | Next lesson |
+|---|---|
+| Frontend asks, backend answers — a request with just a verb and a path | The stock buy told the backend **which** stock and **how many**. How does a click carry data into the request, and into your app's own code? |
+
+## After Class
+
+- **curl twice around a stock buy** — on your own app. If the two curls match, nothing is broken — your build may hold data a different way; a later lesson names it.
+- **Find what holds port 80 on yours** — `sudo ss -tlnp` on your own server. Builds vary — read what **yours** says.
+- **Sort your app's rows** — Network tab, Preserve log ON, one stock buy. API calls — or plain file fetches?
+
+**What you know now:** dynamic means the answer is composed at the moment you ask, from what's true right now. gunicorn runs your Flask code on port 80; Flask is the ready-made parts, gunicorn is the always-on runner. The backend is the half nobody sees, holding the only path to the database. The frontend is what the browser renders — frontend, backend, database make a three-tier setup. An API is the agreed list of requests a program offers other programs — and your app's API is a small list of its own.

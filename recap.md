@@ -695,3 +695,32 @@ Copy into the default root, not a home folder — nginx can't read a home folder
 | HTTPS | possible (certbot) | no — needs CloudFront |
 | cost (small site) | ~$108/yr | ~$10/yr |
 | upkeep | patch/keep the machine alive | nothing to run |
+
+---
+
+## Lesson 24: Dynamic & the API — Backend, Frontend, Database
+**Static** fails the moment an answer doesn't exist yet as a file — a stock price moves, a buy changes the page, a trade is work to *do* (check price, move cash, record trade), not a page to serve. **Dynamic** = the response is composed at the moment of asking, from what's true right now — same address, different answer, depending on state.
+
+```bash
+curl http://<ip>/     # read cash + holdings
+# ...make a trade in the browser...
+curl http://<ip>/     # same address — the numbers moved, nobody edited a file
+```
+What comes back is still ordinary HTML — a program filled blanks in a template moments ago; the template is a file, the finished page never is.
+
+**Who answers on the server:**
+```bash
+sudo ss -tlnp   # -t TCP, -l listening only, -n numeric, -p show program
+```
+`gunicorn` — not nginx — holds port 80 for a dynamic app. **Flask** is the ready-made Python web plumbing your code is built from; **gunicorn** is the always-on runner that executes that code for every request (like typing `python3`, but never stops). gunicorn runs multiple copies of your code at once — nobody waits in line. Both are choices, not standards — HTTP, ports, and HTML are standards every app shares; Python/Flask/gunicorn/Postgres are just this build's picks. "Server" now names a program too, not just the machine — read from context which one is meant.
+
+**The three tiers:**
+- **Frontend** — HTML/CSS/JS rendered in the browser, on your machine (**client-side**). What you see.
+- **Backend** — your Flask code, run by gunicorn, on the server. No screen, no buttons, never seen — composes every answer from the database beside it.
+- **Database** — the backend's memory (cash, holdings, prices). The backend is the *only* path in — your browser can never query it directly, so it alone decides what can be asked.
+
+**API — Application Programming Interface:** the agreed list of requests a program offers other programs. Making one is an **API call**. Programs talk to programs with no screen involved — your news bot calling Anthropic's API and Telegram's Bot API is the same shape as a taxi app's backend calling a maps API and a payments API. Your own app's API: `GET /` (check portfolio), buy a stock, sell a stock — offered to the frontend; when a saved price goes stale, your backend becomes the *client* and calls the price service's API.
+
+In Chrome's Network tab (Preserve log ON), a stock buy shows as `POST` → `302` (backend did the work, then redirected) → `GET /` → `200` (fresh composed page) — versus `style.css`/`logo.png` which are plain finished-file fetches, not API calls.
+
+**Skipped on purpose:** login/**authentication** — the backend's check of *who* is asking, before it answers. One server, one owner here; a real multi-user app checks this on every request.
