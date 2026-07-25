@@ -62,6 +62,8 @@
 <li><a href="#lesson-23-http-the-conversation-your-browser-is-having">Lesson 23 — HTTP: the Conversation Your Browser Is Having</a></li>
 <li><a href="#lesson-24-static-hosting-your-menu-site-goes-on-the-internet">Lesson 24 — Static Hosting: Your Menu Site Goes on the Internet</a></li>
 <li><a href="#lesson-25-dynamic-and-the-api-when-static-hosting-cant-be-the-answer">Lesson 25 — Dynamic and the API: When Static Hosting Can't Be the Answer</a></li>
+<li><a href="#lesson-26-what-the-buy-button-sends-payload-the-dict-the-route-that-reads-it">Lesson 26 — What the Buy Button Sends: Payload, the Dict &amp; the Route That Reads It</a></li>
+<li><a href="#lesson-27-who-keeps-it-running-systemd-nginx-the-renewed-padlock">Lesson 27 — Who Keeps It Running: systemd, nginx &amp; the Renewed Padlock</a></li>
   </ul>
 </nav>
 <main>
@@ -3833,6 +3835,467 @@ LISTEN  127.0.0.1:5432  users:(("postgres",…))   # the database chapter's prog
 <li><strong>Sort your app's rows</strong> — Network tab, Preserve log ON, one stock buy. API calls — or plain file fetches?</li>
 </ul>
 <p><strong>What you know now:</strong> dynamic means the answer is composed at the moment you ask, from what's true right now. gunicorn runs your Flask code on port 80; Flask is the ready-made parts, gunicorn is the always-on runner. The backend is the half nobody sees, holding the only path to the database. The frontend is what the browser renders — frontend, backend, database make a three-tier setup. An API is the agreed list of requests a program offers other programs — and your app's API is a small list of its own.</p>
+<h1 id="lesson-26-what-the-buy-button-sends-payload-the-dict-the-route-that-reads-it">Lesson 26 — What the Buy Button Sends: Payload, the Dict &amp; the Route That Reads It</h1>
+<h2 id="fetch-vs-send-two-kinds-of-clicks">Fetch vs Send — Two Kinds of Clicks</h2>
+<p>Every click so far in this course <em>fetched</em> a page — a link, a refresh, "give me that page," nothing travels but the address. Some clicks carry something <strong>from you</strong>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What travels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fetch</strong></td>
+<td>A link, a refresh. Nothing travels but the address.</td>
+</tr>
+<tr>
+<td><strong>Send</strong></td>
+<td>A Google search, a login, a chat message, <strong>your stock buy</strong> — what you typed travels with the request.</td>
+</tr>
+</tbody>
+</table>
+<p>The app can't know which stock you want — <strong>unless the click brings it along.</strong> Plain browsing is a fetch, a GET, just asking for a page. The moment you buy, sell, or change data through the UI, that's a send.</p>
+<h2 id="live-what-the-buy-button-actually-sent">Live: What the Buy Button Actually Sent</h2>
+<p>Network tab, <strong>Preserve log ON</strong> first — without it, the buy row vanishes on the redirect. One stock buy in the browser, then click the buy row and open <strong>Payload</strong>:</p>
+<pre><code>symbol: NVDA      ← which stock
+shares: 1         ← how many
+</code></pre>
+<p><strong>payload</strong> — what a request carries in. Like an envelope, the payload is what's inside: small, readable, each value with a label on it. Some builds send this in the URL instead of a Payload panel — same key:value pairs, a different place (why, later in this lesson).</p>
+<h2 id="key-and-value-naming-instead-of-position">Key and Value — Naming Instead of Position</h2>
+<p>The list from the Python lesson stores by position — <code>classes[0]</code> — and position doesn't say what a value means. The payload stores by <strong>name</strong>: the label is the <strong>key</strong>, what sits under it is the <strong>value</strong>. It's the same shape as a database row — <code>symbol, name, price</code> over <code>NVDA, NVIDIA, 131.26</code> — every value under a named column. A name, then its value, twice over.</p>
+<h2 id="the-dict-pythons-type-for-keyvalue">The Dict — Python's Type for Key:Value</h2>
+<p>The Python lesson's list read by position. The dict reads by name — braces instead of brackets:</p>
+<pre><code class="language-python">order = {"symbol": "AAPL", "shares": 2}   # braces make a dict; each pair is key: value; commas between
+order["symbol"]                           # read by NAME → 'AAPL' — the list's brackets, a name where the position went
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Reads by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The list</strong></td>
+<td>position — <code>classes[0]</code></td>
+</tr>
+<tr>
+<td><strong>The dict</strong></td>
+<td>name — <code>order["symbol"]</code></td>
+</tr>
+</tbody>
+</table>
+<p>A row was described in the database lesson, in passing, as "a dict — one bundle of named values." Reading by name is like a bilingual dictionary: you give it the word, it gives you the translation.</p>
+<h2 id="live-dict-practice-make-read-break">Live: Dict Practice — Make, Read, Break</h2>
+<pre><code class="language-python">order = {"symbol": "AAPL", "shares": 2}
+print(order["symbol"])          # read by name → AAPL
+order["shares"] = 3             # change a value by name
+order["price"] = 202.50         # a new name adds a pair
+print(order["ticker"])          # a name that isn't there…
+</code></pre>
+<p>The program stops on the last line:</p>
+<pre><code>KeyError: 'ticker'   # a precise answer: no such name. The 404 of the dict.
+</code></pre>
+<p>This same file is the take-home — try it, then try your own (<code>car.py</code>: model, year, mileage — same moves).</p>
+<h2 id="json-the-same-shape-traveling">JSON — the Same Shape, Traveling</h2>
+<p>Facts written as key:value pairs in braces. Secrets Manager answered you in it, back in the scripts lesson:</p>
+<pre><code>{ "Name": "news-bot/anthropic", "SecretString": "sk-ant-…" }   # --query pulled one value out BY NAME
+</code></pre>
+<p>The price service's answer, from the AI-agent lesson, was the same shape — never named then:</p>
+<pre><code>{ "symbol": "NVDA", "price": 184.32 }
+</code></pre>
+<h2 id="the-dict-and-json-one-shape-two-places">The Dict and JSON — One Shape, Two Places</h2>
+<p>A dict lives only while a Python program runs — <strong>at rest</strong>, inside memory. JSON is the same pairs written as plain text, crossing the wire — <strong>traveling</strong>. Read back into another program, any language can parse it, because JSON belongs to none of them. Where you'll meet each: the price service and the Anthropic API answer in JSON; a stock buy from a form travels as form fields instead — where things ride is next.</p>
+<h2 id="get-vs-post-looking-or-changing">GET vs POST — Looking or Changing</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>"Show me my portfolio"</strong></td>
+<td>Looking. Repeat it all day — <strong>nothing changes.</strong></td>
+</tr>
+<tr>
+<td><strong>"Buy one share"</strong></td>
+<td>This one <strong>changes your account.</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The web marks the kind — it's the first word of the raw request, from the HTTP lesson:</p>
+<table>
+<thead>
+<tr>
+<th>Verb</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td>looking — safe to repeat</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td>sending something in, to change things</td>
+</tr>
+</tbody>
+</table>
+<p>Your rows, sorted: dashboard, <code>style.css</code>, the S3 logo — all GET. The stock buy is the one POST.</p>
+<h2 id="where-what-you-send-rides-query-string-vs-body">Where What You Send Rides — Query String vs Body</h2>
+<pre><code>GET /search?q=nvidia+stock HTTP/1.1   # every Google search you've ever made — a little rides in the address
+Host: www.google.com
+</code></pre>
+<pre><code>POST /buy HTTP/1.1
+Host: &lt;the-app-ip&gt;
+                                       # the blank line from the HTTP lesson
+symbol=NVDA&amp;shares=1                  # the payload — the same pairs from the panel
+</code></pre>
+<p>Same first line you've always read — now with what you sent under it. Seeing your own password in plain text in the Payload panel is normal, not a leak: DevTools shows the body before HTTPS encrypts it on the wire.</p>
+<h2 id="the-form-where-the-labels-come-from">The Form — Where the Labels Come From</h2>
+<p>View-source on the dashboard — the buy button sits inside a form:</p>
+<pre><code class="language-html">&lt;form action="/buy" method="POST"&gt;
+  &lt;input name="symbol"&gt;              &lt;!-- the input's name… --&gt;
+  &lt;input name="shares"&gt;
+  &lt;button&gt;Buy&lt;/button&gt;               &lt;!-- submit packs every name=value pair into the body --&gt;
+&lt;/form&gt;
+</code></pre>
+<p>The panel's labels, the body's pairs — they're the form's input names. The page source, from the HTML lesson, now doing a job.</p>
+<h2 id="post-redirect-get-why-refresh-doesnt-buy-again">POST-Redirect-GET — Why Refresh Doesn't Buy Again</h2>
+<p>You hit refresh after a stock buy. Does it buy again?</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Refresh repeats the last request</strong></td>
+<td>If the last request was the POST — <strong>that's buying again.</strong> The browser's "Confirm Form Resubmission" warning is asking exactly this.</td>
+</tr>
+<tr>
+<td><strong>So the app answers "done — ask over there"</strong></td>
+<td>The 302 from the API/network-tab lesson. After it, the last request is the harmless GET — <strong>refresh all you like.</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>POST-redirect-GET</strong> — answer every POST with "go look at the fresh page." Engineers' name for the pattern your app already follows.</p>
+<h2 id="into-the-code-the-function-and-the-route">Into the Code: the Function and the Route</h2>
+<p>SSH to the app's server, open the code with <code>less</code> — read-only, nothing edited, nothing restarted. The whole app is a page or two of Python, and a pattern repeats: a line starting <code>@app.route</code>, a <code>def</code> line, an indented block under it. One of those blocks answers the stock buy.</p>
+<pre><code class="language-python">def buy():          # def gives the block below a name: buy
+    …               # the indented lines are the block
+</code></pre>
+<p><strong>function</strong> — a named block of code. It runs when it's called — not when it's read.</p>
+<pre><code class="language-python">@app.route("/buy", methods=["POST"])   # "when a POST arrives at /buy, run the function below"
+def buy():
+    …
+</code></pre>
+<p><strong>route</strong> — the code's rule matching a verb + path to a function. The <strong>path</strong> is the address part; the <strong>route</strong> is the rule for it. The API lesson's list — "what you can ask me" — is exactly the app's list of routes.</p>
+<h2 id="reading-the-payload-the-dict-move-in-your-own-app">Reading the Payload — the Dict Move, in Your Own App</h2>
+<p>The same label follows the whole trip: the Payload panel's <code>symbol</code>, the POST body's <code>symbol=NVDA</code>, and inside the function, read by name — the dict move:</p>
+<pre><code class="language-python">@app.route("/buy", methods=["POST"])      # the route
+def buy():                                # the function
+    symbol = request.form["symbol"]       # the payload, read by name
+    …                                     # the work — talks to the database
+    return redirect("/")                  # "done — ask over there": POST-redirect-GET
+</code></pre>
+<p>Panel → body → code: the same labels at every stop. The names the form gave the values are the names the code asks for. You directed an AI to build this — now you can read it.</p>
+<h2 id="flask-the-framework-underneath">Flask — the Framework Underneath</h2>
+<p>Nothing in the file reads raw HTTP, matches paths, or assembles responses. Flask does those jobs — ready-made parts, with a real name now:</p>
+<p><strong>framework</strong> — the standard jobs, pre-written. Your code is only routes and decisions; gunicorn holds the port and hands each request in.</p>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Flask</strong></td>
+<td>Python's small one — standard since 2010. Small enough to read whole.</td>
+</tr>
+<tr>
+<td><strong>Django</strong></td>
+<td>Python's big, batteries-included one.</td>
+</tr>
+<tr>
+<td><strong>Express</strong></td>
+<td>the JavaScript counterpart.</td>
+</tr>
+</tbody>
+</table>
+<p>This is the split behind the job titles: a <strong>back-end</strong> engineer writes the code that receives the data and puts it in the database; a <strong>front-end</strong> engineer builds the UI you click.</p>
+<h2 id="your-build-may-differ-two-correct-shapes">Your Build May Differ — Two Correct Shapes</h2>
+<p>Each of you built the app with your own Claude — two shapes came out, and both are correct:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The page reloads</strong></td>
+<td>Form POST → redirect → the backend composes <strong>the whole fresh page</strong>.</td>
+</tr>
+<tr>
+<td><strong>The page asks for its numbers</strong></td>
+<td>The page stays; its own code sends the request and <strong>JSON comes back</strong> — no redirect. In the Network tab: <code>fetch/xhr</code> rows.</td>
+</tr>
+</tbody>
+</table>
+<p>Same backend, same routes, same dict either way. If your take-home screens don't match today's, this is why — not a mistake.</p>
+<h2 id="whats-next_3">What's Next</h2>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>What travels (payload, dict, JSON) and how it rides (GET/POST, query string/body, the form) into a function and a route</td>
+<td>Who keeps the answering program running day and night — and the SQL lines inside your routes that talk to the database.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_6">After Class</h2>
+<ul>
+<li><strong>Write <code>order.py</code></strong> — the class's dict file, typed by you: make it, read by name, change it, add a pair, and read the <code>KeyError</code>. Want your own? Try <code>car.py</code> (make, model, year, mileage) — same moves.</li>
+<li><strong>Open your stock buy's payload</strong> — Network tab, Preserve log ON, one stock buy, the Payload panel. What are YOUR labels? A <code>fetch/xhr</code> row instead — your build is the second shape; its payload panel reads the same way.</li>
+<li><strong>Find your buy route</strong> — in your own code: the <code>@app.route</code> line, the <code>def</code> line, and the line that reads the payload by name.</li>
+</ul>
+<p><strong>What you know now:</strong> a payload is what a request carries in — key:value pairs, the same shape as a database row. Python's dict reads by name instead of position; JSON is the same shape written as text, so it can travel between programs. GET looks, POST changes something — and what you send rides in the query string or the body, packed by a form's input names. POST-redirect-GET is why refresh doesn't buy twice. Inside your code, a route matches a verb + path to a function, and the function reads the payload by name — the same dict move, on your own app. Flask is the framework underneath; your code is only routes and decisions.</p>
+<h1 id="lesson-27-who-keeps-it-running-systemd-nginx-the-renewed-padlock">Lesson 27 — Who Keeps It Running: systemd, nginx &amp; the Renewed Padlock</h1>
+<h2 id="the-bucket-test-one-more-time">The Bucket Test, One More Time</h2>
+<p>The menu site could live in an S3 bucket because everything it needs to run, runs in the visitor's browser — HTML, CSS, JavaScript, handed over as-is. The backend is Python, with Postgres beside it. Try the same test on it:</p>
+<pre><code class="language-bash">python3 order.py   # the dict file from the payload lesson, downloaded to a Mac — it runs
+</code></pre>
+<p>Uploaded to a bucket instead, that exact same file arrives as plain text — nothing there runs Python. <strong>A running program needs a computer with a runner.</strong> The frontend borrows the visitor's; the backend gets no such loan — it needs its own machine, the EC2 you've been SSHing into all along. Writing the backend in JavaScript wouldn't change this: the browser is still the visitor's machine, and Postgres only answers the one trusted program running beside it.</p>
+<h2 id="nobody-starts-the-app">Nobody Starts the App</h2>
+<p>Since the vibe build, nobody has SSH'd in to start your app — not after a reboot, not at 3am — and it answers anyway. Something on the machine starts it and keeps it up. One screen names it:</p>
+<pre><code class="language-bash">sudo systemctl status &lt;the-app-service&gt;   # over SSH, read-only
+</code></pre>
+<pre><code>● investapp.service — Investment app
+     Active: active (running) since Wed 2026-07-01 19:42:03 UTC   ← running since the vibe build
+   Main PID: 2481 (gunicorn)                                       ← the process, named right there
+     CGroup: /system.slice/investapp.service
+             └─2481 /usr/bin/gunicorn --bind 127.0.0.1:8000 app:app  ← the exact command being run
+</code></pre>
+<p>Three facts, one screen — and the program showing all this is the one that started it.</p>
+<h2 id="systemd-the-machines-supervisor">systemd — the Machine's Supervisor</h2>
+<p><strong>systemd</strong> — the program that starts the machine's services at boot, tracks them, and restarts them when their settings say so. <code>systemctl</code> is how you talk to it. You've already used it without naming it: <code>sudo systemctl enable --now nginx</code> in the static-hosting lesson, <code>sudo systemctl restart nginx</code> in the HTTPS lesson — same program behind both. Amazon Linux runs it; so do the other big Linux distributions.</p>
+<h2 id="the-unit-file-a-services-settings-readable">The Unit File — a Service's Settings, Readable</h2>
+<pre><code>/etc/systemd/system/&lt;the-app-service&gt;.service   # read only
+
+[Unit]
+Description=Investment app
+
+[Service]
+ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:8000 app:app   # the command — the whole mystery in one line
+Restart=always                                              # when to bring it back
+
+[Install]
+WantedBy=multi-user.target                                  # the rest — settings we don't need today
+</code></pre>
+<p>Claude wrote this file during the vibe build; now you can read it. <code>systemctl is-enabled &lt;the-app-service&gt;</code> answers whether it starts at boot — the same <code>enable --now</code> you typed in the static-hosting lesson is what sets that.</p>
+<h2 id="live-the-kill-test">Live: The Kill Test</h2>
+<pre><code class="language-bash">sudo systemctl status &lt;the-app-service&gt;   # read the Main PID
+sudo kill -9 &lt;that-pid&gt;                   # end that process now, no cleanup — it dies mid-run
+sudo systemctl status &lt;the-app-service&gt;   # status again
+</code></pre>
+<pre><code>Active: active (running) since … 3s ago
+Main PID: 2907 (gunicorn)              ← a different number — systemd started a new one
+</code></pre>
+<p>The comeback is the <strong>Restart line's doing</strong> — a unit without that line stays dead until someone runs <code>systemctl start</code>. (A refresh mid-restart can fail once; that's the deal.)</p>
+<h2 id="the-execstart-line-word-by-word">The ExecStart Line, Word by Word</h2>
+<pre><code>gunicorn --bind 127.0.0.1:8000 app:app
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Word</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gunicorn</code></td>
+<td>the runner — the program that holds a port and runs your code</td>
+</tr>
+<tr>
+<td><code>--bind 127.0.0.1:8000</code></td>
+<td>which address and port to answer on — <strong>this is where the two shapes differ</strong></td>
+</tr>
+<tr>
+<td><code>app:app</code></td>
+<td>where the Flask app is — the file, then the app inside it</td>
+</tr>
+</tbody>
+</table>
+<p>On a build where gunicorn still faces the world itself, this same line reads <code>--bind 0.0.0.0:80</code>. One word, in one line — the whole difference between the shapes.</p>
+<h2 id="localhost-two-addresses-in-the-listener-column">localhost — Two Addresses in the Listener Column</h2>
+<pre><code class="language-bash">sudo ss -tlnp
+</code></pre>
+<pre><code>LISTEN  0.0.0.0:80      users:(("nginx",…))      ← answers anyone
+LISTEN  127.0.0.1:8000  users:(("gunicorn",…))   ← only this machine
+LISTEN  127.0.0.1:5432  users:(("postgres",…))   ← only this machine
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Address</th>
+<th>Who can reach it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>the public IP</strong></td>
+<td>the world</td>
+</tr>
+<tr>
+<td><strong>the private IP</strong></td>
+<td>machines in your VPC — the networking lesson</td>
+</tr>
+<tr>
+<td><strong>127.0.0.1 — localhost</strong></td>
+<td>only this machine, talking to itself</td>
+</tr>
+</tbody>
+</table>
+<p><strong>localhost — 127.0.0.1</strong> — every computer's name for itself. Your Mac has one too; it means "this machine," whichever machine you're standing on.</p>
+<h2 id="answering-only-your-own-machine-is-a-choice">Answering Only Your Own Machine Is a Choice</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Postgres chose 127.0.0.1</strong></td>
+<td>It holds every account's money records — only the app standing on the same machine gets to talk to it.</td>
+</tr>
+<tr>
+<td><strong>gunicorn — the same move</strong></td>
+<td>On the shape most builds already have, it sits at <code>127.0.0.1:8000</code>; on the other shape it still faces the world itself.</td>
+</tr>
+</tbody>
+</table>
+<p>The target is the same for everyone: gunicorn on the postgres side of that line, with something else taking the front.</p>
+<h2 id="nginx-in-front-the-reverse-proxy-named">nginx in Front — the Reverse Proxy, Named</h2>
+<p>The API lesson's aside — some builds show nginx on <code>:80</code> forwarding to gunicorn — gets its full name now:</p>
+<p><strong>reverse proxy</strong> — the program in front. It takes every request and passes it to the program behind. A very common shape for real Python sites; gunicorn's own docs say to put a server like nginx in front of it.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>nginx</strong></td>
+<td>Faces the internet. Many visitors at once, files served fast, the certificate handled in one place.</td>
+</tr>
+<tr>
+<td><strong>gunicorn</strong></td>
+<td>Runs Python. Your code, for every request — behind nginx, on 127.0.0.1.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-target-drawn_1">The Target, Drawn</h2>
+<p>Whichever shape a build started as, it ends here:</p>
+<pre><code>LISTEN  0.0.0.0:80      users:(("nginx",…))      ← the program facing the world
+LISTEN  127.0.0.1:8000  users:(("gunicorn",…))   ← the app — inside, beside postgres
+LISTEN  127.0.0.1:5432  users:(("postgres",…))   ← made this move on day one
+</code></pre>
+<p>If yours already reads this way, nothing to change — Claude built it during the vibe build. If gunicorn still answers <code>0.0.0.0:80</code> directly, one ask fixes it: tell Claude, on the server, to put nginx in front of gunicorn on an inside-only port. The handing rule inside nginx's settings is typing nobody does by hand anymore — knowing the shape, and reading the proof, is the engineering.</p>
+<h2 id="https-refreshed-what-the-padlock-promises">HTTPS, Refreshed — What the Padlock Promises</h2>
+<p>HTTPS is HTTP with <strong>encryption switched on</strong> — nobody between the browser and the server can read or change what passes. The HTTPS lesson turned it on once, by hand. Two questions settle what actually happened: what switches the encryption on, and why should a browser believe this server is the right one?</p>
+<h2 id="two-keys-made-as-a-pair">Two Keys, Made as a Pair</h2>
+<p>SSH already works this way — the <code>.pem</code> file on your Mac, and its other half on the server:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>the private key</strong></td>
+<td>Stays with its owner — never shared, never travels.</td>
+</tr>
+<tr>
+<td><strong>the public key</strong></td>
+<td>Handed to anyone. Made together with the private one: what one locks, only the other opens.</td>
+</tr>
+</tbody>
+</table>
+<pre><code>privkey.pem     ← the server's private key — never leaves the server
+fullchain.pem   ← the certificate — carries the public key, handed to every visitor
+</code></pre>
+<p>The two files the HTTPS lesson had you carry into place, finally read for what they are.</p>
+<h2 id="the-certificate-and-the-authority">The Certificate and the Authority</h2>
+<p><strong>the certificate</strong> — the server's public key plus its name, signed. Who signed it is the whole point.</p>
+<p><strong>certificate authority — CA</strong> — a company every browser already trusts; browsers ship with a short list of them. The deal: prove the name is yours, and the CA signs. From then on, every browser believes the signature. <strong>Let's Encrypt</strong> is the free CA behind the HTTPS lesson's certificate; <strong>certbot</strong> is the program that proves the name and asks the CA to sign.</p>
+<p>The whole visit, in four stops: the browser asks the server to prove itself; the server hands over the certificate; the browser checks the name matches and the signer is on its trusted-CA list; the padlock goes on — only the private key's holder can finish the handshake. The private key never travels. That's the whole trick.</p>
+<h2 id="live-https-back">Live: HTTPS Back</h2>
+<p>With nginx already answering on port 80 at the domain's address, certbot can prove the name and write the config right there:</p>
+<pre><code class="language-bash">curl http://&lt;your-domain&gt;/                              # confirm your domain still answers this server
+sudo apt install certbot python3-certbot-nginx           # Ubuntu — on Amazon Linux: sudo dnf install certbot python3-certbot-nginx
+sudo certbot --nginx -d &lt;your-domain&gt;                    # proves the name on port 80, writes the config itself
+</code></pre>
+<pre><code>listen 443 ssl;
+ssl_certificate     /etc/letsencrypt/live/&lt;your-domain&gt;/fullchain.pem;   ← the key pair, placed by certbot this time
+ssl_certificate_key /etc/letsencrypt/live/&lt;your-domain&gt;/privkey.pem;
++ a block sending http → 301 → https
+</code></pre>
+<p>Confirm port 443 is open in the security group first — the HTTPS lesson opened it; check it's still there, add it if not. The browser shows the padlock again, and <code>curl http://</code> now answers <strong>301</strong> — the redirect you can read.</p>
+<h2 id="renewal-the-machines-job-now">Renewal — the Machine's Job Now</h2>
+<p>Certificates are short-lived on purpose — about three months. Left alone, that means a person has to remember to renew one. certbot ships the fix as a <strong>timer</strong>, systemd's version of the cron job your news bot runs — but it arrives switched off:</p>
+<pre><code class="language-bash">sudo systemctl enable --now certbot.timer   # the command you know — switches it on
+# certbot-renew.timer on Amazon Linux instead — systemctl list-timers shows which one you have
+</code></pre>
+<pre><code>NEXT                        LEFT      UNIT               ACTIVATES
+Thu 2026-07-23 03:14:00     11h       certbot.timer      certbot.service   ← checks and renews before it runs out
+</code></pre>
+<p>Renewal belongs to the machine now — the same supervisor, running a scheduled job.</p>
+<h2 id="whats-next_4">What's Next</h2>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who keeps the answering program running (systemd, the unit file), the reverse-proxy shape, and HTTPS turned on and renewed on the server itself</td>
+<td>The SQL your app runs, caught live in the database's own log — and the connection string that ties app to database.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_7">After Class</h2>
+<ul>
+<li><strong>Find how YOURS is kept running</strong> — the service, the unit file, the ExecStart line. Builds vary — read what yours says before changing anything.</li>
+<li><strong>Which shape is yours?</strong> <code>sudo ss -tlnp</code>. Already nginx in front of gunicorn: nothing to change. Still gunicorn facing the world: ask Claude to put nginx in front on an inside-only port, then re-run the same <code>ss</code> to see the target.</li>
+<li><strong>Domain → certbot → timer</strong> — point your A record at your server if it's drifted, run certbot with the nginx plugin, enable the renewal timer, and finish with the padlock and <code>sudo ss -tlnp</code>.</li>
+</ul>
+<p><strong>What you know now:</strong> a running program needs a computer with a runner — the backend can't live in a bucket the way the frontend can. systemd is the machine's supervisor: it starts services at boot from a unit file, tracks them, and restarts them when the file's <code>Restart</code> line says so — <code>systemctl status</code> reads all three facts back. localhost, 127.0.0.1, is every computer's name for itself; Postgres and, on most builds, gunicorn answer only there, on purpose. nginx in front of gunicorn is a reverse proxy — one program facing the internet, the other running your Python behind it — and whichever shape a build started as, both end at the same <code>ss</code> output. HTTPS runs on a key pair made together, a certificate that carries the public key and a name, and a certificate authority the browser already trusts to have checked that name; running certbot on the server itself, instead of by hand, lets it prove the name and write the nginx config on its own — and a systemd timer, not a person, keeps the certificate renewed.</p>
 
 </main>
 </body>

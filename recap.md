@@ -724,3 +724,96 @@ sudo ss -tlnp   # -t TCP, -l listening only, -n numeric, -p show program
 In Chrome's Network tab (Preserve log ON), a stock buy shows as `POST` → `302` (backend did the work, then redirected) → `GET /` → `200` (fresh composed page) — versus `style.css`/`logo.png` which are plain finished-file fetches, not API calls.
 
 **Skipped on purpose:** login/**authentication** — the backend's check of *who* is asking, before it answers. One server, one owner here; a real multi-user app checks this on every request.
+
+---
+
+## Lesson 25: Data to the Backend — Payloads, Dicts & Routes
+A stock buy isn't a plain page fetch — clicking Buy **sends** something (which stock, how many shares) along with the request. Chrome's Network tab (Preserve log ON) shows it in the row's **Payload** panel: labeled values, key:value pairs — the same shape as a database row.
+
+**The dict — Python's type for key:value, read by name instead of position:**
+```python
+order = {"symbol": "AAPL", "shares": 2}   # braces make a dict, comma-separated pairs
+order["symbol"]          # → 'AAPL' — read by NAME (a list reads by position: classes[0])
+order["shares"] = 3      # change a value by name
+order["price"] = 202.50  # a new name adds a pair
+order["ticker"]          # KeyError: 'ticker' — no such name, the dict's 404
+```
+
+**JSON** = the same key:value shape, written as text so it can cross the wire between programs. A dict lives inside a running Python program; JSON is what travels: `{"symbol": "NVDA", "price": 184.32}`. Every language reads and writes it — it belongs to none of them.
+
+**GET vs POST — the first word of the request line:**
+- `GET` = looking, safe to repeat
+- `POST` = sending something in, to change things
+
+What you send rides in different places:
+```
+GET /search?q=nvidia+stock HTTP/1.1     # a little rides in the address — the query string
+
+POST /buy HTTP/1.1
+Host: <the-app-ip>
+                                         # the blank line
+symbol=NVDA&shares=1                    # the payload rides in the body
+```
+
+**The form gives the payload its labels** — `<input name="symbol">` is why the panel, the body, and the code all use the same word:
+```html
+<form action="/buy" method="POST">
+  <input name="symbol">
+  <input name="shares">
+  <button>Buy</button>
+</form>
+```
+
+**Refresh after a buy — does it buy again?** Refresh repeats the *last* request. If that's the POST, it buys again (the browser's "Confirm Form Resubmission" warning is exactly this). The fix is **POST-redirect-GET**: answer every POST with "done — go look over there," so the last request becomes a harmless GET.
+
+**Inside the code — a function is a named block, a route matches a verb+path to it:**
+```python
+@app.route("/buy", methods=["POST"])   # "when a POST arrives at /buy, run buy()"
+def buy():
+    symbol = request.form["symbol"]    # the payload, read by name — the dict move
+    ...                                # talks to the database
+    return redirect("/")               # "done — ask over there" — POST-redirect-GET
+```
+
+**Flask** is the framework — pre-written plumbing (reads raw HTTP, matches routes, assembles responses) so your own code only has to hold routes and decisions. `gunicorn` holds the port and hands each request to Flask. Django (Python, batteries-included) and Express (JavaScript) do the same job in other stacks.
+
+---
+
+## Lesson 26: Where the Backend Lives — systemd, nginx & HTTPS Renewal
+A backend needs a computer with a runner — S3 only hands files over (the bucket test: the same `.py` file is inert text in a browser, but runs with `python3 order.py` on a machine). That's why the frontend borrows the visitor's laptop but the backend gets its own EC2, database beside it.
+
+**Nobody starts the app by hand — `systemd` does.** It's the machine's supervisor: starts services at boot, tracks them, restarts them per their settings.
+```bash
+sudo systemctl status <the-app-service>   # is it running? since when? what PID?
+sudo systemctl enable --now <service>     # start now + on every reboot
+sudo kill -9 <pid>                        # kill test — watch systemd bring it back in seconds
+```
+
+**The unit file — a service's settings, plain text:**
+```
+/etc/systemd/system/<the-app-service>.service
+
+[Service]
+ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:8000 app:app   # the command, and where it binds
+Restart=always                                              # the comeback after a kill
+```
+`--bind 0.0.0.0:80` = gunicorn faces the world itself (shape 1). `--bind 127.0.0.1:8000` = gunicorn answers only its own machine, with nginx taking the front door (shape 2, most builds already this way).
+
+**localhost / 127.0.0.1** = every computer's name for itself. Postgres and (in shape 2) gunicorn both bind here on purpose — only a program standing on the same machine can reach them.
+
+**nginx in front = a reverse proxy** — faces the internet, handles the certificate, passes each request inward to gunicorn on `127.0.0.1`.
+```bash
+sudo ss -tlnp
+# 0.0.0.0:80      nginx      ← faces the world
+# 127.0.0.1:8000  gunicorn   ← the app, inside only
+# 127.0.0.1:5432  postgres   ← inside only
+```
+
+**HTTPS, for real this time — certbot runs on the server, not your Mac:**
+```bash
+sudo dnf install certbot python3-certbot-nginx   # Amazon Linux (Ubuntu: apt)
+sudo certbot --nginx -d your-domain.com          # proves the name on port 80, writes nginx's config itself
+sudo systemctl enable --now certbot-renew.timer  # Amazon Linux (Ubuntu: certbot.timer)
+systemctl list-timers                            # confirm the renewal is scheduled
+```
+Certificate = the server's public key + name, signed by a Certificate Authority (Let's Encrypt) every browser already trusts. The private key (`privkey.pem`) never leaves the server — that's the whole trick. Certs are short-lived (~3 months) on purpose, so the renewal timer replaces the old manual fix-it-by-hand routine.
