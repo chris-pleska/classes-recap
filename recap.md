@@ -817,3 +817,168 @@ sudo systemctl enable --now certbot-renew.timer  # Amazon Linux (Ubuntu: certbot
 systemctl list-timers                            # confirm the renewal is scheduled
 ```
 Certificate = the server's public key + name, signed by a Certificate Authority (Let's Encrypt) every browser already trusts. The private key (`privkey.pem`) never leaves the server — that's the whole trick. Certs are short-lived (~3 months) on purpose, so the renewal timer replaces the old manual fix-it-by-hand routine.
+
+---
+
+## Lesson 27: Database Internals — Logging, SQL Injection, Migrations & Moving the Database
+
+Five separate topics on the database you already query by hand, then the first half of giving it its own server.
+
+**Logging** — off by default; turn it on to see every query the app sends, then watch it beside a browser click:
+```bash
+sudo -u postgres psql -c "ALTER SYSTEM SET log_statement = 'all'"
+sudo -u postgres psql -c "SELECT pg_reload_conf()"
+sudo tail -f /var/log/postgresql/postgresql-*.log
+```
+Nobody reads logs this way at work — they ship to Datadog, CloudWatch, Grafana, or Dynatrace instead.
+
+**SQL injection** — user input glued straight into a SQL string lets a stray quote turn data into commands:
+```sql
+-- normal input:  SELECT * FROM companies WHERE symbol = 'AAPL'
+-- ' OR '1'='1 :  SELECT * FROM companies WHERE symbol = '' OR '1'='1'
+```
+The fix is a **parameterized query** — the value rides in separately instead of getting pasted into the sentence:
+```python
+cur.execute("... WHERE symbol = %s", (user_input,))
+```
+
+**Connecting** — the app's connection string packs the same four facts `psql` takes as flags:
+```
+psql -U app_user -d investapp -h localhost
+postgresql://app_user:...@localhost:5432/investapp
+```
+who · which machine (an RDS **endpoint** replaces `localhost` once it's off this box) · which port · which database. Moving the database changes exactly one of these four.
+
+**Migrations** — a table's shape should come from numbered, ordered `.sql` files (`001_create_companies.sql`, `002_...`), run once each, not hand-edits on the live database. Ask Claude how your own tables got their shape — some builds (ours included) skip the folder and Claude just built the tables directly.
+
+**Money data rules** — a ledger is **append-only** (a mistake gets a new offsetting row; nothing is edited or deleted) and stores no balance — the balance is always a fresh sum:
+```sql
+SELECT SUM(amount) FROM ledger;
+```
+
+**Moving the database to its own server — one tier becomes two.** Steps 1–5 of a 12-step move:
+```bash
+# 1. back up first, always
+sudo -u postgres psql -l
+sudo -u postgres pg_dump investapp > investapp.sql
+
+# 5. reach the new server in two hops — laptop -> app server -> db server
+scp -i key.pem key.pem ubuntu@<app-public>:~
+ssh -i key.pem ubuntu@<app-public>
+ssh -i key.pem ubuntu@<db-private-ip>
+```
+Step 2 makes a new subnet in the same VPC, with auto-assign public IP left **off**. Step 3 gives that subnet its own route table with no `0.0.0.0/0` row to the internet gateway — that one missing row is what "private" means. Step 4 launches the database server into it, firewalled to accept port 5432 and 22 only from the app server's security group (a security group, not an address, as the source).
+
+Hit the wall right after: a private subnet has no way out to install anything (`apt update`/`dnf install` hangs at 0%). Wednesday's fix is a NAT gateway — step 6.
+
+---
+
+## Lesson 28: Finishing the Database Move — NAT Gateway, Cutover & Order
+Picking up right where Lesson 27's wall left off. Two separate walls, not one: the route table has no internet row, **and** an internet gateway only carries traffic for a machine with a public address — this server has none on purpose. Adding the row back alone doesn't fix it.
+
+**NAT gateway** — sits in a public subnet, makes outbound calls on the private server's behalf; the server keeps its private address and stays unreachable from outside. ~5¢/hr (~$36/mo) if left running — for class: create it, use it, delete it.
+```bash
+# one new row in the DATABASE subnet's route table
+0.0.0.0/0 → nat-...    # not the internet gateway
+
+sudo apt update    # now succeeds
+```
+
+**Install Postgres + open it to the network:**
+```bash
+sudo -u postgres createuser --pwprompt app_user
+sudo -u postgres createdb -O app_user investapp
+
+# postgresql.conf
+listen_addresses = '*'
+# pg_hba.conf
+host  investapp  app_user  0.0.0.0/0  scram-sha-256
+sudo systemctl restart postgresql
+```
+`pg_hba.conf` is read top to bottom — **first match wins**. A rule appended at the end never fires if a shipped `peer`/`ident` line above it matches first — the error reads like a bad password, but the password was never the problem. Move your line above the shipped ones.
+
+**Copy the backup over, restore, verify:**
+```bash
+# from the app server, over the private network
+scp -i key.pem investapp.sql ubuntu@<db-private-ip>:~
+
+# on the db server
+psql -U app_user -d investapp -f investapp.sql
+GRANT ALL ON ALL TABLES IN SCHEMA public TO app_user;
+
+# row counts must match on both sides
+psql -d investapp -c "SELECT count(*) FROM ledger;"
+psql -h <db-private-ip> -U app_user -d investapp -c "SELECT count(*) FROM ledger;"
+```
+
+**Cutover** — only the address in the connection string changes (same user/password/db name); restart the app, then prove it with a real buy. Leave the old database running until the new one's proven — that's the way back.
+```bash
+sudo grep -rl DATABASE_URL /etc /opt /srv /home 2>/dev/null
+sudo systemctl restart gunicorn
+```
+
+**Close the door** — delete the `0.0.0.0/0` route row, delete the NAT gateway, release its Elastic IP, in that order (the address stays greyed out until the gateway finishes deleting). The database never needs the internet again.
+
+**Getting in later** — through the app server as a jump host (bastion):
+```bash
+ssh -i key.pem -J ubuntu@<app-public> ubuntu@<db-private-ip>
+```
+`-J` = jump via, both hops in one command, no key left behind on the app server.
+
+**Why the order mattered:** back up first, create the login before the restore needs it, count rows before pointing the app anywhere, keep the old database running until a real buy proves the new one, one change at a time, close the way out last. Every stopping point was safe to pause at — that's how you change something people depend on.
+
+**At a real job:** split further into three tiers (frontend/backend/db, each its own team) or hand it to RDS — same steps, but a button instead of `pg_dump` + `scp` + restore by hand.
+
+---
+
+## Lesson 29: Many Engineers, Same Code — Branches, PRs & Merging
+Two people changing the same file at once is new territory — everything so far was solo. A shared push isn't rejected because content clashes; it's rejected because the line of saves (`main`) moved on GitHub while you were working and your copy hasn't seen it (`fetch first`).
+
+**A branch is a second line of saves, with its own name** — not a copy, not a backup, not a separate repo. It starts from the commit you're on; `main` doesn't move while you work. Git's word for the branch you're standing on is `HEAD`.
+```bash
+git switch -c color-fix     # create + stand on it (older: git checkout -b)
+git branch                  # * marks the one you're on
+git switch main              # swap files to main's version
+git switch color-fix         # swap back — nothing was ever lost
+git log --oneline            # shows (HEAD -> color-fix), (origin/main, main)...
+```
+
+**Pushing a branch** — until you push it, it only exists on your machine:
+```bash
+git push -u origin color-fix   # -u links it, so plain `git push` works after
+```
+
+**Pull request** = "here's my line of saves, please add it to main." Nothing merges until someone presses Merge. Git itself has no concept of a PR — that's GitHub (GitLab calls it a merge request). A diff is the same +/- list as `git diff`, drawn as a web page. GitHub won't let you approve your own PR.
+
+**Merging** joins two lines into one; the source branch isn't harmed, it just stops being ahead:
+```bash
+git merge <branch>         # terminal equivalent of the Merge button
+git branch -d color-fix    # safe after merge — the saves live in main now
+```
+
+**Conflicts** — Git decides on its own when two edits touch different lines; it stops and asks only when the *same* line changed on both sides. Not an error, just Git refusing to guess:
+```bash
+git switch main && git pull
+git switch add-button
+git merge main
+# CONFLICT (content): Merge conflict in index.html
+```
+Git writes three markers into the file: `<<<<<<< HEAD`, `=======`, `>>>>>>> main`. Delete all three once you've chosen what stays — committing with `=======` still in the file is the classic mistake. Claude is fine at resolving these; hand it the conflicted file and say what to keep, then read the result yourself.
+
+**Keep your branch caught up with main** — same four commands as a normal pull, just the other direction (main gives, your branch receives). Do it before you push, not as recovery:
+```bash
+git switch main && git pull
+git switch add-button
+git merge main
+```
+
+**.gitignore** — one file listing what Git should never save:
+```
+.env            # your API keys
+*.pem           # key files
+__pycache__/    # Python leftovers
+.DS_Store       # macOS junk
+```
+It only stops a file from being saved *going forward* — a key already pushed has to be rotated, not just ignored.
+
+**Named for later, not taught yet:** `rebase` (moves your saves onto main's tip instead of joining them — one straight line, no merge commit) and `revert` (undoes an already-merged PR by adding a new PR, not erasing history). `git fetch` is the download-only half of `git pull`.

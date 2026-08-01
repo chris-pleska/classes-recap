@@ -64,6 +64,9 @@
 <li><a href="#lesson-25-dynamic-and-the-api-when-static-hosting-cant-be-the-answer">Lesson 25 — Dynamic and the API: When Static Hosting Can't Be the Answer</a></li>
 <li><a href="#lesson-26-what-the-buy-button-sends-payload-the-dict-the-route-that-reads-it">Lesson 26 — What the Buy Button Sends: Payload, the Dict &amp; the Route That Reads It</a></li>
 <li><a href="#lesson-27-who-keeps-it-running-systemd-nginx-the-renewed-padlock">Lesson 27 — Who Keeps It Running: systemd, nginx &amp; the Renewed Padlock</a></li>
+<li><a href="#lesson-28-going-deeper-on-the-database-and-the-move-begins">Lesson 28 — Going Deeper on the Database, and the Move Begins</a></li>
+<li><a href="#lesson-29-finishing-the-database-move-nat-gateway-restore-cutover">Lesson 29 — Finishing the Database Move: NAT Gateway, Restore &amp; Cutover</a></li>
+<li><a href="#lesson-30-many-engineers-same-code-branches-pull-requests-conflicts">Lesson 30 — Many Engineers, Same Code: Branches, Pull Requests &amp; Conflicts</a></li>
   </ul>
 </nav>
 <main>
@@ -4296,6 +4299,997 @@ Thu 2026-07-23 03:14:00     11h       certbot.timer      certbot.service   ← c
 <li><strong>Domain → certbot → timer</strong> — point your A record at your server if it's drifted, run certbot with the nginx plugin, enable the renewal timer, and finish with the padlock and <code>sudo ss -tlnp</code>.</li>
 </ul>
 <p><strong>What you know now:</strong> a running program needs a computer with a runner — the backend can't live in a bucket the way the frontend can. systemd is the machine's supervisor: it starts services at boot from a unit file, tracks them, and restarts them when the file's <code>Restart</code> line says so — <code>systemctl status</code> reads all three facts back. localhost, 127.0.0.1, is every computer's name for itself; Postgres and, on most builds, gunicorn answer only there, on purpose. nginx in front of gunicorn is a reverse proxy — one program facing the internet, the other running your Python behind it — and whichever shape a build started as, both end at the same <code>ss</code> output. HTTPS runs on a key pair made together, a certificate that carries the public key and a name, and a certificate authority the browser already trusts to have checked that name; running certbot on the server itself, instead of by hand, lets it prove the name and write the nginx config on its own — and a systemd timer, not a person, keeps the certificate renewed.</p>
+<h1 id="lesson-28-going-deeper-on-the-database-and-the-move-begins">Lesson 28 — Going Deeper on the Database, and the Move Begins</h1>
+<h2 id="five-separate-topics-not-one-story">Five Separate Topics, Not One Story</h2>
+<p>In the last database session you queried the database by hand. Tonight is the next five things — <strong>not one story, five different topics</strong>, taken one at a time: logging, SQL injection, how the app connects, migrations, and the rules for money data.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Topic</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Logging</strong></td>
+<td>the record of every query the database runs</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>SQL injection</strong></td>
+<td>a security hole, and how to close it</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Connecting</strong></td>
+<td>how the app reaches the database</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Migrations</strong></td>
+<td>how the tables got their shape</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Money data</strong></td>
+<td>the rules that keep a ledger correct</td>
+</tr>
+</tbody>
+</table>
+<h2 id="live-the-database-can-record-every-query">Live: The Database Can Record Every Query</h2>
+<p><strong>log</strong> — a running record written to a file as things happen. Recording every query is <strong>off by default</strong> — one setting turns it on:</p>
+<pre><code class="language-bash">sudo -u postgres psql -c "ALTER SYSTEM SET log_statement = 'all'"   # write down every statement
+sudo -u postgres psql -c "SELECT pg_reload_conf()"                  # make Postgres re-read its settings
+sudo tail -f /var/log/postgresql/postgresql-*.log                  # follow the log as it's written
+# (then click a page in the app)
+</code></pre>
+<pre><code>LOG:  statement: SELECT * FROM quote_cache …   ← the click, as the database saw it
+</code></pre>
+<p>The app is just <strong>another client</strong> — it sends the same kind of <code>SELECT</code> you typed by hand, over the same port 5432. Open the app's code at that line and you'll see the exact query.</p>
+<p>You won't read logs this way at work — nobody SSHes in to <code>tail</code> a file. The logs ship somewhere you can search by time and filter instead: <strong>Datadog</strong>, CloudWatch Logs, Grafana, Dynatrace. Your company picks one and you learn that one. Same lines underneath, same job: something broke an hour ago — go back an hour and look.</p>
+<h2 id="sql-injection-your-text-glued-into-a-sentence">SQL Injection — Your Text, Glued Into a Sentence</h2>
+<p>When you search for a stock, the app glues what you typed into a ready-made SQL sentence, and sends the whole line to the database:</p>
+<pre><code>you type:       AAPL
+the app sends:  SELECT * FROM companies WHERE symbol = 'AAPL'
+</code></pre>
+<p>The database receives <strong>one line of text</strong>. It cannot tell which part the app wrote and which part you typed — it just reads the sentence. Your text is supposed to sit <strong>between the quotes</strong>, as plain data. So what happens if your text <strong>contains a quote</strong>?</p>
+<h2 id="live-one-line-returns-every-row">Live: One Line Returns Every Row</h2>
+<pre><code>you type:       ' OR '1'='1
+the app sends:  SELECT * FROM companies WHERE symbol = '' OR '1'='1'
+</code></pre>
+<p>Your first quote pairs up with the app's opening quote — the data ends early, and the rest of your text is read as <strong>SQL commands</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>Reads as</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>symbol = ''</code></td>
+<td>matches nothing</td>
+<td>"symbol equals empty text" — true for no row</td>
+</tr>
+<tr>
+<td><code>OR</code></td>
+<td>…or…</td>
+<td>either side being true is enough</td>
+</tr>
+<tr>
+<td><code>'1'='1'</code></td>
+<td>always true</td>
+<td>1 equals 1, on every single row — so <strong>every row matches</strong></td>
+</tr>
+</tbody>
+</table>
+<p>That's <strong>SQL injection</strong>: what you typed stopped being data and became part of the command. The search box just handed back the whole table.</p>
+<h2 id="the-fix-give-the-input-to-the-database-separately">The Fix — Give the Input to the Database Separately</h2>
+<p>Don't paste the input into the sentence. Leave a <strong>blank</strong> — a placeholder, written <code>%s</code> — and pass the value as a <strong>separate argument</strong>:</p>
+<pre><code class="language-python">cur.execute("… WHERE symbol = %s", (user_input,))
+</code></pre>
+<p>The sentence and your text arrive <strong>separately</strong>, so the database always knows which is which — a quote you type stays a plain character and can never end the sentence. That comma is the whole habit.</p>
+<p><strong>parameterized query</strong> — the value goes in through a placeholder, so it can never become part of the SQL.</p>
+<p>Fixing this day to day is <strong>developer work, not ours</strong>. A platform engineer needs to know how it works and what it can cost — and when you build something yourself, ask Claude to check it for SQL injection.</p>
+<h2 id="is-our-app-safe">Is Our App Safe?</h2>
+<p>Open the search query in our app's code and compare it to the two shapes:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Looks like</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Unsafe</strong></td>
+<td>the input pasted straight into the sentence — <code>"… = '" + user_input + "'"</code></td>
+</tr>
+<tr>
+<td><strong>Safe</strong></td>
+<td>a placeholder, value passed separately — <code>"… = %s", (user_input,)</code></td>
+</tr>
+</tbody>
+</table>
+<p>If it's the safe shape — good, and now you know why. If it's the unsafe one, <strong>you just found a real bug</strong>, and you know exactly what to ask Claude to change.</p>
+<h2 id="the-connection-string">The Connection String</h2>
+<p>When you connect by hand, you hand <code>psql</code> the facts one flag at a time:</p>
+<pre><code class="language-bash">psql -U app_user -d investapp -h localhost   # -U who · -d which database · -h which machine
+</code></pre>
+<p>The app needs the same facts, but as <strong>one line</strong>:</p>
+<pre><code>postgresql://app_user:…@localhost:5432/investapp
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>Role</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_user:…</code></td>
+<td>who</td>
+<td>a database user + password; the <code>…</code> hides the real password</td>
+</tr>
+<tr>
+<td><code>localhost</code></td>
+<td>which machine</td>
+<td>where the database is — today, this same server. On RDS this is a long AWS <strong>endpoint</strong> instead</td>
+</tr>
+<tr>
+<td><code>5432</code></td>
+<td>which port</td>
+<td>Postgres's port</td>
+</tr>
+<tr>
+<td><code>investapp</code></td>
+<td>which database</td>
+<td>the named database on that server</td>
+</tr>
+</tbody>
+</table>
+<p>It lives in a config file or an environment variable — wherever the build put it. Keep this: when the database moves to its own server, <strong>exactly one of these four changes.</strong></p>
+<h2 id="migrations-the-tables-build-history">Migrations — the Tables' Build History</h2>
+<p>Someone created these tables — the columns, the types. Not by hand on the live database. It was written down as <strong>numbered files, run in order</strong>, each one a single change to the database's shape:</p>
+<pre><code>migrations/
+  001_create_companies.sql        step 1: the companies table
+  002_create_transactions.sql     step 2: the ledger
+  003_…                           run in order, once each, on every copy of the database
+</code></pre>
+<p><strong>migration</strong> — a change to the database's structure, written down as an ordered, repeatable step.</p>
+<p>Ours doesn't have this folder. Claude built our tables the quick way — straight into Postgres as it went. That's fine for a one-off; it's not how a team ships a change to a live database. Not your job to write them — just don't be surprised by the folder, and know the question: <strong>ask Claude how your tables got their shape.</strong></p>
+<h2 id="the-rules-for-money-data">The Rules for Money Data</h2>
+<p>The list of every deposit, buy, and sell is called a <strong>ledger</strong>. Ledgers follow rules banks have used for centuries — how mistakes are handled, whether anything is deleted, and where your balance is kept.</p>
+<h2 id="a-ledger-never-deletes">A Ledger Never Deletes</h2>
+<p>You bought the wrong stock. Why not just delete that row, or edit it? A ledger doesn't:</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>symbol</th>
+<th>shares</th>
+<th>amount</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4183</td>
+<td>NVDA</td>
+<td>2</td>
+<td>-262.52</td>
+<td>the wrong buy — left in place</td>
+</tr>
+<tr>
+<td>4184</td>
+<td>NVDA</td>
+<td>-2</td>
+<td>+262.52</td>
+<td>a new row that cancels it out</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>append-only</strong></td>
+<td>rows are only ever added — a fix is a new row, not an edit</td>
+</tr>
+<tr>
+<td><strong>soft delete</strong></td>
+<td>to remove something, mark it removed — the row stays</td>
+</tr>
+</tbody>
+</table>
+<p>Why: <strong>an edited past can't be checked.</strong> Every bank works this way. Does ours? A build that edits or deletes old rows is a real finding.</p>
+<h2 id="the-balance-is-a-sum-not-a-stored-number">The Balance Is a Sum, Not a Stored Number</h2>
+<pre><code>Deposit +1,000 → Buy 2 shares @ $100, −200 → add them up: 1,000 − 200 = $800
+</code></pre>
+<p>A bank keeps <strong>no saved balance</strong>. The number is <strong>added up from the ledger every time it's asked</strong> — arithmetic you could do on paper. A stored copy is a second version of the truth that can drift from the rows.</p>
+<h2 id="live-the-sum">Live: The SUM</h2>
+<p>One new word, and it's the adding-up you just did on paper:</p>
+<pre><code class="language-sql">SELECT SUM(amount) FROM ledger;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SELECT SUM(amount)</code></td>
+<td><code>SUM</code> = the paper arithmetic, in one word</td>
+</tr>
+<tr>
+<td><code>FROM ledger;</code></td>
+<td>every line, deposits and buys — your build's name may differ</td>
+</tr>
+</tbody>
+</table>
+<p>Run it — three numbers on one screen: the paper number, the query's number, the number on the app's page. <strong>All three agree.</strong> The balance is computed, not stored.</p>
+<h2 id="where-one-query-actually-goes">Where One Query Actually Goes</h2>
+<p>The first half you already own: phone → DNS → internet gateway → subnet → security-group check → nginx on 443 → gunicorn → the app. Today it gains its last leg — the app sends its SQL query, with its own name and password (the connection string), through port 5432, to Postgres, whose data folder sits on the EBS disk, where the buy's row lands.</p>
+<p>Today it all lives on <strong>one server</strong>, so the query never leaves the machine. Change the endpoint in that connection string, and it would — which is exactly what's next.</p>
+<h2 id="part-2-give-the-database-its-own-server">Part 2: Give the Database Its Own Server</h2>
+<p>Right now the database shares a machine with the app. This is a <strong>two-class move</strong>, always safe to stop at: tonight got through Steps 1–5; the class after this one finishes it, starting from the wall hit at the end.</p>
+<h2 id="why-move-it-at-all">Why Move It At All</h2>
+<p><code>sudo ss -tlnp</code>, the command from the hosting chapter, shows three programs sharing one machine:</p>
+<table>
+<thead>
+<tr>
+<th>Program</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>nginx</strong></td>
+<td>serves the website to the internet</td>
+</tr>
+<tr>
+<td><strong>gunicorn</strong></td>
+<td>runs the app's code</td>
+</tr>
+<tr>
+<td><strong>postgres</strong></td>
+<td>holds the money records (the database)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>They slow each other down</strong> — one machine's CPU and memory, split three ways. If nginx gets busy, it takes the food off the database's plate.</li>
+<li><strong>The website is open to the internet</strong> — so this machine is too. The database holds everyone's money records — it shouldn't sit on a machine the internet can reach.</li>
+</ul>
+<p>And they all fall together: one machine breaks, everything is down. Give the database <strong>its own machine</strong> — its own CPU and memory, and one that can be <strong>closed off from the internet.</strong></p>
+<h2 id="the-plan-one-tier-to-two">The Plan — One Tier to Two</h2>
+<p>A second machine, just for the database — the app server (nginx, gunicorn, the app) stays in its public area; a second server, in a private area of the network, holds only postgres. The app reaches postgres over the network on port 5432.</p>
+<p><strong>One-tier</strong> — everything on one machine, the setup we started with. <strong>Three-tier</strong> — front end, back end, and database each on their own machine, the shape you'll hear named at work. Tonight goes from one tier to two; the database is the piece that moves.</p>
+<p>A word to watch: moving a database like this is also called <strong>migrating</strong> it — not the same as the migration files (the tables' change history) from earlier. Same word, two meanings.</p>
+<p>From your phone to the app, <strong>nothing changes</strong>. The only difference is that the app's database now lives on a different machine.</p>
+<h2 id="live-step-1-back-up-the-database">Live, Step 1: Back Up the Database</h2>
+<pre><code class="language-bash">sudo -u postgres psql -l                             # list the databases on this machine — yours may not be called investapp
+sudo -u postgres pg_dump investapp &gt; investapp.sql
+</code></pre>
+<p>That makes one file with every table and every row. It does <strong>not</strong> include the database logins — the usernames and passwords allowed to connect. Those get created by hand on the new server. Never change a database without a backup first.</p>
+<h2 id="live-step-2-make-the-subnet">Live, Step 2: Make the Subnet</h2>
+<p>A <strong>subnet</strong> is a section of your private network. Make a new one in the <strong>same VPC as your app server</strong> — they have to be able to reach each other. Three things to get right:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Address range</strong></td>
+<td>cannot overlap an existing subnet — try <code>172.31.0.0/20</code>, and if it says it overlaps, walk the number up (16, 32, 48…) until it takes</td>
+</tr>
+<tr>
+<td><strong>Auto-assign public IP</strong></td>
+<td><strong>leave it off</strong> — a machine here should have a private address and nothing else</td>
+</tr>
+<tr>
+<td><strong>Availability zone</strong></td>
+<td>pick the same one your app server is in — same building, shorter trip, no cross-zone charge</td>
+</tr>
+</tbody>
+</table>
+<p>The subnet exists now — but it is <strong>not private yet</strong>. It was born attached to the VPC's main route table, and that table has a way out to the internet. Next step fixes that.</p>
+<h2 id="live-step-3-give-it-a-route-table-of-its-own">Live, Step 3: Give It a Route Table of Its Own</h2>
+<p>The main route table sends anything not local out through the internet gateway — that row is what makes the default subnets public. So make a <strong>new route table</strong>, leave that row out, and <strong>associate it with the new subnet</strong>. The new table has one row only: <code>local</code> — traffic inside the VPC's own address block stays inside. No internet row. That one absence is what private means.</p>
+<p>Check the wiring in the VPC console's <strong>Resource map</strong> — every subnet, and the route table each one follows, drawn in one picture. Your new subnet should be on its <strong>own line, to its own route table.</strong> If it's still drawn to the main one, the association didn't save — and the subnet is still public.</p>
+<p>Nothing routes out of this subnet now. That is <strong>exactly what we want</strong> — and, in a few minutes, exactly what stops us.</p>
+<h2 id="live-step-4-launch-the-server-with-the-right-firewall">Live, Step 4: Launch the Server, With the Right Firewall</h2>
+<p>Launch it like any other EC2 instance — the one thing that matters is choosing the <strong>new subnet</strong> under Network settings, and the <strong>same key pair</strong> you already use. Give it a security group of its own:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Port</th>
+<th>Allowed from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PostgreSQL</td>
+<td>5432</td>
+<td>the app server's security group</td>
+</tr>
+<tr>
+<td>SSH</td>
+<td>22</td>
+<td>the app server's security group</td>
+</tr>
+</tbody>
+</table>
+<p>The source is <strong>a security group, not an address.</strong> Any machine in that group may connect; nobody else — not the internet, not your laptop. Addresses change when a server restarts; the group doesn't. Watch the region you're in when you go looking for that group — the wrong region shows a stranger's-looking list and the launch fails.</p>
+<h2 id="live-step-5-reach-it-in-two-hops">Live, Step 5: Reach It in Two Hops</h2>
+<p>It has no public address, and its firewall lets SSH in from the app server only — so your laptop cannot reach it. You go <strong>through</strong> the app server:</p>
+<pre><code class="language-bash"># your laptop — once: put the key on the app server, hop 2 needs it
+scp -i key.pem key.pem ubuntu@&lt;app-public&gt;:~
+# hop 1 — into the app server, as always
+ssh -i key.pem ubuntu@&lt;app-public&gt;
+
+# app server — hop 2, over the private network (ubuntu@ or ec2-user@, whichever image you chose)
+chmod 400 key.pem
+ssh -i key.pem ubuntu@&lt;db-private-ip&gt;
+</code></pre>
+<p>The app server is the one machine on <strong>both sides</strong>. Leaving your private key on it is a real smell — a later class shows the version with no key to copy.</p>
+<h2 id="where-we-stopped-and-what-stopped-us">Where We Stopped, and What Stopped Us</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Status</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The backup</td>
+<td>Done</td>
+<td>One <code>.sql</code> file on the app server, with every row</td>
+</tr>
+<tr>
+<td>The private subnet</td>
+<td>Done</td>
+<td>Its own route table, no way out to the internet</td>
+</tr>
+<tr>
+<td>The server, reachable</td>
+<td>Done</td>
+<td>Launched inside it, firewalled to the app server, two hops in</td>
+</tr>
+<tr>
+<td>Install Postgres</td>
+<td><strong>Stuck</strong></td>
+<td><code>apt update</code> hangs at 0%. Nothing to download from</td>
+</tr>
+</tbody>
+</table>
+<p>A brand-new server is an empty machine. To put Postgres on it, it has to fetch Postgres — and we just took away every road out.</p>
+<h2 id="whats-next_5">What's Next</h2>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logging, SQL injection, the connection string, migrations, and the money rules for a ledger — then the database move begun: backup, private subnet, its own route table, a firewalled server, and two-hop SSH in — stopped at an empty machine with no way out to install anything</td>
+<td>Why the obvious fix doesn't work, what a NAT gateway is, and building one; then installing Postgres, opening it to the network, copying the backup across, restoring it, and pointing the app at the new server</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_8">After Class</h2>
+<ul>
+<li><strong>Find how YOURS does it</strong> — the query log, your connection string's four parts, your search query's safety, and how your tables got their shape. Table and file names differ across builds — every step starts with "find how mine does it."</li>
+<li><strong>Turn on the query log</strong> — the same one setting as in class — and watch a click arrive. Find your connection string and read its four parts.</li>
+<li><strong>The security check</strong> — find your search query in the code. Safe placeholder, or pasted-in input? Either answer is a win — if it's unsafe, tell Claude to fix it and check again.</li>
+<li><strong>The money rules</strong> — ask Claude how your tables got their shape. Then run the <code>SUM</code> on your ledger and check: does your build store a balance, or compute it?</li>
+</ul>
+<p><strong>What you know now:</strong> a database log records every query, off by default until one setting turns it on — the app is just another client sending the same kind of <code>SELECT</code> you'd type by hand. SQL injection happens when user input is glued straight into a SQL sentence instead of passed as a separate, parameterized argument — one habit, one comma, closes the hole. The connection string carries the same four facts <code>psql</code> takes as flags — who, which machine, which port, which database — and moving the database changes exactly one of them. Migrations are the tables' ordered, repeatable build history, kept separate from the live database's day-to-day changes. A ledger is append-only — mistakes are corrected with a new row, never an edit or delete — and a real balance is summed fresh from the ledger every time, never stored. Moving the database off the app server means a new private subnet with its own route table and no internet route, a firewalled second server reachable only through the app server in two SSH hops — and an empty machine that, once sealed off from the internet, has no way yet to fetch the software it needs.</p>
+<h1 id="lesson-29-finishing-the-database-move-nat-gateway-restore-cutover">Lesson 29 — Finishing the Database Move: NAT Gateway, Restore &amp; Cutover</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Last class got the new database server built, private, and reachable — then hit a wall. <code>sudo apt update</code> sat at 0% forever:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Status</th>
+<th>What happened</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The backup</td>
+<td>Done</td>
+<td>One <code>.sql</code> file on the app server, with every row</td>
+</tr>
+<tr>
+<td>The private subnet</td>
+<td>Done</td>
+<td>Its own route table, no way out to the internet</td>
+</tr>
+<tr>
+<td>The server, reachable</td>
+<td>Done</td>
+<td>Launched inside it, firewalled to the app server, two hops in</td>
+</tr>
+<tr>
+<td>Install Postgres</td>
+<td><strong>Stuck</strong></td>
+<td><code>apt update</code> hangs at 0%. Nothing to download from</td>
+</tr>
+</tbody>
+</table>
+<p>A brand-new server is an empty machine. To put Postgres on it, it has to fetch Postgres — and the private subnet took away every road out. Tonight starts by explaining that wall, then finishes the move: install, open it to the network, copy the backup across, restore it, point the app at it, and seal the server back up.</p>
+<h2 id="two-walls-and-the-obvious-fix-only-clears-one">Two Walls, and the Obvious Fix Only Clears One</h2>
+<pre><code>$ sudo apt update
+0% [Connecting to archive.ubuntu.com]     … and it sits there. No error. Just nothing.
+</code></pre>
+<p>Everyone tries the same fix first: put the internet row back in the route table. It doesn't work, and the reason is worth keeping. There are <strong>two</strong> walls, not one:</p>
+<table>
+<thead>
+<tr>
+<th>Wall</th>
+<th>What it is</th>
+<th>Why the fix doesn't clear it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. The route table</td>
+<td>No internet row, so nothing addressed outside the VPC has anywhere to go</td>
+<td>Adding the row back is the "obvious fix" — but it still isn't enough</td>
+</tr>
+<tr>
+<td>2. The internet gateway</td>
+<td>Only carries traffic for a machine that <strong>has a public address</strong></td>
+<td>Our database server has none, on purpose — the gateway has nothing to hand the answer back to</td>
+</tr>
+</tbody>
+</table>
+<p><strong>An internet gateway only carries traffic for a machine with a public address.</strong> Ours has none. That's what a NAT gateway is for.</p>
+<h2 id="two-ways-out">Two Ways Out</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>How it works</th>
+<th>Trade-off</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>NAT gateway</strong> (the real answer)</td>
+<td>A box in a <em>public</em> subnet that makes outbound calls on the private server's behalf. The server keeps its private address and stays unreachable from outside</td>
+<td>About 4.5¢/hour for the gateway + a public address + 4.5¢/GB — roughly $36/month if left running (~$33 of that is the gateway alone). Every part-hour bills as a full one, so a class costs pennies: create it, install, delete it. At a real job you leave it running — an hour of engineer time costs more than a month of gateway</td>
+</tr>
+<tr>
+<td><strong>A public address for a few minutes</strong></td>
+<td>Give the database server an Elastic IP, put the internet row back, install, then take both away</td>
+<td>Cheaper, and it works — but adding that row is <em>the definition of a public subnet</em>. For those minutes the database server is a machine on the internet with only its firewall in the way. Undo <strong>two</strong> things, not one: release the address <strong>and</strong> delete the <code>0.0.0.0/0</code> row — dropping the address alone still leaves the subnet public for the next thing launched in it</td>
+</tr>
+</tbody>
+</table>
+<p>We build the NAT gateway — it's what you'll meet at work, and it's the honest answer to "how does a private server get updates?" Then we delete it, because ours never needs the internet again.</p>
+<p><strong>NAT gateway</strong> — a one-way door out of a private subnet. The private server <em>starts</em> a connection out (an update, a download) and the answer comes back on it; nothing outside can start a connection in. That asymmetry is the whole point.</p>
+<h2 id="live-step-6-build-the-nat-gateway">Live, Step 6: Build the NAT Gateway</h2>
+<p>Three fields, in a <strong>public</strong> subnet — any default subnet, not the database's:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What to put</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Subnet</td>
+<td>a <strong>public</strong> one — not the database's private subnet</td>
+</tr>
+<tr>
+<td>Connectivity</td>
+<td>Public</td>
+</tr>
+<tr>
+<td>Elastic IP</td>
+<td>Allocate a new one — the door's own public address</td>
+</tr>
+</tbody>
+</table>
+<p>Then one row in the <strong>database subnet's</strong> route table — everything not local goes to the NAT gateway, not the internet gateway:</p>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>172.31.0.0/16</code></td>
+<td>local</td>
+</tr>
+<tr>
+<td><code>0.0.0.0/0</code></td>
+<td><code>nat-…</code> — the NAT gateway</td>
+</tr>
+</tbody>
+</table>
+<p>Wait for <strong>Available</strong>, then run <code>sudo apt update</code> again — it moves. Note to self: delete this later. It bills whether you use it or not.</p>
+<h2 id="live-step-7-install-postgres-create-the-login-and-database">Live, Step 7: Install Postgres, Create the Login and Database</h2>
+<p>Same install as the database chapter — match the <strong>major version</strong> to the app server, or the backup won't load. Then create the login and database by hand; the backup file doesn't carry them:</p>
+<pre><code class="language-bash">psql --version                                              # check the app server's version first — match it here
+
+# Ubuntu:
+sudo apt update &amp;&amp; sudo apt install -y postgresql
+# Amazon Linux (15/16/17/18 also offered — match the app server):
+sudo dnf install -y postgresql18-server
+sudo postgresql-setup --initdb                              # Amazon Linux only — Ubuntu does this for you
+
+# both, once Postgres is installed:
+sudo -u postgres createuser --pwprompt app_user             # --pwprompt = ask you to type its password
+sudo -u postgres createdb -O app_user investapp             # -O = owned by app_user · yours isn't called investapp
+</code></pre>
+<p>Use the <strong>same username, password, and database name</strong> as the old server — then the app barely notices the move. You can read all three out of the app's connection string.</p>
+<h2 id="live-step-8-tell-postgres-to-answer-the-network">Live, Step 8: Tell Postgres to Answer the Network</h2>
+<p>A fresh Postgres only answers its own machine. Two settings change that:</p>
+<pre><code class="language-bash">sudo -u postgres psql -tAc 'SHOW config_file; SHOW hba_file;'   # find both files — works on any distro, any version
+</code></pre>
+<pre><code># in postgresql.conf — answer on the network, not just this machine
+listen_addresses = '*'
+
+# in pg_hba.conf — network logins: this database, this user, any address, password required
+host  investapp  app_user  0.0.0.0/0  scram-sha-256
+</code></pre>
+<pre><code class="language-bash">sudo systemctl restart postgresql       # the files are read at start — restart to load them
+</code></pre>
+<p>From <strong>any</strong> address?! Yes — <strong>where from</strong> is the firewall's job (Step 4: only the app server's security group). Postgres checks <strong>who</strong>: the right user and password. Two separate guards, both have to say yes — and it's how RDS, AWS's managed database, is set up too.</p>
+<h3 id="the-gotcha-first-match-wins">The Gotcha: First Match Wins</h3>
+<p><code>pg_hba.conf</code> is read top to bottom, and the <strong>first</strong> matching rule wins — the rest are never looked at. Two lines ship with Postgres, above wherever you add yours:</p>
+<pre><code>local  all  all                peer
+host   all  all  127.0.0.1/32  ident
+# ↓ yours, added at the end of the file — never reached
+host  investapp  app_user  0.0.0.0/0  scram-sha-256
+</code></pre>
+<pre><code>FATAL: Ident authentication failed for user "app_user"
+</code></pre>
+<p>That message says <em>authentication</em> — so the instinct is to go check the password again, and the password was never the problem. Move your line <strong>above</strong> the two shipped ones and the same password works at once. (Ubuntu calls the second-line method <code>peer</code>, Amazon Linux calls it <code>ident</code> — same wall.) <strong>When a rule looks ignored, read what sits above it.</strong></p>
+<h2 id="live-step-9-copy-the-backup-across">Live, Step 9: Copy the Backup Across</h2>
+<p>The backup from Step 1 (<code>investapp.sql</code>) is still sitting on the app server — the new server has never seen it. Copy it over the private network with <code>scp</code>, the same command that put the SSH key there, pointed the other way:</p>
+<pre><code class="language-bash"># app server — check the file first (named after YOUR database, not investapp)
+ls -lh investapp.sql
+scp -i key.pem investapp.sql ubuntu@&lt;db-private-ip&gt;:~   # ec2-user@ instead of ubuntu@ on Amazon Linux
+</code></pre>
+<p>Read it as a sentence: <code>scp</code> — copy over ssh · <code>-i key.pem</code> — with this key · <code>investapp.sql</code> — this file · <code>ubuntu@&lt;db-private-ip&gt;:~</code> — to that user, on that machine, in their home folder. The <code>:</code> is what makes it a remote copy instead of a rename.</p>
+<p>Private address, private network — this file never touches the internet. Check it landed: <code>ls -lh ~</code> on the database server, same size as before.</p>
+<h2 id="live-step-10-restore-then-count-the-rows-on-both">Live, Step 10: Restore, Then Count the Rows on Both</h2>
+<p><code>count(*)</code> means "how many rows." Ask the old database, then ask the new one <strong>over the network</strong> — the numbers have to match:</p>
+<pre><code class="language-bash"># database server — load the file just copied over
+psql -U app_user -d investapp -f investapp.sql
+# and let the app's user use what it just created
+GRANT ALL ON ALL TABLES IN SCHEMA public TO app_user;
+</code></pre>
+<pre><code class="language-bash"># app server — the old database, the ledger
+psql -d investapp -c "SELECT count(*) FROM ledger;"
+# → 1247
+
+# now the new server, over the network, as app_user
+psql -h &lt;db-private-ip&gt; -U app_user -d investapp -c "SELECT count(*) FROM ledger;"
+# → 1247
+</code></pre>
+<p>That second command is the first time the app server has ever talked to the database over a network. If it answers, the firewall rule and both Postgres settings are right. <strong>Same number of rows — nothing was lost.</strong></p>
+<h2 id="live-step-11-point-the-app-at-it">Live, Step 11: Point the App at It</h2>
+<p>The connection string has four parts. Only <strong>one</strong> changes — the address (the <strong>endpoint</strong>), from <code>localhost</code> to the new server's private address:</p>
+<pre><code>postgresql://app_user:…@&lt;db-private-ip&gt;:5432/investapp
+</code></pre>
+<pre><code class="language-bash">sudo grep -rl DATABASE_URL /etc /opt /srv /home 2&gt;/dev/null   # find the file that holds it
+# common answers: /etc/&lt;app&gt;.env · /opt/&lt;app&gt;/.env · beside the app's .py file
+sudo systemctl restart gunicorn                                # or whatever your app's service is called
+</code></pre>
+<p>You almost certainly do not edit Python code here. A well-built app reads the connection string from a file outside the code — that's why the password was never committed to Git. Look for the <code>.env</code>-style file, not the address inside <code>app.py</code>.</p>
+<p>Restart the app, then make a <strong>real buy on the live site</strong> — it works. The old database is still running on the app server, untouched — that's the way back if anything's wrong.</p>
+<h2 id="live-step-12-close-the-way-out">Live, Step 12: Close the Way Out</h2>
+<p>Postgres is installed; the database never calls out again. Delete the <code>0.0.0.0/0</code> row from the database subnet's route table, and <strong>delete the NAT gateway</strong> — it charges by the hour whether anything uses it or not. Release its Elastic IP too.</p>
+<pre><code class="language-bash">curl -m 5 https://example.com    # worked a minute ago — now it times out
+</code></pre>
+<p>Cost check before closing the laptop: NAT gateway deleted, Elastic IP released, <strong>in that order</strong> — the address is separate from the gateway that held it, the button is called <em>Release</em> rather than Delete, and it stays greyed out until the gateway finishes deleting. Wait a minute, then release.</p>
+<p>And the website still works — <strong>a buy never needed that route.</strong> The only traffic the database server does is answer the app.</p>
+<h2 id="you-try-it-can-your-laptop-reach-the-database">You Try It: Can Your Laptop Reach the Database?</h2>
+<p>No — the server has no public address to even aim at. <code>nc</code> asks one question: "can I open a connection to this machine, on this port?"</p>
+<pre><code class="language-bash"># Mac — -vz = just check, send nothing · -G 5 -w 5 = timeouts, give up after 5 seconds
+nc -vz -G 5 -w 5 &lt;db-private-ip&gt; 5432        # → times out
+
+# Windows (PowerShell) — same question, one command
+Test-NetConnection &lt;db-private-ip&gt; -Port 5432   # → failed
+
+# the same ssh that worked from the app server:
+ssh -i key.pem ubuntu@&lt;db-private-ip&gt;           # → times out
+</code></pre>
+<p>Note: not <code>ping</code> — it speaks ICMP, which no rule here allows, so it fails even where things do work; it's not a reliable test.</p>
+<p>Straight to the database: no way in. Yet the site still loads — <strong>the app talks to the database for you.</strong> Nobody else can.</p>
+<h2 id="logging-in-later-the-jump-host">Logging In Later: the Jump Host</h2>
+<p>Through the app server — the same two hops as Step 5. The pattern is common enough to have a name and a shortcut:</p>
+<p><strong>jump host</strong> (or <strong>bastion</strong>) — a machine you're allowed to reach, that you connect <em>through</em> to reach one you can't reach directly. Here: the app server.</p>
+<pre><code class="language-bash">ssh -i key.pem -J ubuntu@&lt;app-public&gt; ubuntu@&lt;db-private-ip&gt;
+</code></pre>
+<p><code>-J</code> = "jump via" — both hops in one command, <strong>and no key left on the app server.</strong> Delete the copy you put there in Step 5.</p>
+<p>At a real job, a bastion is a machine of its own, not your app server, and a small team holds the keys. Increasingly it's no machine at all — AWS <strong>Session Manager</strong> opens a shell from the console with no key and no open port 22.</p>
+<h2 id="why-that-order">Why That Order</h2>
+<p>Every step was safe to stop at:</p>
+<ul>
+<li>Backed up <strong>before</strong> touching anything.</li>
+<li>Created the login on the new server <strong>before</strong> the restore needed it.</li>
+<li>Counted the rows on both databases <strong>before</strong> pointing the app anywhere.</li>
+<li>Left the old database running until a <strong>real buy</strong> proved the new one works.</li>
+<li>Made <strong>one change at a time</strong>, checking after each.</li>
+<li>Closed the way out <strong>last</strong> — only after everything worked.</li>
+</ul>
+<p>We stopped in the middle of this move for two days and nothing broke, because every stopping point was a safe one. <strong>That's how you change something people depend on.</strong></p>
+<h2 id="and-at-a-real-job">And at a Real Job</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>What it looks like</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Keep splitting: three tiers, three teams</strong></td>
+<td>Split once more — nginx on one machine, the app on another, the database on a third — and you have the <strong>three-tier</strong> shape most older systems still run. The reason is people, not computers: front-end, back-end, and database each get owned by a different team, and each can deploy without waiting on the other two</td>
+</tr>
+<tr>
+<td><strong>Or hand the machine back: RDS</strong></td>
+<td>AWS runs the database server for you — you pick the engine and size, they patch, back up, and restore. Every step done by hand tonight becomes a button (<em>restore to point in time</em> instead of <code>pg_dump</code> + <code>scp</code> + reload). You never SSH in, because there's nothing to SSH into. It costs more; companies pay it because an engineer's hours cost more still</td>
+</tr>
+</tbody>
+</table>
+<p>So why do it the hard way once? Because <strong>the buttons only mean something if you know what they replace.</strong> You moved a live database without losing a row — when RDS does it for you, you'll know exactly what it did.</p>
+<h2 id="one-buy-end-to-end">One Buy, End to End</h2>
+<p>The full path a buy takes now: phone → DNS → internet gateway → public subnet → firewall check → nginx on 443 → gunicorn → the app — all on the app server. Then the app sends its query <strong>over the network</strong> into the private subnet: through the database's firewall, port 5432, to Postgres on its own server, where the buy's row is saved to disk.</p>
+<p>You can now follow one buy the whole way, and name every machine it passes through.</p>
+<h2 id="after-class_9">After Class</h2>
+<p>Optional practice and Q&amp;A — less structured, working through the move on your own build with the instructor:</p>
+<ul>
+<li><strong>Do the move on your own server</strong> — billing alarm first, and delete the NAT gateway when you're done.</li>
+<li><strong>Find how yours does it</strong> — your own database name, table names, and connection-string file differ from the demo; every step starts with "find how mine does it."</li>
+<li><strong>Confirm the two-guard model</strong> — check that your database server's security group source is a security group, not an address, and that <code>pg_hba.conf</code> matches your app's actual user and database name.</li>
+<li><strong>Practice the jump host</strong> — reach the database server with <code>ssh -J</code> in one line, and confirm no copy of your key was left behind on the app server.</li>
+</ul>
+<p><strong>What you know now:</strong> a private subnet with no internet route blocks outbound traffic in two places, not one — the missing route row, and the internet gateway's refusal to carry traffic for a machine with no public address — and a NAT gateway is the one-way door that fixes both without giving the server a public address of its own. Installing Postgres on the new server means matching the app server's major version and recreating the login and database by hand, since a backup file carries rows but not logins. <code>pg_hba.conf</code> is read top to bottom and stops at the first match, so a new rule has to sit above the shipped defaults or it's silently never reached. The whole move — backup, subnet, route table, server, firewall, NAT gateway, install, restore, cutover, teardown — was staged so every stopping point left a working system, with the old database left running until a real transaction proved the new one worked. A jump host (or bastion) is how you reach a machine with no public address at all, <code>-J</code> collapses the two hops into one command, and at a real job that role is either its own guarded machine or replaced entirely by AWS Session Manager, which needs no key and no open port.</p>
+
+<h1 id="lesson-30-many-engineers-same-code-branches-pull-requests-conflicts">Lesson 30 — Many Engineers, Same Code: Branches, Pull Requests &amp; Conflicts</h1>
+<h2 id="the-situation">The Situation</h2>
+<p>You change line 5 of a file. At the same time, somebody else changes line 40 of that same file. You both save. You both send it. What happens to their work? What happens to yours?</p>
+<p>Everything you've done in Git so far, you did alone in your own repo — this question never came up. Tonight it does, because one file — <code>index.html</code>, the class menu page — belongs to the whole class. Everybody is allowed to send changes to it, and one part of it is marked with your name. You change <strong>your</strong> part; somebody else changes theirs. So the file gets changed by many people on the same day, in different places inside it. Hold on to that — it's the whole reason today exists.</p>
+<h2 id="six-commands-you-already-have">Six Commands You Already Have</h2>
+<p>A refresh, not a re-teach:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>git status</code></td>
+<td>What changed</td>
+</tr>
+<tr>
+<td><code>git add</code></td>
+<td>Pick what to save</td>
+</tr>
+<tr>
+<td><code>git commit</code></td>
+<td>Put one save into Git's memory</td>
+</tr>
+<tr>
+<td><code>git push</code></td>
+<td>Send your saves to GitHub</td>
+</tr>
+<tr>
+<td><code>git clone</code></td>
+<td>Copy a repo that already exists</td>
+</tr>
+<tr>
+<td><code>git pull</code></td>
+<td>Bring down saves you don't have</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A repo</strong> is a folder Git is watching, plus every save it remembers for it. Access comes before the clone — check you're let in before you copy anything:</p>
+<pre><code class="language-bash">git ls-remote git@github.com:312school/class-menu-page.git
+# a list of long codes           → you're in
+# Permission denied (publickey)  → no working SSH key yet
+
+git clone git@github.com:312school/class-menu-page.git
+</code></pre>
+<p><strong>Permission denied means no working SSH key.</strong> Being in the organization isn't enough on its own — that's a trip to the unstuck ladder, not a sign the clone command is wrong.</p>
+<h2 id="why-a-shared-push-fails">Why a Shared Push Fails</h2>
+<p>Your saves sit in a line, and that line has a name: <code>main</code>. Every <code>git commit</code> adds one save to the end of it. In the Git lesson, that line belonged to you alone. Here, it belongs to everybody in the class.</p>
+<p>Engineer one changes a line and sends it — nothing new, exactly what you already do:</p>
+<pre><code class="language-bash">git commit -m "Raise the coffee price"
+git push
+# To github.com:312school/class-menu-page.git
+#    2bcda9a..4e77d90  main -&gt; main
+</code></pre>
+<p><code>main</code> on GitHub now has one more save than before. Engineer two changes a <strong>different</strong> line and tries the same thing:</p>
+<pre><code class="language-bash">git commit -m "Raise the tea price"
+git push
+#  ! [rejected]        main -&gt; main (fetch first)
+# error: failed to push some refs to 'github.com:312school/class-menu-page.git'
+# hint: Updates were rejected because the remote contains work that you do not
+# hint: have locally. This is usually caused by another repository pushing to
+# hint: the same ref.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>What Git says</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(fetch first)</code></td>
+<td>Nothing was sent. Get GitHub's saves first</td>
+</tr>
+<tr>
+<td><code>the remote contains work that you do not have</code></td>
+<td>GitHub's <code>main</code> has a save your copy has never seen</td>
+</tr>
+</tbody>
+</table>
+<p>They changed a <strong>different line</strong> — so this isn't the content clashing. The line of saves simply moved while they were working. That's a different problem from a conflict, and it needs a different fix: branches.</p>
+<h2 id="branches-the-one-new-idea">Branches — the One New Idea</h2>
+<p>A branch is a second line of saves, with its own name. It <strong>starts from the save you're on</strong> — everything before that point it shares with <code>main</code>. Your next <code>git commit</code> goes onto your line, not onto <code>main</code>. And <code>main</code> doesn't move while you work — <code>main</code> <strong>is a branch too</strong>, just the one that was already there.</p>
+<p>A branch is not any of these three things people assume:</p>
+<ul>
+<li><strong>Not a new folder.</strong> You still have one folder, with one <code>index.html</code> in it.</li>
+<li><strong>Not a backup.</strong> A branch protects nothing; <code>commit</code> and <code>push</code> do that.</li>
+<li><strong>Not a separate repo.</strong> Same repo, same GitHub, same saves underneath.</li>
+</ul>
+<p>So what is it? A name for where your next saves go. Git puts the files for whichever branch you're standing on into your one folder, and swaps them when you switch. Git's own word for the branch you're standing on is <code>HEAD</code>.</p>
+<pre><code class="language-bash">git switch -c color-fix
+# Switched to a new branch 'color-fix'
+
+git branch
+# * color-fix
+#   main
+</code></pre>
+<p><code>-c</code> means <strong>create</strong> — make the branch, then stand on it. The <code>*</code> marks the branch you're standing on. You'll also see <code>git checkout -b color-fix</code> — the older name for the same thing, and still what a lot of people type. <code>git switch</code> came later to make this one job clearer.</p>
+<p>Your one folder shows one branch at a time:</p>
+<pre><code class="language-bash">git commit -m "Make the heading green"   # a save on color-fix
+
+git switch main        # refresh the page → the green is gone
+git switch color-fix   # refresh again      → the green is back
+</code></pre>
+<p>Nothing was lost either time — both versions are saved, you're just looking at one, then the other. Git prints the same history in the terminal:</p>
+<pre><code class="language-bash">git log --oneline
+# 9c2f1ab (HEAD -&gt; color-fix) Make the heading green
+# 4e77d90 (origin/main, main) Raise the coffee price
+# 2bcda9a Sections: only active students
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HEAD</code></td>
+<td>Git's word for the branch you're standing on</td>
+</tr>
+<tr>
+<td><code>origin/main</code></td>
+<td>GitHub's <code>main</code>, as your machine last saw it</td>
+</tr>
+</tbody>
+</table>
+<p>Adding <code>--graph --all</code> draws the two lines as branching text — it's noisy on a real repo, and nothing later needs it. <code>--oneline</code> is the one worth keeping.</p>
+<h2 id="pushing-a-branch">Pushing a Branch</h2>
+<p>Until you push it, nobody else can see it. Before the push, <code>color-fix</code> exists only in the folder on your machine, next to <code>main</code> — GitHub has <code>main</code> only. <code>git push -u origin color-fix</code> sends it up:</p>
+<pre><code class="language-bash">git push -u origin color-fix
+# remote: Create a pull request for 'color-fix' on GitHub by visiting:
+# remote:      https://github.com/312school/class-menu-page/pull/new/color-fix
+# To github.com:312school/class-menu-page.git
+#  * [new branch]      color-fix -&gt; color-fix
+# branch 'color-fix' set up to track 'origin/color-fix'.
+</code></pre>
+<p><code>origin</code> is the name your folder uses for "the copy on GitHub" — set when you cloned. <code>-u</code> links your branch to the one on GitHub, so after this, <code>git push</code> on its own is enough. The branch now exists in both places, and GitHub noticed — it's already offering the next step.</p>
+<h2 id="pull-requests-and-reviews">Pull Requests and Reviews</h2>
+<p>A <strong>pull request</strong> asks for your branch to go into <code>main</code>. In plain words: here is my line of saves, please add it to <code>main</code>. It's a page on GitHub where the change can be looked at and talked about <em>before</em> it goes in — and nothing enters <code>main</code> until somebody presses <strong>Merge</strong>.</p>
+<pre><code>Pull requests → New pull request
+base: main   ←   compare: color-fix
+Title + description: what changed, and why
+→ Create pull request
+</code></pre>
+<p>Each pull request covers one person's own part of the page, so nobody waits on anybody to open theirs. Opening it notifies nobody in practice — copy the link into the team channel and ask, and ask politely: text carries no tone, and "can you please review this" reads very differently from "review this."</p>
+<p>A pull request can target any branch, not only <code>main</code> — teams often aim at a shared release branch. Branch names at work follow a pattern too: <code>fix/coffee-row</code>, <code>feat/add-cake-row</code> — a short prefix, then what the change does.</p>
+<p>Git and GitHub are two different things with similar names:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Git</strong></td>
+<td>The program on your machine. It saves versions and makes branches. Works with no internet and no account</td>
+</tr>
+<tr>
+<td><strong>GitHub</strong></td>
+<td>A company that keeps repos for you. It adds the web page, who's allowed in, reviews, and the pull request</td>
+</tr>
+</tbody>
+</table>
+<p>Git itself has no pull requests at all — the service adds them, and each one uses its own word for it: GitHub and Bitbucket say <strong>pull request</strong>; GitLab says <strong>merge request</strong>.</p>
+<p>A <strong>diff</strong> is the list of lines that changed — the same thing <code>git diff</code> shows you, drawn as a web page:</p>
+<pre><code class="language-diff">  &lt;li&gt;Tea &lt;b&gt;2.00&lt;/b&gt;&lt;/li&gt;
+- &lt;h1&gt;Class Menu&lt;/h1&gt;
++ &lt;h1 style="color: green"&gt;Class Menu&lt;/h1&gt;
+  &lt;li&gt;Cake &lt;b&gt;3.00&lt;/b&gt;&lt;/li&gt;
+</code></pre>
+<p><code>-</code> and red is the line that was taken out; <code>+</code> and green is the line that was put in; grey with no sign is unchanged, shown so you can see where in the file you are.</p>
+<p>Reviewing means reading the diff, then approving it or asking a question — <strong>Files changed</strong> is the tab with the diff on it, <strong>Review changes</strong> is Comment, Approve, or Request changes, and GitHub won't let you approve your own — somebody else has to read it. Claude can explain a diff you don't follow — paste it and ask what changed, but <strong>approving is still your decision.</strong> An approval is cover, not ceremony: a merged pull request breaks production sooner or later, and when it does, the question is whose change it was and who read it. Reviewed by somebody else, that's a team's miss. Merged alone, it's yours.</p>
+<h2 id="merging">Merging</h2>
+<p>Merging puts one line of saves into another. Merge <code>color-fix</code> into <code>main</code>, and <code>main</code> then has your saves as well as its own — the two lines become one line going forward. Your branch is not harmed by merging; it simply stops being ahead. On GitHub this is the <strong>Merge pull request</strong> button; in the terminal it's <code>git merge &lt;branch&gt;</code> — same thing.</p>
+<pre><code>Merge pull request → Confirm merge → Delete branch
+
+# then, standing on main:
+git switch main → git pull → git log --oneline
+</code></pre>
+<p>Deleting the merged branch is safe — the saves are in <code>main</code> now, the branch was only the name they were written under. Your machine keeps its own copy either way; <code>git branch -d color-fix</code> removes that one.</p>
+<p>If a second branch — say <code>add-button</code> — started <strong>before</strong> that merge, it's now behind: it began at an older commit than the one <code>main</code> ends on. Nothing is broken and nothing is lost, the branch is simply older, and it doesn't have what <code>main</code> gained until it catches up.</p>
+<h2 id="conflicts">Conflicts</h2>
+<p>The whole rule comes down to one question: the same line, or different lines?</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Different lines</strong> — you changed line 12, they changed line 40</td>
+<td>Git puts both in and never asks</td>
+</tr>
+<tr>
+<td><strong>The same line</strong> — you both changed line 12</td>
+<td>Git cannot know which one you meant, so it stops and asks</td>
+</tr>
+</tbody>
+</table>
+<p>That's all a conflict is: <strong>Git will not guess.</strong> It's not an error, and it's not something you broke. Lines that touch count as the same spot — Git reads the file in blocks, and one untouched line between them is enough to keep them apart.</p>
+<p>A conflict, end to end — bringing <code>main</code> into a branch that touched the same line:</p>
+<pre><code class="language-bash">git switch main → git pull → git switch add-button → git merge main
+# CONFLICT (content): Merge conflict in index.html
+
+vi index.html → git add → git commit → git push
+# the pull request goes green → Merge pull request
+</code></pre>
+<p>Both engineers' work ends up on the same line of the same file — nothing was overwritten. Git writes three marker lines into the file so you can choose:</p>
+<pre><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+  &lt;li&gt;Coffee &lt;b&gt;2.50&lt;/b&gt; &lt;button&gt;Order&lt;/button&gt;&lt;/li&gt;
+=======
+  &lt;li&gt;Coffee &lt;b&gt;2.80&lt;/b&gt;&lt;/li&gt;
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; main
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Marker</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code></td>
+<td>Your side — the branch you're standing on</td>
+</tr>
+<tr>
+<td><code>=======</code></td>
+<td>The divider</td>
+</tr>
+<tr>
+<td><code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; main</code></td>
+<td>What came in from <code>main</code></td>
+</tr>
+</tbody>
+</table>
+<p>Keep what you want, delete all three marker lines. Here the answer is both — the new price and the button. <strong>The common mistake:</strong> committing with <code>=======</code> still in the file — the page then shows it to everybody who opens it.</p>
+<p>A conflict needs two branches, not two people — you can make one on purpose to practice:</p>
+<ol>
+<li>On <code>main</code>, pick one line in your own part of the page.</li>
+<li><code>git switch -c change-one</code> → change that line → <code>git commit</code>.</li>
+<li><code>git switch main</code> → <code>git switch -c change-two</code> → <strong>the same line</strong>, differently → <code>git commit</code>.</li>
+<li><code>git switch main</code> → <code>git merge change-one</code> → clean.</li>
+<li><code>git merge change-two</code> → <strong>CONFLICT</strong>, guaranteed.</li>
+</ol>
+<p>In step 3, the second branch starts from <code>main</code> — not from <code>change-one</code>. Start it there instead and Git merges cleanly, with nothing to practice on.</p>
+<p>Claude resolves conflicts, and that's the normal way now — it's good at this, including large and messy ones, and hardly anybody works through conflict markers by hand any more. Show it the conflicted file and say what you want kept:</p>
+<blockquote>
+<p>"There is a conflict in <code>index.html</code>. Keep the new price and the Order button, and remove the markers."</p>
+</blockquote>
+<p><strong>Read the file afterwards.</strong> You're the one pressing Merge, so you're the one saying the result is right.</p>
+<h2 id="keeping-up-with-main">Keeping Up with Main</h2>
+<p>The same four commands as resolving a conflict — this time with nothing to decide, because the changes are on different lines:</p>
+<pre><code class="language-bash">git switch main → git pull → git switch add-button → git merge main
+# Merge made by the 'ort' strategy.   ← different lines, nothing to decide
+</code></pre>
+<p>The direction is the other way round from the pull request: here <code>main</code> gives and <strong>your branch receives</strong> — <code>main</code> isn't touched. Do this <strong>before</strong> you push, as ordinary daily practice, not recovery from a problem — then anything to decide, you decide on your own branch, not on a pull request somebody is already reading.</p>
+<h2 id="gitignore_1">.gitignore</h2>
+<p>One file lists what Git should never save:</p>
+<pre><code>.gitignore
+─────────────
+.env            your API keys
+*.pem           key files
+__pycache__/    Python leftovers
+.DS_Store       macOS junk
+</code></pre>
+<p>One line per thing Git should never track. Commit the file itself, and everybody in the repo gets the same list — this is the <strong>never push a key</strong> rule from the news-bot lesson, written down where Git can act on it.</p>
+<p><strong>The honest limit:</strong> it stops a file being saved <em>in the first place</em>, and does nothing about a file already in the history. A key that was ever pushed has to be replaced with a new one — <code>.gitignore</code> can't undo a push that already happened.</p>
+<h2 id="named-not-drilled-rebase-and-revert">Named, Not Drilled: rebase and revert</h2>
+<p>Two more words, so they aren't new later:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>rebase</strong></td>
+<td>A second way to catch up. Merging joins the two lines and adds a save that ties them together. Rebase instead moves your saves so they start from <code>main</code>'s newest save — one straight line, no join. A topic of its own, later — it rewrites your saves, which is why it isn't today</td>
+</tr>
+<tr>
+<td><strong>revert</strong></td>
+<td>Undoing a pull request that was already merged. One button on GitHub: Revert — it opens a new pull request, and that one needs an approval too. It doesn't erase anything; it adds a new save that puts the file back</td>
+</tr>
+</tbody>
+</table>
+<p><code>git fetch</code> is the half of <code>git pull</code> that only downloads — <code>pull</code> is <code>fetch</code> then <code>merge</code>. Claude can run either of these for you when it comes up.</p>
+<h2 id="where-you-are">Where You Are</h2>
+<p>Three things you can do now:</p>
+<ul>
+<li><strong>A branch you made</strong> — created, worked on, pushed.</li>
+<li><strong>A merged pull request</strong> — into code the whole class shares, read by somebody else first.</li>
+<li><strong>A conflict you fixed</strong> — made on purpose, read, decided, finished.</li>
+</ul>
+<h2 id="after-class_10">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, working through the flow again with the instructor:</p>
+<ul>
+<li><strong>One more change through the whole flow</strong> — a fresh branch, a commit, a push, a pull request, a review, a merge.</li>
+<li><strong>One more conflict on purpose</strong> — two branches off <code>main</code>, the same line, differently, and resolve it either by hand or by asking Claude.</li>
+<li><strong>A <code>.gitignore</code> in your own app repo</strong> — commit it, and confirm nothing in it is already tracked from before.</li>
+</ul>
+<p><strong>What you know now:</strong> <code>main</code> is a branch too — a line of saves everybody in the class shares, and a shared push gets rejected with <code>(fetch first)</code> the moment somebody else's save landed on it before yours. A branch is a second line of saves starting from the commit you're on — not a copy, not a backup, not a separate repo — and <code>HEAD</code> is Git's name for whichever one you're standing on. Pushing a branch makes it visible on GitHub; a pull request asks for it to be merged into <code>main</code>, and nothing lands until somebody presses Merge, one diff and one approval at a time. Merging joins two lines into one without harming the branch that was merged in; a branch that forked before that merge is simply behind, not broken. A conflict only happens when two branches change the <strong>same line</strong> — different lines merge silently — and the three markers, <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; main</code>, mark your side, the divider, and their side, all three deleted once you've chosen. Catching up with <code>main</code> uses the same four commands as resolving a conflict, just with nothing to decide, and it's daily practice, not damage control. <code>.gitignore</code> keeps a file from ever being tracked in the first place — it can't undo a key that already got pushed.</p>
 
 </main>
 </body>
