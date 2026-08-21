@@ -1,5 +1,12 @@
 {
-  "recap": 32,
-  "notes": 32,
-  "quiz": 32
+  "foundations": {
+    "recap": 32,
+    "notes": 32,
+    "quiz": 32
+  },
+  "scale": {
+    "recap": 6,
+    "notes": 6,
+    "quiz": 6
+  }
 }

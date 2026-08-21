@@ -67,6 +67,12 @@
 <li><a href="#lesson-28-going-deeper-on-the-database-and-the-move-begins">Lesson 28 — Going Deeper on the Database, and the Move Begins</a></li>
 <li><a href="#lesson-29-finishing-the-database-move-nat-gateway-restore-cutover">Lesson 29 — Finishing the Database Move: NAT Gateway, Restore &amp; Cutover</a></li>
 <li><a href="#lesson-30-many-engineers-same-code-branches-pull-requests-conflicts">Lesson 30 — Many Engineers, Same Code: Branches, Pull Requests &amp; Conflicts</a></li>
+<li><a href="#lesson-31-infrastructure-as-code-terraform-start-to-finish">Lesson 31 — Infrastructure as Code: Terraform, Start to Finish</a></li>
+<li><a href="#lesson-32-real-infrastructure-state-drift-sharing-writing-it-once">Lesson 32 — Real Infrastructure: State, Drift, Sharing &amp; Writing It Once</a></li>
+<li><a href="#lesson-33-one-server-built-from-code-ami-data-sources-the-security-group">Lesson 33 — One Server, Built From Code: AMI, Data Sources &amp; the Security Group</a></li>
+<li><a href="#lesson-34-one-server-built-from-code-identity-installation-the-disposable-machine">Lesson 34: One Server, Built From Code — Identity, Installation &amp; the Disposable Machine</a></li>
+<li><a href="#lesson-35-the-data-tier-amazon-rds-managed-databases-moving-your-data">Lesson 35: The Data Tier — Amazon RDS, Managed Databases &amp; Moving Your Data</a></li>
+<li><a href="#lesson-36-the-cutover-moving-your-data-reading-a-route-table-when-it-goes-wrong">Lesson 36 — The Cutover: Moving Your Data, Reading a Route Table &amp; When It Goes Wrong</a></li>
   </ul>
 </nav>
 <main>
@@ -5290,6 +5296,1547 @@ __pycache__/    Python leftovers
 <li><strong>A <code>.gitignore</code> in your own app repo</strong> — commit it, and confirm nothing in it is already tracked from before.</li>
 </ul>
 <p><strong>What you know now:</strong> <code>main</code> is a branch too — a line of saves everybody in the class shares, and a shared push gets rejected with <code>(fetch first)</code> the moment somebody else's save landed on it before yours. A branch is a second line of saves starting from the commit you're on — not a copy, not a backup, not a separate repo — and <code>HEAD</code> is Git's name for whichever one you're standing on. Pushing a branch makes it visible on GitHub; a pull request asks for it to be merged into <code>main</code>, and nothing lands until somebody presses Merge, one diff and one approval at a time. Merging joins two lines into one without harming the branch that was merged in; a branch that forked before that merge is simply behind, not broken. A conflict only happens when two branches change the <strong>same line</strong> — different lines merge silently — and the three markers, <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; main</code>, mark your side, the divider, and their side, all three deleted once you've chosen. Catching up with <code>main</code> uses the same four commands as resolving a conflict, just with nothing to decide, and it's daily practice, not damage control. <code>.gitignore</code> keeps a file from ever being tracked in the first place — it can't undo a key that already got pushed.</p>
+<h1 id="lesson-31-infrastructure-as-code-terraform-start-to-finish">Lesson 31 — Infrastructure as Code: Terraform, Start to Finish</h1>
+<h2 id="why-write-infrastructure-down">Why Write Infrastructure Down</h2>
+<p>Everything you own in AWS so far, you built by clicking through the console. A click works — but it can't do three things:</p>
+<table>
+<thead>
+<tr>
+<th>A click can't...</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Repeat it</strong></td>
+<td>Not exactly, and not a month later</td>
+</tr>
+<tr>
+<td><strong>Review it</strong></td>
+<td>Nobody can check it before it happens</td>
+</tr>
+<tr>
+<td><strong>Rebuild it</strong></td>
+<td>When it's gone, it's gone</td>
+</tr>
+</tbody>
+</table>
+<p>This course also turns on things that bill by the hour — load balancers, gateways, databases. Some of it is past the free tier, and it bills whether or not anyone is learning. Two things fix that: a <strong>budget alarm</strong> on your account (a spending limit that emails you — a few screens in AWS Billing), and one command that turns it all off. You'll meet that command by the end of today.</p>
+<h2 id="the-idea-infrastructure-as-code">The Idea: Infrastructure as Code</h2>
+<p><strong>Infrastructure as code</strong>: you write down the infrastructure you want in files, and you keep those files the way you keep code. A program reads them and makes reality match.</p>
+<p>That's the opposite of a script. <strong>A script performs steps</strong>, in the order you wrote them. <strong>This describes a destination</strong>, and the program works out the steps itself.</p>
+<p>A file can do the three things a click can't:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>A file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Repeat it</strong></td>
+<td>Run the same file again and get the same thing — a year later, too</td>
+</tr>
+<tr>
+<td><strong>Review it</strong></td>
+<td>Someone reads the file, and the change it would make, before anything happens</td>
+</tr>
+<tr>
+<td><strong>Rebuild it</strong></td>
+<td>Everything gone? Run the file. It comes back</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-field-several-tools-one-idea">The Field: Several Tools, One Idea</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What makes it different</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CloudFormation</strong></td>
+<td>AWS's own. Describes what should exist — but only ever on AWS</td>
+</tr>
+<tr>
+<td><strong>Pulumi / CDK</strong></td>
+<td>You write a real programming language (Python, TypeScript) and it produces the infrastructure</td>
+</tr>
+<tr>
+<td><strong>Ansible</strong></td>
+<td>Not infrastructure as code at all — it's <strong>configuration management</strong>. It configures machines that already exist (one command puts a new version of nginx on all of them), a different job from creating them</td>
+</tr>
+<tr>
+<td><strong>Terraform</strong></td>
+<td>Describes what should exist, against any cloud — the one we teach</td>
+</tr>
+</tbody>
+</table>
+<p>None of these is the winner. They're different answers to the same question, and you'll meet all four names on job postings.</p>
+<p><strong>Why Terraform specifically:</strong></p>
+<ul>
+<li><strong>Not tied to one cloud.</strong> The same tool describes AWS, Google Cloud, a DNS provider, a database service — you learn the idea once.</li>
+<li><strong>It's the name job postings use.</strong></li>
+<li><strong>Its certification is one of two this program targets</strong> — the other is Kubernetes, much later.</li>
+</ul>
+<p>You'll read that Terraform belongs to IBM now, and that it's no longer open source. Both are true: the license changed in August 2023, and there's a community fork called <strong>OpenTofu</strong> that works almost identically. What it means for you: free to use, for learning and for work — you just may not sell a product that <em>is</em> Terraform. We teach Terraform.</p>
+<h2 id="setting-up-terraform">Setting Up Terraform</h2>
+<p>Installing it is the step most likely to go wrong today. Errors here are expected and say nothing about anybody — one tool, this many different machines.</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS (Homebrew)</td>
+<td><code>brew tap hashicorp/tap &amp;&amp; brew install hashicorp/tap/terraform</code></td>
+</tr>
+<tr>
+<td>Amazon Linux (yum)</td>
+<td><code>sudo yum install -y yum-utils shadow-utils</code> then add the HashiCorp repo, then <code>sudo yum install terraform</code></td>
+</tr>
+<tr>
+<td>Ubuntu/Debian (apt)</td>
+<td>add the HashiCorp gpg key and repo, then <code>sudo apt update &amp;&amp; sudo apt install terraform</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>When it doesn't go clean, the three that actually happen:</strong></p>
+<pre><code class="language-bash">terraform version
+# → any version above 0.12 is fine for today. Stop here.
+# → brew says "already installed, just not linked"? Run the brew link
+#   command it prints, then close and reopen the terminal.
+</code></pre>
+<pre><code class="language-bash">xcode-select --install
+# macOS error mentioning "command line tools" — a long download, start it and wait,
+# then run the brew command again.
+</code></pre>
+<pre><code>code . → command not found
+# VS Code: Cmd⇧P → "Shell Command: Install 'code' command in PATH"
+</code></pre>
+<p>None of these is about you, and the newest version isn't required for anything today.</p>
+<p><strong>The editor:</strong> in VS Code, install the extension called <strong>HashiCorp Terraform</strong> — published by HashiCorp, with the verified tick (there are convincing lookalikes). Restart VS Code — nothing changes until you do. It completes resource types and argument names for you, which is most of what you'll type today.</p>
+<p><strong>Two commands confirm the install:</strong></p>
+<pre><code class="language-bash">terraform version
+# → a version number. That's the new tool.
+
+aws sts get-caller-identity
+# → your own account number. Terraform borrows these same credentials —
+#   the ones you already set up with `aws configure`.
+</code></pre>
+<p><strong>Then a repository to keep the files in</strong>, named exactly <code>infra-as-code-YOUR_GITHUB_USERNAME</code>. Your username on the end so no two are the same. It becomes the history of every change you ever make to your infrastructure.</p>
+<h2 id="the-five-new-words">The Five New Words</h2>
+<p><code>provider</code> — a plug-in that knows how to make one kind of thing, usually one company's cloud. Think of it as an interpreter: Terraform speaks to it, and it speaks AWS.</p>
+<pre><code class="language-hcl">provider "aws" {
+  region = "us-east-1"
+}
+</code></pre>
+<p>Who you are is never in this file — that came from <code>aws configure</code>, off your machine. This block is only <em>how to speak AWS</em>.</p>
+<p><code>resource</code> — one thing that should exist. A network is a resource. A server is a resource. A firewall rule is a resource. Your file is a list of them.</p>
+<pre><code class="language-hcl">resource "aws_vpc" "scratch" {
+  cidr_block = "10.99.0.0/16"
+}
+</code></pre>
+<p>Every resource is written with two names:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>the resource type</strong> (<code>"aws_vpc"</code>)</td>
+<td>What kind of thing it is. The provider decides the list of possible types — you can't invent one</td>
+</tr>
+<tr>
+<td><strong>the name</strong> (<code>"scratch"</code>)</td>
+<td>What <em>you</em> call this one, so you can refer to it later in the file. AWS never sees it</td>
+</tr>
+</tbody>
+</table>
+<p>AWS gives the real thing an id of its own — something like <code>vpc-0a1b2c3d4e5f6a7b8</code> — and that's what shows up in the console. Your name for it stays in the file.</p>
+<p>Two of the same type can't share a name — copy a block, forget to rename it, and this is what you get:</p>
+<pre><code>Error: Duplicate resource "aws_subnet" configuration
+  on main.tf line 14:
+  14: resource "aws_subnet" "private" {
+An aws_subnet resource named "private" was already declared at main.tf line 8.
+Resource names must be unique per type in each module.
+</code></pre>
+<p>Terraform tells you the file, the line, the name it objected to, and the rule — copy-then-rename is the single most common way to hit it.</p>
+<p><strong>The whole shape, and there's only one:</strong></p>
+<pre><code class="language-hcl"># main.tf
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_vpc" "scratch" {
+  cidr_block = "10.99.0.0/16"
+}
+</code></pre>
+<h2 id="init-plan-apply">init, plan &amp; apply</h2>
+<p><code>terraform init</code> — download the providers this folder needs, into this folder. It's a download: nothing is created in your account, nothing costs money. Run it again whenever the set of plug-ins the folder needs changes, <strong>not</strong> every time you change a resource. <code>terraform init -upgrade</code> gets a newer version of a plug-in you already have.</p>
+<p><code>terraform plan</code> — asks AWS what exists, compares that to your file, and prints what it would do to make them match. <strong>Nothing changes.</strong> Run it as many times as you like — it's a question, not an instruction.</p>
+<p><code>terraform apply</code> — do what the plan said. It shows you the plan again and asks once before it starts. This is the only command that changes anything in your account — everything else looks, downloads, or reports.</p>
+<p>The whole thing, on something real:</p>
+<pre><code class="language-bash">terraform init
+# → .terraform/ appears, with the AWS plug-in inside
+# → .terraform.lock.hcl records which version you got
+
+terraform plan
+# → 1 to add. Nothing has happened yet.
+
+terraform apply
+# → it asks. You say yes. Then the AWS console, and there it is.
+</code></pre>
+<p><code>10.99.0.0/16</code> is deliberately odd-looking, so it's obviously not your real network — a network costs nothing.</p>
+<h2 id="reading-a-plan">Reading a Plan</h2>
+<p>Read it backwards — the last line first:</p>
+<pre><code>Plan: 1 to add, 0 to change, 0 to destroy.
+</code></pre>
+<p>Not every attribute — no engineer reads that. You read the count, you read the symbols, and <strong>you stop if the destroy number isn't what you expected.</strong></p>
+<p>Seven symbols, two of them with an order built in:</p>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>+</code></td>
+<td>create something new</td>
+</tr>
+<tr>
+<td><code>-</code></td>
+<td>destroy it</td>
+</tr>
+<tr>
+<td><code>~</code></td>
+<td>change it where it stands — nothing is destroyed</td>
+</tr>
+<tr>
+<td><code>-/+</code></td>
+<td><strong>destroy it, then create the replacement</strong> — read left to right, that's the order the work happens in</td>
+</tr>
+<tr>
+<td><code>+/-</code></td>
+<td>create the replacement first, then destroy the old one</td>
+</tr>
+<tr>
+<td><code>&lt;=</code></td>
+<td>read something that already exists, without touching it</td>
+</tr>
+<tr>
+<td><em>(none)</em></td>
+<td>not changing — most lines of a long plan</td>
+</tr>
+</tbody>
+</table>
+<h2 id="turning-it-off-terraform-destroy">Turning It Off: terraform destroy</h2>
+<p><code>terraform destroy</code> — delete everything <em>this folder</em> made. Nothing else. It shows you a plan first, where every line is a minus, and asks once. This is the command that makes the rest of the course affordable.</p>
+<pre><code class="language-bash">terraform destroy
+# → read it: every line is a minus. Then yes.
+# → refresh the console. Gone, in about ten seconds.
+</code></pre>
+<p>You now know how to make something and how to remove it, and you've done both on something that didn't matter. Everything after this is the same two commands on things that do.</p>
+<h2 id="after-class_11">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Finish the install</strong> if it didn't go clean live — brew link, Xcode command line tools, or the VS Code <code>code</code> command, one at a time.</li>
+<li><strong>Run the loop again</strong> on a second scratch resource — <code>init</code> → <code>plan</code> → <code>apply</code> → check the console → <code>destroy</code>.</li>
+<li><strong>Read a plan out loud</strong> before running <code>apply</code> — say what each <code>+</code>, <code>-</code>, or <code>~</code> means before you approve it.</li>
+</ul>
+<p><strong>What you know now:</strong> infrastructure as code means describing the destination in a file and letting a program work out the steps, instead of performing the steps yourself — the opposite of a script. A <code>provider</code> is the plug-in that speaks to one cloud; a <code>resource</code> is one thing that should exist, named with a type the provider fixes and a name you choose. <code>terraform init</code> downloads the providers a folder needs; <code>terraform plan</code> asks what would change and changes nothing; <code>terraform apply</code> is the only command that touches your account, and it asks once before it does. A plan reads backwards — the counts, then the symbols, stopping if the destroy count is a surprise. <code>terraform destroy</code> removes everything a folder made, which is what keeps a course full of hourly-billed services affordable.</p>
+
+<h1 id="lesson-32-real-infrastructure-state-drift-sharing-writing-it-once">Lesson 32 — Real Infrastructure: State, Drift, Sharing &amp; Writing It Once</h1>
+<h2 id="the-real-network-seven-resources">The Real Network: Seven Resources</h2>
+<p>Last session's <code>aws_vpc</code> was scratch — a network that cost nothing and did nothing. This time it's real, and it takes seven resources to make a network anything can actually run on:</p>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>aws_vpc</code></td>
+<td>a private network of your own</td>
+</tr>
+<tr>
+<td><code>aws_subnet</code> &times;2</td>
+<td>a section of it, in two availability zones</td>
+</tr>
+<tr>
+<td><code>aws_internet_gateway</code></td>
+<td>one way in and out</td>
+</tr>
+<tr>
+<td><code>aws_route_table</code></td>
+<td>where traffic goes</td>
+</tr>
+<tr>
+<td><code>aws_route_table_association</code> &times;2</td>
+<td>this subnet uses that table</td>
+</tr>
+</tbody>
+</table>
+<p>The addresses: <code>10.0.0.0/16</code> for the network, then <code>10.0.1.0/24</code> and <code>10.0.2.0/24</code> for the two subnets, one per availability zone. Both of these subnets are public — both reach the gateway — so they're named <code>public_a</code> and <code>public_b</code>, never <code>private</code>. Five kinds of resource, seven blocks in the file, because the subnets and the associations come in twos.</p>
+<p>The build happens one resource at a time: say what you want in one plain sentence, write that resource in the file, <code>plan</code> to check what it would do, <code>apply</code> and it exists. Then the next one. Nothing gets added blind, and the plan gets read every single time.</p>
+<p>Open the VPC in the console after <code>apply</code> and there's a second route table you never wrote — no name, no subnet attached to it:</p>
+<p><strong>the main route table</strong> <em>(every VPC has one)</em> — AWS creates it together with the network. Terraform didn't make it, so Terraform will never touch it and it will never show up in a plan. You can't delete it; it goes when the VPC goes. Nothing is associated with it, so no traffic uses it — seeing it in the console isn't a sign anything went wrong.</p>
+<h2 id="order-without-an-order-the-dependency-graph">Order Without an Order: the Dependency Graph</h2>
+<p>Nothing in the file says &quot;do me second.&quot; But look inside the subnet block:</p>
+<pre><code class="language-hcl">resource "aws_subnet" "a" {
+  vpc_id            = aws_vpc.main.id
+  availability_zone = "us-east-1a"
+  cidr_block        = "10.0.1.0/24"
+}
+</code></pre>
+<p>The subnet <em>mentions</em> the network, so the network has to exist first — and Terraform can see that. <strong>The dependency graph</strong> is Terraform's map of which resource mentions which. It's also read backwards, to work out a safe order for deleting.</p>
+<p>Getting traffic out takes three more resources, and one value you can't copy blind:</p>
+<pre><code class="language-hcl">resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"   # → anywhere that is not inside this network
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+# → then one association per subnet: subnet_id + route_table_id, four lines each.
+</code></pre>
+<p><code>0.0.0.0/0</code> is the whole point of a route: <strong>anywhere else</strong>. The Terraform Registry's own example puts a narrower range there instead — paste that unchanged and <code>apply</code> fails part-way, with some resources made and some not. Fix the value and run <code>apply</code> again.</p>
+<h2 id="change-or-outage-one-word-decides">Change or Outage: One Word Decides</h2>
+<p>Same file, same command, a very different consequence depending on what you touched:</p>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Symbol</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Change a tag</td>
+<td><code>~</code></td>
+<td>changed where it stands — nothing is destroyed, nothing goes down</td>
+</tr>
+<tr>
+<td>Change a subnet's address range</td>
+<td><code>-/+</code></td>
+<td>destroyed and built again — safe here only because these subnets are empty</td>
+</tr>
+</tbody>
+</table>
+<p>In the console, that same address-range change just happens the moment you click. Terraform is the only one of the two that told you first.</p>
+<h2 id="drift-when-somebody-changes-it-by-hand">Drift: When Somebody Changes It by Hand</h2>
+<p><strong>drift</strong> — reality has moved away from what your file says, usually because somebody changed something in the console instead of in the file. It happens on every real team, usually in a hurry, usually with a good reason at the time.</p>
+<p>Terraform finds it without being asked:</p>
+<pre><code class="language-bash">terraform plan
+# → Note: Objects have changed outside of Terraform
+# → and it offers to put it back the way the file says.
+</code></pre>
+<p>The file is what you meant; the cloud is only what happens to be true right now. Nothing gets fixed until a person runs <code>apply</code> — there's no schedule, and nothing running in the background.</p>
+<p>There's a flag that skips the yes/no prompt entirely:</p>
+<pre><code class="language-bash">terraform apply -auto-approve
+# → no plan to read, no yes to type. It just happens.
+</code></pre>
+<p>This exists for the machine that runs Terraform when nobody's watching — a pipeline that applies your code after somebody merges it, a later course. <strong>Don't use it yet.</strong> Reading the plan is the thing you're here to learn — type <code>yes</code>.</p>
+<h2 id="the-state-file-terraforms-memory">The State File: Terraform's Memory</h2>
+<p>You've made and deleted several networks in that account today. Your file says <code>"main"</code>. AWS has never heard that word. So when you run <code>plan</code>, how does Terraform know which network it's looking after?</p>
+<p><strong>state</strong> <em>(the file is called <code>terraform.tfstate</code>)</em> — Terraform's memory file, how it remembers what it has already made and what it hasn't. For each thing, it stores the name from your file beside the real AWS id.</p>
+<p>Watch what happens without it:</p>
+<pre><code class="language-bash">mv terraform.tfstate /tmp/keep-this-safe
+terraform plan
+# → 7 to add. Your network is still sitting in AWS, untouched.
+
+mv /tmp/keep-this-safe terraform.tfstate
+terraform plan
+# → No changes. It remembers again.
+</code></pre>
+<p>One file moved, and nothing else. Same code, same cloud, two different answers — so the answer was never coming from just those two things.</p>
+<p>Deleting the memory file does not delete your network. Your network is still sitting in AWS, running and billing — Terraform has simply forgotten it exists. And that's the dangerous part: next time you run <code>apply</code>, it builds a <em>second</em> network beside the first, because as far as its memory goes, it never made one. The state file isn't a copy of your infrastructure, and it isn't disposable.</p>
+<h2 id="whats-inside-it-and-why-its-gitignored">What's Inside It — and Why It's Gitignored</h2>
+<p>The state file stores every detail of everything it made — not just names and ids, but every setting, every value, exactly as AWS reported it back. Including the ones you wouldn't want stored: when you create a database later in this course, its password lands in this file in plain text. Nobody has to do anything unusual for that to happen — it's just another value the resource returned.</p>
+<pre><code>.terraform/        the downloaded plug-ins. Big, and easy to get again.
+*.tfstate          the memory file. Can hold passwords.
+*.tfstate.*        its backups. Same reason.
+*.tfvars           value files, which often hold secrets too.
+
+— and the one people wrongly add to that list —
+.terraform.lock.hcl  ← NOT ignored. You COMMIT this one: it pins which
+                     provider version you got, so next month you get that same one.
+</code></pre>
+<p>Your Terraform files belong in git, and so does the lock file. The memory file never does:</p>
+<pre><code class="language-bash">git add . &amp;&amp; git commit -m "the network, in code"
+git push
+# → every change from here on is a commit.
+</code></pre>
+<h2 id="one-laptop-isnt-enough-remote-state">One Laptop Isn't Enough: Remote State</h2>
+<p>The memory of your entire infrastructure is a file in a folder on your machine, and it's not in git. What happens when that laptop dies? Or when a second person has to run this?</p>
+<p><strong>remote state</strong> — the memory file kept in shared storage instead of on one machine, so it survives the laptop, and any machine that's allowed to can read and write it. Three places do this job: an <strong>S3 bucket</strong> (ours), an <strong>Azure storage account</strong>, or <strong>Terraform Cloud</strong>.</p>
+<pre><code class="language-hcl">terraform {
+  backend "s3" {
+    bucket = "your-unique-bucket-name"
+    key    = "unit1/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+</code></pre>
+<p>The backend does nothing until you run this:</p>
+<pre><code class="language-bash">terraform init
+# → "Do you want to copy existing state to the new backend?"   yes
+
+terraform init -reconfigure   # ← every later time you change this block
+</code></pre>
+<p>The bucket has to exist <strong>before</strong> this works — Terraform will not make it for you. So you make that one bucket by hand, once (versioning on, public access blocked), and it lives outside everything you'll ever destroy. <code>backend.tf</code> itself is committed to git: it holds the address of the memory, not the memory.</p>
+<p>There's one exception to how Terraform normally works: the backend block will not take a variable.</p>
+<pre><code class="language-hcl">backend "s3" {
+  bucket = var.bucket_name     # ← rejected
+  region = var.region          # ← rejected
+}
+</code></pre>
+<p>Terraform reads this block <strong>before</strong> it reads anything else in your files — it has to find the memory before it can work out what a variable means. So the bucket name and the region get typed out in full. This is the one place in the file where writing the value out again is correct.</p>
+<h2 id="two-people-at-once-state-locking">Two People at Once: State Locking</h2>
+<p>If the memory is shared, two people can run <code>apply</code> at the same moment. Both write the memory file. One of them silently wins, and the other's record of what it built is gone.</p>
+<p><strong>state locking</strong> — while one person is applying, the memory file is <strong>locked</strong> and nobody else can start. They get told to wait. You have to ask for it: add <code>use_lockfile = true</code> to that backend block. <strong>It's off unless you turn it on</strong>, and nothing warns you.</p>
+<pre><code class="language-bash"># terminal one:  terraform apply   — then stop at the yes/no prompt
+# terminal two:  terraform apply
+# → with locking off: it runs. Nobody is warned, and nothing says a word.
+
+# terminal two, with locking on and re-init'd:  terraform apply
+# → Error: Error acquiring the state lock
+#   S3 PutObject, status code 412: at least one of the preconditions
+#   you specified did not hold — and who is holding it, since when.
+</code></pre>
+<p>The lock is held for as long as that prompt sits there unanswered. On a real team, that name is your colleague's — this is how you find out they're mid-change instead of overwriting them.</p>
+<h2 id="say-it-once-variables">Say It Once: Variables</h2>
+<p>Look back at your file: <code>us-east-1</code> is in the provider, and again in each subnet. The address range appears more than once too. Change one and forget another, and you have a bug that <code>plan</code> cannot warn you about — because the file is exactly what you wrote.</p>
+<p><strong>variable</strong> — a named value you declare once and refer to everywhere else. Change it in one place and every use of it changes.</p>
+<pre><code class="language-hcl">variable "region" {
+  type    = string
+  default = "us-east-1"
+}
+
+region = var.region    # ← how you refer to it, anywhere in the file
+</code></pre>
+<p>On its own, a variable needs no quotes, nothing around it. Inside a piece of text it has to be wrapped, or it's not read as a variable:</p>
+<pre><code class="language-hcl">availability_zone = "${var.region}a"        # → us-east-1a
+name              = "${var.region}-main-db"   # → us-east-1-main-db
+</code></pre>
+<p>Leave the <code>${ }</code> off inside quotes and Terraform doesn't complain — it hands AWS the literal letters <code>var.region</code>, and AWS is the one that objects: <code>Invalid AWS Region: var.region</code>.</p>
+<h2 id="getting-a-value-back-out-outputs">Getting a Value Back Out: Outputs</h2>
+<p><strong>output</strong> — a value you ask Terraform to <strong>print for you</strong> when it finishes, usually something only AWS could tell you, like the real id of a thing it just made.</p>
+<pre><code class="language-hcl">output "subnet_a_id" {
+  value = aws_subnet.a.id      # ← and a second one just like it, for b
+}
+</code></pre>
+<pre><code class="language-bash">terraform output       # ← prints the real ids, ready to paste
+</code></pre>
+<p>A variable is a value going <strong>in</strong>. An output is a value coming <strong>out</strong>.</p>
+<h2 id="one-description-many-resources-for_each">One Description, Many Resources: for_each</h2>
+<p>Look at what's actually in your file right now:</p>
+<pre><code class="language-hcl">resource "aws_subnet" "a" {
+  vpc_id            = aws_vpc.main.id
+  availability_zone = "us-east-1a"
+  cidr_block        = "10.0.1.0/24"
+}
+
+resource "aws_subnet" "b" {
+  vpc_id            = aws_vpc.main.id
+  availability_zone = "us-east-1b"
+  cidr_block        = "10.0.2.0/24"
+}
+</code></pre>
+<p>Eight lines, and only two values are actually different. A third subnet would be eight more.</p>
+<p><strong>for_each</strong> — you hand Terraform a <strong>set of names</strong> and <strong>one description</strong>. It makes one of the thing for each name. It is not a loop: nothing runs in order, no counter, no first or second — both subnets are made at once.</p>
+<pre><code class="language-hcl">variable "subnets" {          # ← the set of names, and what goes with each
+  type = map(string)
+  default = {
+    "us-east-1a" = "10.0.1.0/24"
+    "us-east-1b" = "10.0.2.0/24"
+  }
+}
+
+resource "aws_subnet" "main" {
+  for_each          = var.subnets
+  vpc_id            = aws_vpc.main.id
+  availability_zone = each.key     # ← the name it is on: us-east-1a
+  cidr_block        = each.value   # ← what sits beside it: 10.0.1.0/24
+}
+</code></pre>
+<p>Two blocks became one. The next <code>plan</code> is <strong>not</strong> &quot;no changes&quot; — the subnets have different names now, so Terraform destroys both and builds them again. Safe here only because they're empty.</p>
+<h2 id="when-for_each-breaks-what-pointed-at-the-old-names">When for_each Breaks What Pointed at the Old Names</h2>
+<p>There's no <code>aws_subnet.a</code> any more. Both route table associations named it, so both stop working — and the fix is that they become one block with <code>for_each</code> too:</p>
+<pre><code class="language-hcl">resource "aws_route_table_association" "main" {
+  for_each       = aws_subnet.main
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.public.id
+}
+</code></pre>
+<p>Two errors show up, in this order. First <code>Reference to undeclared resource</code> — the old name is gone. Then <code>Missing resource instance key</code> — you reached <code>aws_subnet.main</code> as if it were one thing, and it's a set now. Your outputs move the same way.</p>
+<h2 id="after-class_12">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Build the seven-resource network again on your own</strong> — one resource, one sentence, one plan, one apply, checked in the console before moving to the next.</li>
+<li><strong>Cause drift on purpose, then let plan find it</strong> — change a tag by hand in the console, run a plain <code>plan</code>, and read what it offers to do.</li>
+<li><strong>Move the state file aside and back</strong> — watch a plan go from &quot;7 to add&quot; to &quot;No changes,&quot; on infrastructure that never actually changed.</li>
+<li><strong>Rewrite your two subnets as one <code>for_each</code> block</strong>, then fix everything that pointed at the old names — the associations, and any outputs.</li>
+</ul>
+<p><strong>What you know now:</strong> a real network is seven resources whose order comes from what they reference, not from the order you wrote them in — and AWS quietly keeps its own default route table alongside the one you made. Drift is reality moving away from your file, usually by a console click, and <code>plan</code> finds it without being asked. Terraform's memory of what it has built is the state file — lose it and your infrastructure doesn't disappear, but Terraform forgets it exists and will happily build a second copy. That file holds secrets in plain text, so it's gitignored (the lock file isn't). Remote state moves that memory into shared storage like S3, using a <code>backend</code> block that — uniquely — can't take a variable; state locking stops two people from applying at once, but only if you turn it on. Variables let you say a value once and use it everywhere; outputs print a value back out when Terraform finishes. And <code>for_each</code> replaces near-identical copies of a resource with one description over a set of names — not a loop, all made at once — at the cost of rewriting everything that referenced the old, individually-named resources.</p>
+
+<h1 id="lesson-33-one-server-built-from-code-ami-data-sources-the-security-group">Lesson 33 — One Server, Built From Code: AMI, Data Sources &amp; the Security Group</h1>
+<h2 id="nobody-configures-a-real-environment-by-hand">Nobody Configures a Real Environment by Hand</h2>
+<p>Your network is already in Terraform — the VPC, the subnets, the internet gateway, the route table. This session adds the one thing that runs the app: the machine itself, described in the same file, created by the same <code>apply</code>.</p>
+<p>Three reasons nobody does this by clicking, and the third one settles it:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>People make mistakes</strong></td>
+<td>Anything done by hand is done slightly differently at 2am</td>
+</tr>
+<tr>
+<td><strong>It can't be reproduced</strong></td>
+<td>You know this one already — it's why your network is a file</td>
+</tr>
+<tr>
+<td><strong>Real environments run thousands of servers</strong></td>
+<td>Nobody configures a thousand machines one at a time</td>
+</tr>
+</tbody>
+</table>
+<p>Maersk's machines were wiped in 2017. Recovery meant rebuilding <em>4,000 servers and 45,000 computers</em>, in ten days, round the clock, while ships kept sailing with nobody able to tell them where to go. That's the scale the third reason is actually about.</p>
+<h2 id="describing-a-machine-means-deciding-five-things">Describing a Machine Means Deciding Five Things</h2>
+<p>Before any AWS word, a server is just a thing you describe, and describing one means deciding five things:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Decision</th>
+<th>Answered by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Which operating system it starts with</td>
+<td>The AMI</td>
+</tr>
+<tr>
+<td>2</td>
+<td>How big it is</td>
+<td>The instance type</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Where in your network it sits</td>
+<td>The subnet</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Who is allowed to reach it</td>
+<td>The security group</td>
+</tr>
+<tr>
+<td>5</td>
+<td>What it's allowed to do inside AWS</td>
+<td>The instance role and profile — <em>next session</em></td>
+</tr>
+</tbody>
+</table>
+<p>Every AWS word in this lesson is the answer to one of the first four. A key pair is a sixth thing you almost always want, but it isn't required — an instance with no key exists and runs, you just can't get onto it.</p>
+<p><strong>The instance needs a subnet, not a VPC.</strong> The console asks you to pick a VPC first, but that's only a filter — it's how the console decides which subnets to offer. The instance itself only ever records the subnet. Give Terraform <code>subnet_id</code> and it works out the VPC from that; there's no <code>vpc_id</code> argument on an instance.</p>
+<h2 id="decision-one-ami-the-disk-it-starts-from">Decision One: AMI — the Disk It Starts From</h2>
+<p><strong>AMI</strong> (Amazon Machine Image) — the starting disk: an operating system, and optionally everything else you want already installed on it. Picking &quot;Amazon Linux&quot; in the console is picking an AMI.</p>
+<p>You can make your own — take an EC2, SSH in, install and configure everything, then create an AMI from it. That's called a <strong>golden image</strong>, and it turns a one-time configuration into something you can stamp out many times. This is Part 3 of the unit.</p>
+<p>Four places AMIs come from:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Quick start</strong></td>
+<td>Amazon's own, kept up to date</td>
+</tr>
+<tr>
+<td><strong>My AMIs</strong></td>
+<td>Ones you built — empty until you build one, and shareable with other AWS accounts</td>
+</tr>
+<tr>
+<td><strong>Community AMIs</strong></td>
+<td>Published by other organizations — Debian's official images, Kubernetes-tuned images</td>
+</tr>
+<tr>
+<td><strong>AWS Marketplace</strong></td>
+<td>Companies selling prepackaged, configured, maintained software as an AMI</td>
+</tr>
+</tbody>
+</table>
+<p>The Marketplace is a real alternative to building it yourself. Palo Alto and Fortinet sell their firewalls this way — buy the firewall as an AMI, launch it, and it's configured and patched, versus building an EC2, buying a license, and maintaining it forever by hand. Some listings <strong>sell support hours alongside the image</strong>: &quot;this subscription includes five hours of support so we can help you install it.&quot; In real jobs the choice usually comes down to the cost of engineer time, not the cost of the license.</p>
+<p><strong>An AMI id is not worth writing down.</strong> Every AMI has an id like <code>ami-0abc123…</code>. It's <strong>different in every region</strong>, and it's <strong>replaced whenever Amazon publishes a newer image</strong>. Hard-code one and your file is wrong in another region and stale within weeks. Putting it in a variable doesn't fix this — a variable just moves the hard-coded value to a different line; it's still a value you typed. The fix is to describe the image you want and let Terraform look up today's id.</p>
+<h2 id="data-reading-a-fact-instead-of-creating-one">data — Reading a Fact Instead of Creating One</h2>
+<p>Typing <code>us-east-1a</code> into a file assumes that zone exists and always will. AWS already knows the real list — so ask it.</p>
+<p><strong>data source</strong> — a resource you <strong>read</strong> instead of create. Terraform fetches the fact; it makes nothing and changes nothing and owns nothing. The difference from a variable, put most simply: in a variable, <em>you</em> put the value in. A data block takes the value <em>directly from Amazon.</em></p>
+<pre><code class="language-hcl">data "aws_ami" "linux" {
+  most_recent = true                            # newest match wins
+  owners      = ["amazon"]                      # Amazon's own images, not a stranger's
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+}
+
+# read it as data.aws_ami.linux.id
+</code></pre>
+<p>The <code>owners</code> line matters: anyone can publish an AMI, and without an owner filter you're booting a stranger's disk image.</p>
+<p>In <code>terraform plan</code>, a data read shows as <code>&lt;=</code> rather than <code>+</code> or <code>~</code> — the first time you see that symbol. It means <em>read</em>.</p>
+<p><strong>Matching nothing is an error, and that's the point:</strong> <code>Your query returned no results</code>. That error means <strong>your filter is wrong</strong>, not that the image is missing — Terraform stops rather than guessing.</p>
+<p><strong>Filtering by a tag has the same trap as everything else about drift.</strong> Filter a subnet on its <code>Name</code> tag, and if it doesn't match, the fix is <em>not</em> to open the console and add the tag by hand — that works once, and the next <code>apply</code> sees a tag that isn't in your file and removes it, breaking the filter again. The right fix is to set the tag <strong>in the Terraform that creates the subnet</strong>, so the file and AWS agree:</p>
+<pre><code class="language-hcl">resource "aws_subnet" "public" {
+  # …
+  tags = { Name = "subnet-1" }
+}
+</code></pre>
+<p>And if the subnet is in your own Terraform anyway, you don't need a data block at all — reference it directly as <code>aws_subnet.public.id</code>. <strong>A data block is for things Terraform did not create.</strong></p>
+<h2 id="decisions-two-and-three-how-big-and-where">Decisions Two and Three: How Big, and Where</h2>
+<p>Both of these you've already chosen before, by clicking.</p>
+<p><strong>Instance type</strong> — how much CPU and RAM. In <code>t3.micro</code>, <strong><code>t3</code> is the family and <code>micro</code> is the size.</strong> The family is what the machine is built for; the size is how much of it you get.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Built for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>T</strong></td>
+<td>General purpose. Ordinary servers — the one you use</td>
+</tr>
+<tr>
+<td><strong>M</strong></td>
+<td>General purpose, larger and steadier than T</td>
+</tr>
+<tr>
+<td><strong>C</strong></td>
+<td>Compute optimized — a high ratio of CPU to memory</td>
+</tr>
+<tr>
+<td><strong>R</strong></td>
+<td>Memory optimized — applications that need a lot of RAM</td>
+</tr>
+<tr>
+<td><strong>I, D, H</strong></td>
+<td>Storage optimized</td>
+</tr>
+<tr>
+<td><strong>P, G</strong></td>
+<td>Accelerated computing — machines with GPUs, for AI and graphics</td>
+</tr>
+<tr>
+<td><strong>HPC</strong></td>
+<td>High performance computing — simulation and modeling</td>
+</tr>
+</tbody>
+</table>
+<p>Storage optimized means AWS physically places the storage close to the machine in the data center, so the distance the data travels is short. On your laptop that difference is invisible; at the scale of a billion-dollar company, nanoseconds add up into money.</p>
+<p><strong>Both bill by the hour from the moment the machine exists</strong>, whichever family and size you pick, and whether or not anything is running on it.</p>
+<p><strong>Subnet</strong> — which part of your own network the machine sits in. You built subnets in Terraform already; the machine goes in one of them.</p>
+<h2 id="decision-four-the-security-group-one-resource-per-rule">Decision Four: The Security Group, One Resource Per Rule</h2>
+<p><strong>Security group</strong> — the checkpoint in front of the machine: which ports are open, and to whom. A new machine answers nobody until you allow it. You clicked one of these into existence when your site first went live.</p>
+<pre><code class="language-hcl">resource "aws_security_group" "app" {
+  name   = "app-sg"
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  security_group_id = aws_security_group.app.id   # which group this rule is in
+  from_port = 22 , to_port = 22 , ip_protocol = "tcp"
+  cidr_ipv4 = "0.0.0.0/0"                          # from where
+}
+
+resource "aws_vpc_security_group_egress_rule" "out" {   # going out — write it
+  security_group_id = aws_security_group.app.id
+  ip_protocol = "-1" , cidr_ipv4 = "0.0.0.0/0"
+}
+</code></pre>
+<p><strong>The group on its own is empty.</strong> Creating it opens nothing. Each rule is a separate resource, and each one names the group it belongs to with <code>security_group_id</code>. <strong>One port per rule</strong> — <code>from_port</code> and <code>to_port</code> are a range, and setting them to the same number opens exactly one port, which is what you almost always want. Open 22 and 80 with two ingress rules, not one range from 22 to 80. Rule names must be unique, so copying a block to make a second rule means changing the label too, or the plan fails on a duplicate name. The source can be a reference — <code>cidr_ipv4 = aws_vpc.main.cidr_block</code> means &quot;anyone inside my own VPC&quot;; <code>"0.0.0.0/0"</code> means the whole internet.</p>
+<p><strong>Outbound access is free in the console, and it is not free in Terraform.</strong> Create a security group by clicking, and AWS quietly adds an allow-all outbound rule you never asked for. Terraform doesn't do this — nothing exists that you didn't write. A group with no egress rule gives you a machine that boots, lets you SSH in, and then can't download anything: no <code>yum install</code>, no <code>git clone</code>, nothing.</p>
+<p><strong><code>vpc_security_group_ids</code>, not <code>security_groups</code>.</strong> Two arguments on <code>aws_instance</code> look like they do the same thing. They don't — <code>security_groups</code> is for EC2-Classic and the default VPC only. You're in your own VPC, so it's the wrong one, and using it makes Terraform <strong>destroy and recreate the whole instance</strong> every time the group changes.</p>
+<h2 id="two-arguments-any-block-can-take">Two Arguments Any Block Can Take</h2>
+<p><strong><code>depends_on</code></strong> — Terraform normally works out build order from your references: a subnet block that names <code>aws_vpc.main.id</code> can't be built before the VPC, so it isn't. When two resources are related but <strong>neither one names the other</strong>, Terraform is free to try them in either order, and an apply can fail because the machine went first and the subnet didn't exist yet — a failure that often disappears on a second apply, which is what makes it confusing.</p>
+<pre><code class="language-hcl">resource "aws_instance" "app" {
+  # …
+  depends_on = [aws_subnet.public]
+}
+</code></pre>
+<p>Square brackets — it takes a list. You won't need it often; reach for it when an apply fails on ordering.</p>
+<p><strong><code>lifecycle { ignore_changes = [...] }</code></strong> — worth a second look now that it applies to a machine you'll SSH into and poke at by hand. Terraform's normal behavior is to be the boss: anything changed outside the file gets undone at the next apply. Sometimes you don't want that for one specific value — something outside Terraform is allowed to own it, and you want Terraform to keep managing everything else.</p>
+<pre><code class="language-hcl">resource "aws_instance" "app" {
+  # …
+  lifecycle {
+    ignore_changes = [tags]
+  }
+}
+</code></pre>
+<h2 id="the-decisions-written-down-one-machine-in-one-block">The Decisions, Written Down: One Machine, in One Block</h2>
+<pre><code class="language-hcl">resource "aws_instance" "app" {
+  ami                    = data.aws_ami.linux.id      # 1 which operating system
+  instance_type          = "t3.micro"                 # 2 how big
+  subnet_id              = aws_subnet.public.id       # 3 where in your network
+  vpc_security_group_ids = [aws_security_group.app.id] # 4 who may reach it
+  # iam_instance_profile = ...                        # 5 what it may do — next session
+
+  key_name               = "my-key"                   # so SSH works
+
+  associate_public_ip_address = true                  # or it has no address to SSH to
+}
+</code></pre>
+<p>Four decisions here, and the fifth next session. <strong><code>associate_public_ip_address = true</code> is what gives the machine an address you can SSH to</strong> — without it the instance is created, runs, and is unreachable. <strong>Read the plan before you say yes:</strong> change this or the security-group argument on a machine that already exists, and Terraform destroys it and builds another one.</p>
+<p><strong>The EC2 resource is called <code>aws_instance</code>.</strong> Searching the registry for &quot;EC2&quot; gives a long list, and none of the obvious names is the right one — the registry is also split into resources (things you create) and data sources (things you read), so check you're in the right half before copying anything.</p>
+<p><strong><code>terraform plan</code> is documentation.</strong> If you don't know what an argument is called, run <code>plan</code> and read the output — it prints every attribute the resource is going to have, with its real name, ready to copy straight back into your file.</p>
+<p><strong>Key pairs are regional.</strong> A key created in <code>us-east-1</code> doesn't exist in <code>us-east-2</code> — hit <code>InvalidKeyPair.NotFound</code> on an apply and the key almost certainly does exist, just in a different region from the one your provider block resolves to.</p>
+<h2 id="output-again-marking-a-value-sensitive">output, Again: Marking a Value Sensitive</h2>
+<pre><code class="language-hcl">output "instance_id" {
+  value     = aws_instance.app.id
+  sensitive = false
+}
+</code></pre>
+<p><code>terraform output</code> prints it. A variable is a value going <strong>in</strong>; an output is a value coming <strong>out</strong> — use it for anything only AWS can tell you, like the real id of something Terraform just made. <code>sensitive = true</code> is the reason outputs matter beyond convenience: a generated database password is a value you need once and must not have scrolling through a shared screen or a CI log. Mark it sensitive and Terraform prints <code>(sensitive value)</code> instead — you read it deliberately, once.</p>
+<h2 id="ssh-in-and-there-is-nothing-on-it">SSH In — and There Is Nothing On It</h2>
+<pre><code class="language-bash">chmod 400 ~/Downloads/my-key.pem
+ssh -i ~/Downloads/my-key.pem ec2-user@&lt;public-ip&gt;
+</code></pre>
+<p><code>ec2-user</code> is the username on Amazon Linux images; Ubuntu images use <code>ubuntu</code>. The <code>chmod 400</code> is required — SSH refuses a key file that other users on your machine could read.</p>
+<p>No app. No packages. No database. A machine described in five lines, created by <code>apply</code>, and completely empty. So the next question is the one this unit is really about: <strong>what puts the app on it?</strong></p>
+<h2 id="after-class_13">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Add the missing public IP</strong> — the most common issue in the room was an instance with no address at all, fixed with <code>associate_public_ip_address = true</code>, which forces a destroy-and-rebuild on a machine that already exists.</li>
+<li><strong>Open port 22, not just 80</strong> — the security group as written in the main session only opened port 80; SSH needs a second ingress rule, a copy of the first block with a different label and <code>from_port = 22</code>, <code>to_port = 22</code>.</li>
+<li><strong>Reference a resource made with <code>for_each</code> from another file</strong> — same folder, one configuration, no import needed, but a subnet made with <code>for_each</code> is a map, not a single resource, so it's picked by its key: <code>aws_subnet.main["us-east-1a"].id</code>.</li>
+<li><strong>Pull the SSH key name from a variable</strong> instead of typing it twice — <code>key_name</code> takes the name of the key as it appears in the AWS console, not a file path and not the <code>.pem</code> filename.</li>
+<li><strong>Run <code>terraform destroy</code> at the end</strong>, every time — everything built in class was created by Terraform, so destroying it costs nothing; the file is still there and one <code>apply</code> brings it all back.</li>
+</ul>
+<p><strong>What you know now:</strong> describing a machine means deciding five things — which operating system (the AMI), how big (the instance type), where in your network (the subnet), who may reach it (the security group), and what it's allowed to do in AWS (next session) — and every new AWS word this session was the answer to one of the first four. A <code>data</code> block reads a fact from AWS instead of creating anything, shows as <code>&lt;=</code> in a plan, and exists so an AMI id or an availability zone never has to be typed and go stale. A security group is empty until you add rules, and each rule is its own resource naming the group it belongs to — outbound access that the console gives you for free, Terraform makes you write down, and <code>vpc_security_group_ids</code> is the correct argument in your own VPC where <code>security_groups</code> forces a destroy-and-rebuild. <code>depends_on</code> states an order Terraform can't infer from references alone; <code>lifecycle { ignore_changes = [...] }</code> tells it to stop fighting over one value that something outside the file is allowed to own. An instance with no public IP is unreachable, not broken, and changing that setting on a live machine replaces it. SSHing in at the end lands on a machine with nothing installed — the app still has to get there, which is where the next session picks up.</p>
+
+<h1 id="lesson-34-one-server-built-from-code-identity-installation-the-disposable-machine">Lesson 34: One Server, Built From Code — Identity, Installation &amp; the Disposable Machine</h1>
+<h2 id="decision-five-the-machine-needs-an-identity-of-its-own">Decision Five: The Machine Needs an Identity of Its Own</h2>
+<p>The app on this machine has to read a database password out of Secrets Manager. To be allowed to, the machine has to be <em>somebody</em> in AWS — the fifth of the five decisions from last session: what the machine is allowed to do.</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Role</strong></td>
+<td>An identity in AWS with a set of permissions attached. You've used roles as a person; this is the same object, for a machine.</td>
+</tr>
+<tr>
+<td><strong>Instance profile</strong></td>
+<td>The object AWS actually attaches to a machine. It holds the role — a machine can't be given a role directly, the profile is the thing in between.</td>
+</tr>
+</tbody>
+</table>
+<p>In the console this is one dropdown, and AWS writes the profile for you without saying so. In code, nothing is written for you — it's three resources and one argument on the instance.</p>
+<h2 id="why-your-own-keys-dont-go-onto-the-machine">Why Your Own Keys Don't Go Onto the Machine</h2>
+<p>The obvious shortcut is to copy your own AWS access keys onto the machine — and it works: <code>aws sts get-caller-identity</code> on that machine answers with your own name. It's the wrong answer for three reasons:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Why it breaks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The keys are one person's</strong></td>
+<td>Everyone who reaches that machine is now that person in AWS</td>
+</tr>
+<tr>
+<td><strong>Copying them on is manual</strong></td>
+<td>The machine stops being something you can delete and rebuild from the file</td>
+</tr>
+<tr>
+<td><strong>They expire</strong></td>
+<td>Somebody has to log into a running server and paste new ones in</td>
+</tr>
+</tbody>
+</table>
+<p>None of the three is a problem once the machine has an identity <em>of its own</em> — which is what a role and a profile give it.</p>
+<h2 id="writing-decision-five-down-three-resources-one-argument">Writing Decision Five Down: Three Resources, One Argument</h2>
+<pre><code class="language-hcl">resource "aws_iam_role" "ec2_role" {                # 1 the identity
+  assume_role_policy = ...                          # who may assume this role
+}
+
+resource "aws_iam_role_policy" "ec2_policy" {        # 2 what it may do
+  role   = aws_iam_role.ec2_role.id
+  policy = jsonencode({ ... })
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {  # 3 the object AWS attaches
+  role = aws_iam_role.ec2_role.name
+}
+</code></pre>
+<pre><code class="language-hcl"># ec2.tf — nothing happens until this line exists
+iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+</code></pre>
+<p>A role has two separate lists, answering two different questions:</p>
+<ul>
+<li><strong><code>assume_role_policy</code></strong> — who may <strong>assume</strong> the role, taking on its permissions for a while. Here that list has one entry, the EC2 service. Without it, the machine is refused before it asks for anything.</li>
+<li><strong><code>policy</code></strong> — what the role may then do. <code>Action: "*"</code> on <code>Resource: "*"</code> means every action on every service in the account — write down what the machine actually needs instead (for this app, Secrets Manager). The <strong>AWS Policy Generator</strong> builds the JSON for you.</li>
+</ul>
+<p>Run <code>aws sts get-caller-identity</code> again from a machine that has a profile, and the answer changes:</p>
+<pre><code class="language-bash">aws sts get-caller-identity
+# → arn:aws:sts::...:assumed-role/ec2_role/i-0a1b2c3d   the machine, not you
+</code></pre>
+<p>No keys anywhere on the disk, and nothing anybody has to rotate.</p>
+<h2 id="the-full-machine-five-decisions-one-block">The Full Machine, Five Decisions, One Block</h2>
+<pre><code class="language-hcl">resource "aws_instance" "app" {
+  ami                    = data.aws_ami.linux.id             # 1 which operating system
+  instance_type          = "t3.micro"                        # 2 how big
+  subnet_id              = aws_subnet.public.id              # 3 where in your network
+  vpc_security_group_ids = [aws_security_group.app.id]       # 4 who may reach it
+  iam_instance_profile   = aws_iam_instance_profile.app.name # 5 what it may do
+
+  key_name               = "my-key"
+
+  associate_public_ip_address = true
+}
+</code></pre>
+<p>Five decisions, five arguments. <code>plan</code>, then <code>apply</code>, and the machine exists — <strong>read the plan before you say yes</strong>: changing <code>associate_public_ip_address</code> or the security-group argument on a machine that already exists destroys it and builds another one.</p>
+<p>SSH onto it and there's still nothing there. No app, no packages, no database — a machine described in five lines, created by <code>apply</code>, and empty. So the next question is the one this stretch of the unit is really about: <strong>what puts the app on it?</strong></p>
+<h2 id="two-ways-to-get-the-app-onto-a-fresh-machine">Two Ways to Get the App Onto a Fresh Machine</h2>
+<p>Both are used in the real world, and the only difference between them is where the app comes from.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Amazon's image + your script</th>
+<th>Your own image</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>How fast a new machine is ready</strong></td>
+<td>Slow — it installs first</td>
+<td>Fast — already installed</td>
+</tr>
+<tr>
+<td><strong>Is the code current</strong></td>
+<td>Always — fetched on every boot</td>
+<td>Only as current as the image</td>
+</tr>
+<tr>
+<td><strong>When the work happens</strong></td>
+<td>Every time a machine starts</td>
+<td>Once, when you build the image</td>
+</tr>
+<tr>
+<td><strong>What you maintain</strong></td>
+<td>A script</td>
+<td>A script, an image, and the habit of rebuilding it</td>
+</tr>
+</tbody>
+</table>
+<p>In the file, only one argument changes:</p>
+<pre><code class="language-hcl"># Amazon's image + your script
+resource "aws_instance" "app" {
+  ami       = data.aws_ami.linux.id
+  user_data = file("install.sh")
+  # ...
+}
+
+# Your own image
+resource "aws_instance" "app" {
+  ami       = "ami-&lt;the one you built&gt;"
+  # no script — it already ran
+  # ...
+}
+</code></pre>
+<p>Nothing else in the configuration moves — this is a choice, not an architecture, and you can change it later by editing one line.</p>
+<p>Which one a real company picks depends on <strong>how often the company changes its code</strong>, not on the tool: a team shipping several times a day can't wait for an install on every boot; a team shipping once a month shouldn't be maintaining an image either. A healthcare company in the matrix rebuilds its images <em>every month</em> on a schedule, because a regulator requires its machines to run patched software — that rebuild happens whether or not the code changed.</p>
+<h2 id="what-the-script-actually-does">What the Script Actually Does</h2>
+<p>Nothing on this list is new — you've done every one of these by hand, on a real machine. What changes is who types them, and that they happen the same way every time:</p>
+<ol>
+<li>Install the packages</li>
+<li>Install and start the database</li>
+<li>Get the code</li>
+<li>Write the service file</li>
+<li>Start the web server</li>
+</ol>
+<pre><code class="language-hcl">user_data                   = file("install.sh")   # runs once, on first boot, as root
+user_data_replace_on_change = true                 # edit the script → build a new machine
+</code></pre>
+<p>The script runs once, as the machine first boots — editing it does nothing to a machine already running. <code>user_data_replace_on_change = true</code> means Terraform destroys the machine and builds another one with the new script whenever it changes; <code>false</code> (what you get if you never write the line) means Terraform stores the new script but the machine keeps running the old one until somebody stops and starts it by hand.</p>
+<pre><code class="language-bash"># on the machine, when the app is not up
+sudo cat /var/log/cloud-init-output.log   # everything the script printed
+</code></pre>
+<p>The database in this script installs right next to the app, on the same machine — deliberately not the setup from Foundations, and covered further below.</p>
+<h2 id="the-script-cant-hold-a-secret">The Script Can't Hold a Secret</h2>
+<p>Step 2 needs a database password. The script is a file in your repository, and anything written into it is in the repository too.</p>
+<ul>
+<li><strong>Not in the script</strong> — that's the repository.</li>
+<li><strong>Not in the image</strong> — anyone who can launch it can read it.</li>
+<li><strong>Not typed in by you</strong> — then only you can ever build a machine.</li>
+</ul>
+<p>The answer is decision five, doing its job — the machine fetches the secret itself, as it boots:</p>
+<pre><code class="language-bash"># the secret itself, made once, from your own laptop:
+#   aws secretsmanager create-secret --name app/db --secret-string "..."
+DB_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id app/db \
+  --query SecretString --output text)
+</code></pre>
+<p>The machine is only allowed to ask because the role's policy allows <code>secretsmanager:GetSecretValue</code>. <code>create-secret</code> is what makes a secret; <code>put-secret-value</code> only changes one that already exists.</p>
+<p><strong>Environment variable</strong> — a name and a value the operating system hands to a program when it starts. The app doesn't change at all: the script's only job is to put the value where the app already looks, writing <code>DB_PASSWORD</code> into the environment file the service reads when it starts the app.</p>
+<h2 id="building-your-own-image-for-real">Building Your Own Image, for Real</h2>
+<pre><code class="language-bash">aws ec2 create-image \
+  --instance-id &lt;the machine you built&gt; \
+  --name "app-with-everything-on-it"
+</code></pre>
+<p>A machine launched from that image comes up with nothing installing — no packages, no clone, no wait. Nobody needs to build one at home; seeing both methods run is the lesson. An image you forget about keeps costing money.</p>
+<h2 id="disposable-destroy-it-and-it-comes-back">Disposable: Destroy It, and It Comes Back</h2>
+<pre><code class="language-bash">terraform destroy    # the machine is gone
+terraform apply      # a new one, and the app answers on it
+</code></pre>
+<p>Nobody logged in. Nobody installed anything. Nobody remembered a step. The second machine isn't a copy of the first — both were built from the same file. That's what makes a machine a thing you can throw away and replace, and it changes what the app itself has to do.</p>
+<h2 id="five-things-the-app-has-to-do-now-that-it-can-be-replaced">Five Things the App Has to Do, Now That It Can Be Replaced</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Requirement</th>
+<th>Where it stands</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✓</td>
+<td>Start by itself, on boot</td>
+<td>Your service file already does this</td>
+</tr>
+<tr>
+<td>✓</td>
+<td>Listen on a known port</td>
+<td>Your web server already does this</td>
+</tr>
+<tr>
+<td>✓</td>
+<td>Take its configuration from the environment</td>
+<td>Your environment file and your secret already do this</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Be able to answer "are you working?"</td>
+<td>Nothing has ever asked your app this</td>
+</tr>
+<tr>
+<td>—</td>
+<td>Send its logs somewhere that outlives the machine</td>
+<td>Yours are on the machine. The machine goes.</td>
+</tr>
+</tbody>
+</table>
+<p>Three of the five you already do, without ever having called them anything.</p>
+<h2 id="the-fourth-a-health-endpoint">The Fourth: A Health Endpoint</h2>
+<p><strong>Health endpoint</strong> (usually at the path <code>/health</code>) — a URL that answers only when the app can do its job. From outside, it's the only way to tell a working machine from a switched-on one.</p>
+<p><code>/health</code> is a convention, not a rule — nothing in AWS or the operating system requires that word. Teams use it so everyone knows where to look; plenty of apps have no such path at all until something is going to ask.</p>
+<p><strong>It must not check the database.</strong> If it does, one database wobble reports <em>every machine</em> as dead at the same moment, over a problem none of them actually had. The rule: check what this machine is responsible for, nothing further away than itself.</p>
+<p>One word, two meanings worth keeping straight — here, <em>endpoint</em> is a path on your app. When a managed database arrives, its <em>endpoint</em> is a hostname you connect to.</p>
+<h2 id="the-fifth-logs-that-outlive-the-machine">The Fifth: Logs That Outlive the Machine</h2>
+<p>Reading a log by connecting to the machine has worked all year. It stops working once machines are <em>replaced</em> instead of repaired — a log on a destroyed machine is gone with it.</p>
+<p>What it needs: something has to install a log agent while the machine boots, one more step in the same script. Where it gets built: the <strong>monitoring</strong> topic, later in this stage, which is also where the logs get somewhere to go.</p>
+<h2 id="where-you-are-two-machines-both-billing">Where You Are: Two Machines, Both Billing</h2>
+<table>
+<tbody>
+<tr>
+<td><strong>The hand-built one</strong></td>
+<td>Still serving your domain, still holding your certificate — it has to stay</td>
+</tr>
+<tr>
+<td><strong>The coded one</strong></td>
+<td>Answers on its own address only. You can delete it and bring it back whenever you like — that's now two commands</td>
+</tr>
+</tbody>
+</table>
+<p>Do this at the end of every working session:</p>
+<ol>
+<li>List the machines running in your account</li>
+<li>Keep the one serving your domain</li>
+<li>Run <code>terraform destroy</code> on the other one</li>
+</ol>
+<p>Moving your domain onto the new machine, and deleting the hand-built one for good, is covered in the <strong>load balancer</strong> topic.</p>
+<h2 id="one-thing-about-this-setup-is-wrong-on-purpose">One Thing About This Setup Is Wrong, on Purpose</h2>
+<p>The database is on the same machine as the app. In Foundations you moved the database <em>off</em> the app server, onto a machine of its own with no public address — the machine built this session has one installed right next to the app.</p>
+<p>That's because the database machine from Foundations is in the old network, and this one is in the new network and can't reach it — building a private database tier here would be a whole topic of its own. What replaces it: a <strong>managed database</strong>, one AWS runs for you instead of a machine you install Postgres on and look after yourself — its own topic, coming up next.</p>
+<h2 id="whats-next_6">What's Next</h2>
+<table>
+<thead>
+<tr>
+<th>Today</th>
+<th>Next lesson</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Decision five (role and instance profile), the two ways to install the app, secrets fetched at boot, and the disposable machine — three of five app requirements already true, health checks and logs still open</td>
+<td>The database moves off this machine for good, onto a managed database — Amazon RDS</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-class_14">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture, ending in <code>destroy</code>:</p>
+<ul>
+<li><strong>Repeat it end to end</strong> — the five decisions, the security group, the boot script — and reach the app over SSH.</li>
+<li><strong>Prove it's disposable</strong> — <code>destroy</code>, then <code>apply</code>. If the machine comes back and the app answers on it, you have it.</li>
+<li><strong>Then stretch</strong> — point the script at <strong>your own app</strong> instead of the demo app. Working from the demo app is fine while yours is still coming together, but the moment your script installs your app is the moment this stops being something you watched.</li>
+</ul>
+<p><strong>What you know now:</strong> a machine gets its own identity in AWS through a role — who may assume it — and an instance profile, the object actually attached to the machine, and only with that identity is it allowed to fetch a secret from Secrets Manager instead of carrying anyone's personal keys. The app gets onto a fresh machine one of two ways: a script that installs it at boot, current every time but slow to start, or a custom image with everything already on it, fast to start but only as current as the last rebuild — which one a real team picks is a fact about how often they ship, not about which tool is better. A secret never lives in the script, the image, or a value you typed in — the machine fetches it itself at boot, using the identity decision five gave it, and hands it to the app as an ordinary environment variable. <code>terraform destroy</code> and <code>terraform apply</code> prove the machine is disposable, and that's what turns "start on boot, listen on a port, read config from the environment" from accidents into requirements — along with two the app doesn't do yet: answer a health check that reports on itself and nothing further away, and send its logs somewhere that outlives the machine. The database sitting on this machine, next to the app, is wrong on purpose — it's a placeholder for a managed database, which is where this unit goes next.</p>
+
+<h1 id="lesson-35-the-data-tier-amazon-rds-managed-databases-moving-your-data">Lesson 35: The Data Tier — Amazon RDS, Managed Databases &amp; Moving Your Data</h1>
+<h2 id="two-app-servers-means-two-separate-databases">Two App Servers Means Two Separate Databases</h2>
+<p>Postgres has been on the app server because the boot script installs it there, every time the server is built. That was fine with one server. It stops being fine with two: the second server runs the same boot script, so it installs its <strong>own</strong> Postgres — an order saved on one server does not exist on the other. Two app servers pointed at two different databases is not high availability, it's two different apps that happen to look the same.</p>
+<p><strong>Your code can rebuild the server. It cannot bring back your data.</strong> Prove it to yourself:</p>
+<pre><code class="language-sql">-- put one row in, with your own name in it
+INSERT INTO trades (symbol, note) VALUES ('AAPL', 'Kurmanbek');
+</code></pre>
+<pre><code class="language-bash">terraform destroy   # then   terraform apply
+</code></pre>
+<pre><code class="language-sql">SELECT * FROM trades;
+-- 0 rows, or an error that the table does not exist. Your row is gone.
+</code></pre>
+<p>The server came back because a file describes it. The row didn't, because <strong>no file describes your data</strong>. Keep running <code>destroy</code> — it's what keeps the bill small. The fix isn't to stop destroying servers; it's to move the data somewhere a <code>destroy</code> can't reach.</p>
+<h2 id="five-jobs-have-to-be-done-wherever-a-database-lives">Five Jobs Have to Be Done, Wherever a Database Lives</h2>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Install and patch the engine</td>
+<td>Postgres itself, and every security update to it</td>
+</tr>
+<tr>
+<td>2. Back up, and prove the restore</td>
+<td>A backup nobody has restored is not a backup</td>
+</tr>
+<tr>
+<td>3. Keep it serving when the machine dies</td>
+<td>Hardware fails. Something has to answer for that</td>
+</tr>
+<tr>
+<td>4. Hold the password out of the code</td>
+<td>The application needs it. The repository must not have it</td>
+</tr>
+<tr>
+<td>5. Report whether it is healthy</td>
+<td>Somebody has to be able to see that it is in trouble</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Managed</strong> means another company does jobs from this list, and you cannot log in to the machine. It's not a quality level and not an easier version of the same database — it's a different division of labor.</p>
+<h2 id="you-did-four-of-these-yourself-the-fifth-had-no-answer">You Did Four of These Yourself. The Fifth Had No Answer</h2>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>What you actually ran</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 · install and patch</td>
+<td><code>dnf install postgresql-server</code>, <code>initdb</code>, <code>systemctl enable</code></td>
+</tr>
+<tr>
+<td>2 · back up and restore</td>
+<td><code>pg_dump</code>, then <code>\dt</code> on the other side to prove it came back</td>
+</tr>
+<tr>
+<td>3 · survive the machine dying</td>
+<td>Nothing. If that server was lost, the database was lost with it</td>
+</tr>
+<tr>
+<td>4 · hold the password</td>
+<td>Secrets Manager, read by the machine's own identity at boot</td>
+</tr>
+<tr>
+<td>5 · report health</td>
+<td><code>systemctl status</code>, <code>ss | grep 5432</code> — you, looking</td>
+</tr>
+</tbody>
+</table>
+<p>The one the room found the hard way: <code>pg_dump</code> carries <strong>no users and no roles</strong>. <code>pg_dumpall --globals-only</code> is what carries those.</p>
+<p>Moving Postgres to its own server, on its own, only solves job 3 — if the app server dies, the database keeps running, because it's no longer on that machine. The other four don't change: you still install it, still patch it, still back it up, still watch it, and now on <strong>two machines instead of one</strong>. That's why we don't stop there.</p>
+<h2 id="what-a-managed-database-takes-away-from-you">What a Managed Database Takes Away From You</h2>
+<table>
+<thead>
+<tr>
+<th>Loss</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>No superuser</strong></td>
+<td>Your account is powerful, but it isn't the Postgres superuser. Some extensions and commands are closed to you</td>
+</tr>
+<tr>
+<td><strong>No access to the operating system</strong></td>
+<td>There's a machine and an OS underneath, but no SSH, no shell, no log file to read on disk</td>
+</tr>
+<tr>
+<td><strong>No <code>postgresql.conf</code></strong></td>
+<td>The same settings exist, but you change them through a <strong>parameter group</strong> instead of editing a file</td>
+</tr>
+<tr>
+<td><strong>More per hour</strong></td>
+<td>The same size of machine costs more as a managed database than as a raw server</td>
+</tr>
+</tbody>
+</table>
+<p>If you need something at the operating-system level on the database machine, a managed database is the wrong answer, and you run it yourself.</p>
+<h2 id="four-ways-to-run-a-database-and-the-one-we-use">Four Ways to Run a Database, and the One We Use</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Who does the five jobs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>On a server you own</td>
+<td>You. This is what you've been doing</td>
+</tr>
+<tr>
+<td>A managed relational service</td>
+<td>The cloud provider. <strong>Amazon RDS</strong> is this one</td>
+</tr>
+<tr>
+<td>Hosted Postgres from a vendor</td>
+<td>A company that only does databases — not AWS</td>
+</tr>
+<tr>
+<td>A re-engineered engine</td>
+<td>Rebuilt underneath, still speaks Postgres. <strong>Aurora</strong> is this one — not our topic</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ours is Amazon RDS for PostgreSQL.</strong> The same PostgreSQL, the same SQL, the same <code>psql</code>, the same <code>pg_dump</code>, your schema, your roles and grants, your app's driver. Nothing you learned stops being true.</p>
+<h2 id="an-rds-instance-is-not-an-ec2-instance">An RDS Instance Is Not an EC2 Instance</h2>
+<p>It's called an instance, but it isn't one of your machines — there is nothing in your account to log in to.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What's true of it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>no SSH</strong></td>
+<td>There's no key pair, and you didn't miss a step. Nothing is listening for you</td>
+</tr>
+<tr>
+<td><strong>no shell</strong></td>
+<td>You cannot run a command on it. You talk to it in SQL, and nothing else</td>
+</tr>
+<tr>
+<td><strong>a hostname</strong></td>
+<td>A name that points at wherever AWS is running it. AWS calls this the <strong>endpoint</strong> — a hostname here, not a URL path</td>
+</tr>
+<tr>
+<td><strong>port, user, password</strong></td>
+<td>Exactly what <code>psql</code> has always wanted from you</td>
+</tr>
+</tbody>
+</table>
+<h2 id="availability-zones-and-the-subnet-group">Availability Zones and the Subnet Group</h2>
+<p><strong>Availability zone</strong> (often written AZ) — its own power and its own cooling, inside the same region, joined to the other zones by fast private cable. A region is made of several of them. Your subnets already sit in one zone or another — you've just never had to care which.</p>
+<p>You hand RDS subnets in <strong>two</strong> zones, and AWS will not accept a subnet group whose subnets are all in the same zone. The database itself is a single machine running in a single zone — the second zone is just somewhere for it to move to later, if a standby is turned on.</p>
+<h2 id="a-database-needs-nothing-from-the-internet">A Database Needs Nothing From the Internet</h2>
+<p>It never browses. It never downloads. Nobody outside your network should be able to reach it. So give it subnets with:</p>
+<ul>
+<li><strong>no route to the internet</strong> — nothing outside can start a conversation with it, and it can't start one either</li>
+<li><strong>no NAT gateway</strong> — a NAT gateway exists so private machines can reach <em>out</em>. This one has no reason to, and a NAT gateway isn't cheap</li>
+<li><strong>no public address</strong> — AWS calls this <em>not publicly accessible</em>. The only things that can reach it are inside your network</li>
+</ul>
+<p>And of the things that are inside your network, only your app servers may reach it, on the Postgres port. You'd normally allow an address range for that rule — name the app servers' <strong>security group</strong> instead. Servers get replaced and their addresses change; the group doesn't.</p>
+<h2 id="everything-you-choose-when-you-create-it">Everything You Choose When You Create It</h2>
+<table>
+<thead>
+<tr>
+<th>What you choose</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Engine and version</td>
+<td>PostgreSQL, and which release</td>
+</tr>
+<tr>
+<td>Size and storage</td>
+<td>The smallest one is fine for this</td>
+</tr>
+<tr>
+<td>Which subnets</td>
+<td>The subnet group — two zones, no route out</td>
+</tr>
+<tr>
+<td>Who may reach it</td>
+<td>The app servers' group, port 5432</td>
+</tr>
+<tr>
+<td>When it may be patched</td>
+<td>A weekly window you pick. <strong>That's job 1, handed over</strong></td>
+</tr>
+<tr>
+<td>How long backups are kept</td>
+<td>A number of days. <strong>That's job 2, handed over</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Two of the five jobs stop being work and become <strong>settings you choose once</strong>. It takes about ten minutes to build.</p>
+<h2 id="the-master-password-ends-up-in-the-state-file">The Master Password Ends Up in the State File</h2>
+<p>One of those choices is the master password. Terraform writes everything it creates into the state file, and the password goes in as <strong>plain text</strong> — however you produced it. Typing it, reading it from a variable, generating a random one: all three end the same way.</p>
+<ul>
+<li><strong>Protect the state file</strong> — yours is already in S3. Encrypt the bucket and let only the people who run Terraform read it. Anyone who can read state can read every password in it.</li>
+<li><strong>Or never put it there</strong> — <code>manage_master_user_password</code> hands the job to RDS. It creates the password, keeps it in Secrets Manager, rotates it, and your state file never sees it.</li>
+</ul>
+<p>This is true of every secret Terraform touches, not only this one. The state file is as sensitive as the things inside it.</p>
+<h2 id="prove-you-can-reach-it-before-you-move-any-data">Prove You Can Reach It Before You Move Any Data</h2>
+<pre><code class="language-bash"># from the app server, in this order
+nc -vz &lt;the endpoint&gt; 5432
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -c &quot;SELECT version();&quot;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Result</th>
+<th>What it tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nc</code> fails</td>
+<td>Nothing is listening for you — the security group rule, or the database and the server aren't in the same network</td>
+</tr>
+<tr>
+<td><code>nc</code> works, <code>psql</code> fails</td>
+<td>The network is fine. Now it's the user, the password, or the database name</td>
+</tr>
+</tbody>
+</table>
+<p>Run these from the app server, not from your laptop — the app server is the thing that has to reach it.</p>
+<h2 id="the-connection-five-pieces-of-information">The Connection: Five Pieces of Information</h2>
+<p><code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>database name</code> — together called <strong>the connection</strong>. Every application has them written into it somewhere: a configuration file, environment variables it reads, or a line of code.</p>
+<p>When the database moves, the host is wrong and something has to change it. Changing what an application does is <strong>the developer's job</strong>, not the platform engineer's — in this room, Claude is the developer.</p>
+<h2 id="find-which-case-your-app-is">Find Which Case Your App Is</h2>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Nothing changes</strong></td>
+<td>It already reads the host from a variable. The boot script writes a different value into the same variable</td>
+</tr>
+<tr>
+<td><strong>One line changes</strong></td>
+<td>It has <code>localhost</code> written into it. Claude changes it to read the host the way it already reads the password</td>
+</tr>
+<tr>
+<td><strong>A real change</strong></td>
+<td>It keeps its data in a file rather than in Postgres — a different path, covered below</td>
+</tr>
+</tbody>
+</table>
+<p>The way the app gets its settings never changes: the boot script fetches them and writes them where the app already looks. <strong>Job 4 stayed yours</strong> — keeping the password out of the code is still your work.</p>
+<h2 id="the-whole-connection-lives-in-one-secret">The Whole Connection Lives in One Secret</h2>
+<p>Your boot script already fetches a secret from Secrets Manager. That secret now holds all five pieces — host, port, user, password, database name — and Terraform puts the host in, because Terraform created the database and knows its address.</p>
+<p>A hostname isn't secret. It lives there because <em>that's where the rest of the connection already is</em> — one place to look, one thing to change when it moves.</p>
+<h2 id="moving-the-data-once-by-hand">Moving the Data, Once, By Hand</h2>
+<pre><code class="language-bash"># from the app server. the same connection line as setup.
+pg_dump -h 127.0.0.1 -U investment_app -d investment_app -f app.sql
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -f app.sql
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -c &quot;SELECT * FROM trades;&quot;
+</code></pre>
+<p>Without <code>-h 127.0.0.1</code>, <code>pg_dump</code> connects over the local socket, where PostgreSQL requires your Linux user name to match the database user name — and you're logged in as <code>ec2-user</code>. The row with your name in it, from the start of setup, is inside the dump file and is in the new database after the restore.</p>
+<p>No tool, no script, nothing automated. <strong>Once, by hand.</strong> This is the only time your data moves.</p>
+<h2 id="if-your-app-keeps-its-data-in-a-file-theres-nothing-to-dump">If Your App Keeps Its Data in a File, There's Nothing to Dump</h2>
+<p>Some apps store their data in a file on the server instead of in Postgres — that file <em>is</em> the database, and it has no host to point somewhere else.</p>
+<ol>
+<li><strong>Claude changes the application</strong> to speak to PostgreSQL instead</li>
+<li><strong>It creates your tables</strong> in the new database, empty</li>
+<li><strong>Same place as everyone else</strong>, from here on</li>
+</ol>
+<p>Your old rows don't come with you, and that's fine — it's practice data you made yourself.</p>
+<h2 id="take-postgres-off-the-app-server-for-good">Take Postgres Off the App Server for Good</h2>
+<pre><code class="language-diff"># in the boot script — the database server goes, the client stays
+- dnf install -y postgresql16-server   # remove
+- postgresql-setup --initdb            # remove
+- systemctl enable --now postgresql    # remove
++ dnf install -y postgresql16          # keep the psql client
+
+terraform destroy   # then   terraform apply
+</code></pre>
+<p>This is the win: your app is running on a server that <strong>has never had a database on it</strong>, and the row with your name in it is still there.</p>
+<h2 id="the-health-check-still-must-not-ask-the-database">The Health Check Still Must Not Ask the Database</h2>
+<p>A health check answers one question: is this server able to serve? If it queries the database to decide, a slow database makes <strong>every server report itself as dead at the same moment</strong>, and one problem becomes a total outage. Check what this machine is responsible for, and nothing further away.</p>
+<p>AWS publishes whether the database is up, and its basic numbers — that's half of job 5, handed over. Deciding what counts as unhealthy, and being told about it, is its own topic and isn't answered here.</p>
+<h2 id="rpo-and-rto-the-two-questions-that-decide-everything">RPO and RTO: The Two Questions That Decide Everything</h2>
+<p>Before choosing any of what follows, answer both for the app you built — not in general, for yours:</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>What it decides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>How much data can you afford to lose?</strong></td>
+<td>An hour of orders? A day? This decides how often backups happen. The real term is <strong>recovery point objective</strong>, RPO</td>
+</tr>
+<tr>
+<td><strong>How long can you afford to be down?</strong></td>
+<td>Ten minutes? A morning? This decides what you build, not what you back up. The real term is <strong>recovery time objective</strong>, RTO</td>
+</tr>
+</tbody>
+</table>
+<p>A hospital can't restore from yesterday. An airline is busy at every hour, so there's no safe time to be down. The numbers come from the business, and the engineering follows them.</p>
+<h2 id="backups-snapshots-point-in-time-recovery-are-three-different-things">Backups, Snapshots &amp; Point-in-Time Recovery Are Three Different Things</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Automated backup</strong></td>
+<td>Runs on a window you set and <strong>expires</strong> after the number of days you chose. You don't take it; it happens</td>
+</tr>
+<tr>
+<td><strong>Snapshot</strong></td>
+<td>One copy, taken by you, that <strong>stays until you delete it</strong> — the same word you used for disks</td>
+</tr>
+<tr>
+<td><strong>Point-in-time recovery</strong></td>
+<td>Go back to <strong>a moment</strong> inside the retention window, not to a copy someone took</td>
+</tr>
+</tbody>
+</table>
+<p>This is <strong>job 2</strong>, the one you proved by hand. It's running from the moment the database exists, and you didn't have to remember.</p>
+<h2 id="restoring-gives-you-a-new-database-not-the-old-one-back">Restoring Gives You a New Database, Not the Old One Back</h2>
+<p>All three behave the same way when you restore: you get a <strong>new database with a new hostname</strong>, running beside the one you already have. Nothing is ever put back in place.</p>
+<p>So recovery is three steps, not one: restore it, check it's right, then <em>point the app at the new hostname</em>. That's why the hostname lives in the secret and not in a file that rebuilds the server.</p>
+<h2 id="a-standby-survives-the-machine-dying-job-3">A Standby Survives the Machine Dying — Job 3</h2>
+<p>Turn it on and AWS keeps a full copy of your database in the other zone, always up to date. If the machine running your database fails, the standby becomes the database — <strong>and the hostname doesn't change</strong>, so your app never knows.</p>
+<p>This is <strong>job 3</strong> — the one that had no answer when the database was on your own server. Watch this one; don't build it. A standby is a second database and it roughly doubles the price.</p>
+<h2 id="read-replicas-are-for-reading-standbys-are-not">Read Replicas Are for Reading — Standbys Are Not</h2>
+<p>You cannot read from the standby; it has no address you can connect to. A <strong>read replica</strong> is a different thing: a copy with its own hostname that you <em>can</em> read from — and it <strong>lags</strong>, so a value you just wrote may still show the old one.</p>
+<p>Neither of these is something you create tonight. Both are extra databases, and both bill by the hour from the moment they exist.</p>
+<h2 id="you-never-destroy-a-production-database">You Never Destroy a Production Database</h2>
+<p>That's the rule, and it's the reason the data had to move off a server you throw away. A <strong>development</strong> database is a different matter — and even then, if you're not certain, take a backup first.</p>
+<p>This one exists so you can learn on it, and it bills against your credits for as long as it runs. Two ways to stop paying for it:</p>
+<ul>
+<li><strong>Stop it</strong> — a database can be stopped for <strong>up to seven days</strong>, then it starts itself again. You stop paying for the machine; storage and snapshots still cost a little</li>
+<li><strong>Snapshot it, then delete it</strong> — the snapshot keeps your data. When you need the database again, restore it, and you'll get a <strong>new hostname</strong>, exactly as above</li>
+</ul>
+<p>Deleting a database asks you one more question: <strong>take a final snapshot first?</strong> On this one you skip it. On a production database you always take it.</p>
+<h2 id="five-jobs-where-each-one-went">Five Jobs. Where Each One Went</h2>
+<table>
+<thead>
+<tr>
+<th>The job</th>
+<th>Who does it now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Install and patch the engine</td>
+<td>AWS, inside a window you choose</td>
+</tr>
+<tr>
+<td>Keep it serving when the machine dies</td>
+<td>AWS, if you turn the standby on</td>
+</tr>
+<tr>
+<td>Back up, and prove the restore</td>
+<td>AWS takes them. <strong>Proving the restore is still yours</strong></td>
+</tr>
+<tr>
+<td>Report whether it is healthy</td>
+<td>AWS publishes the numbers. <strong>Deciding what's wrong is still yours</strong></td>
+</tr>
+<tr>
+<td>Hold the password out of the code</td>
+<td>You. This one didn't move</td>
+</tr>
+</tbody>
+</table>
+<p>Two moved, two moved halfway, and one stayed with you. That's what "managed" bought you, and now you can say exactly what it costs.</p>
+<h2 id="after-class_15">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>The whole move, on your own account</strong> — your own subnets, your own database, your own connection changed. Find how your app does it; no two of these apps are the same.</li>
+<li><strong>Stop paying for it when you finish</strong> — stop the database, or take a snapshot and delete it. Don't leave it running and forget it — it's on your standing check of what's costing you money.</li>
+<li><strong>Then prove the restore, for real</strong> — next time you need it, restore from your own snapshot. Connect, run <code>\dt</code> and <code>\du</code>, and put the <strong>new hostname</strong> into your secret.</li>
+</ul>
+<p><strong>What you know now:</strong> a database needs five jobs done no matter where it lives — install and patch the engine, back it up and prove the restore, keep serving when the machine dies, hold the password out of the code, and report whether it's healthy — and "managed" means another company does some of them from a list, not a quality level. Amazon RDS is not an EC2 instance: no SSH, no shell, only a hostname (the <strong>endpoint</strong>), a port, a user and a password, running across a subnet group that spans two availability zones even though the database itself lives in one. The database needs nothing from the internet, so its subnets get no route out, no NAT gateway, and no public address, and only the app servers' security group is allowed to reach it. The master password Terraform sets lands in the state file as plain text unless <code>manage_master_user_password</code> keeps it out entirely — the state file is as sensitive as the secrets inside it. The connection — host, port, user, password, database name — lives together in one secret, and moving it is the developer's job: change what the app reads, not what the platform runs. The data itself moves exactly once, by hand, with <code>pg_dump</code> and <code>psql -f</code>, after which Postgres comes off the app server's boot script for good. Backups, snapshots, and point-in-time recovery are three different things, but all three hand you back a <strong>new database with a new hostname</strong> — recovery is restore, verify, then repoint, never an in-place fix. A standby answers job 3 by keeping the hostname stable when the machine dies; a read replica is a separate, laggy copy you can actually query. You never destroy a production database — you stop it or snapshot it — and by the end, two of the five jobs have moved to AWS, two moved halfway, and one, the password, never left you.</p>
+
+<h1 id="lesson-36-the-cutover-moving-your-data-reading-a-route-table-when-it-goes-wrong">Lesson 36 — The Cutover: Moving Your Data, Reading a Route Table &amp; When It Goes Wrong</h1>
+<h2 id="where-we-left-off_1">Where We Left Off</h2>
+<p>The database exists: RDS, in your private subnet group, closed off from the internet, reachable only from the app servers' security group on port 5432. Tonight is the rest of the story — reading the network well enough to say <em>why</em> it's private instead of taking the name's word for it, moving the real rows across, and the moment the whole exercise pays off: the server that used to hold your database no longer does, and nothing was lost.</p>
+<h2 id="only-the-route-table-tells-you-whether-a-subnet-is-public-or-private">Only the Route Table Tells You Whether a Subnet Is Public or Private</h2>
+<p>The name proves nothing — you can call a subnet <code>public-a</code> and give it no route to the internet. The address range proves nothing either, because every subnet sits inside the VPC's range and a VPC is never given internet addresses itself. The only real answer is in the subnet's route table, on the row for <code>0.0.0.0/0</code>.</p>
+<table>
+<thead>
+<tr>
+<th>That row...</th>
+<th>Reads as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>points at an <strong>internet gateway</strong></td>
+<td><strong>Public.</strong> Something on the internet can open a connection to a server in this subnet</td>
+</tr>
+<tr>
+<td>points at a <strong>NAT gateway</strong></td>
+<td><strong>Still private.</strong> A server here can reach out and get an answer back. Nothing on the internet can open a connection to it</td>
+</tr>
+<tr>
+<td>doesn't exist</td>
+<td><strong>Private.</strong> Nothing goes out and nothing comes in. This is what your database subnets are</td>
+</tr>
+</tbody>
+</table>
+<p>Every route table also carries a <code>local</code> line that AWS puts there and you can't remove. It means the address is inside this VPC, so the traffic stays inside — <strong>it is not a route to the internet</strong>, and it's the line people mistake for one.</p>
+<h2 id="reach-it-before-you-move-anything-nc-then-psql-in-that-order">Reach It Before You Move Anything: nc, Then psql, In That Order</h2>
+<p>The same two commands from setup, run again with intent this time — proving the path before trusting it with real rows:</p>
+<pre><code class="language-bash"># from the app server, in this order
+nc -vz &lt;the endpoint&gt; 5432
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -c "SELECT version();"
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Result</th>
+<th>What it tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nc</code> fails</td>
+<td>Nothing is listening for you — the security group rule, or the database and the server aren't in the same network</td>
+</tr>
+<tr>
+<td><code>nc</code> works, <code>psql</code> fails</td>
+<td>The network is fine. Now it's the user, the password, or the database name</td>
+</tr>
+</tbody>
+</table>
+<p>Run both from the <strong>app server</strong>, not your laptop — the app server is the machine that actually has to make this connection, every time it starts.</p>
+<h2 id="the-environment-file-is-the-only-thing-that-changes">The Environment File Is the Only Thing That Changes</h2>
+<p>Everyone in the room runs the same repository now, so the answer is the same for all of you: the app reads all five pieces of the connection — host, port, user, password, database name — from one file, and the boot script writes that file. The app reads it exactly once, when it starts.</p>
+<pre><code class="language-bash"># /etc/investment-app.env, written by the boot script
+DB_HOST=127.0.0.1          # the only line that changes
+DB_PORT=5432
+DB_NAME=investment_app
+DB_USER=investment_app
+DB_PASSWORD=…              # fetched from Secrets Manager at boot
+</code></pre>
+<p>The way the app gets its settings never changes: the boot script fetches them and writes them where the app already looks. <strong>Job 4 stayed yours</strong> — keeping the password out of the code is still your work, no matter which machine the database is on.</p>
+<h2 id="move-the-data-once-by-hand">Move the Data, Once, By Hand</h2>
+<pre><code class="language-bash"># from the app server. the same connection line as the reach check.
+pg_dump -h 127.0.0.1 -U investment_app -d investment_app -f app.sql
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -f app.sql
+
+psql 'host=&lt;the endpoint&gt; port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -c "SELECT * FROM trades;"
+</code></pre>
+<p>Without <code>-h 127.0.0.1</code>, <code>pg_dump</code> connects over the local socket, where PostgreSQL requires your Linux user name to match the database user name — and you're logged in as <code>ec2-user</code>. No tool, no script, nothing automated. <strong>Once, by hand.</strong> This is the only time the data moves.</p>
+<h2 id="the-cutover-edit-restart-buy-one-more-share">The Cutover: Edit, Restart, Buy One More Share</h2>
+<p>The dump is restored on the new database. The app is still talking to the old one, because it only read the environment file once, back when it booted.</p>
+<pre><code class="language-bash"># on the app server, after the data is in the new database
+sudo vi /etc/investment-app.env     # DB_HOST=127.0.0.1  becomes  DB_HOST=&lt;the endpoint&gt;
+
+sudo systemctl restart investment-app
+</code></pre>
+<p>Editing the file changes nothing on its own — <strong>restarting is what makes the app read it again.</strong> How you know it actually worked: refresh the page and buy one more share. The new database now has your old rows <em>and</em> the new one. The database still running on the app server keeps the number it had before, and it will never change again — that gap between the two counts is the proof the cutover happened.</p>
+<h2 id="the-host-belongs-in-the-secret-but-not-yet">The Host Belongs in the Secret — But Not Yet</h2>
+<p>The boot script already fetches a secret from Secrets Manager to get the database password. The host belongs in that same secret, put there by Terraform, because Terraform created the database and knows its address. A hostname isn't secret — it goes there because <em>that's where the rest of the connection already is</em>: one place to look, one thing to change when the database moves again.</p>
+<p>You just changed the host by hand, in the file on the server. That works once. The boot script writes that file from scratch on every new server, so <strong>a rebuilt server goes back to looking for a database on itself.</strong> The repository doesn't do this yet — making the boot script read the host from the secret is your work now, not something already built for you. A literal hostname written into the boot script itself isn't the fix either: editing the boot script replaces the machine, which is exactly what a restore already forces — the secret is the one place that survives a rebuild.</p>
+<h2 id="take-postgres-off-the-server-with-the-right-command">Take Postgres Off the Server — With the Right Command</h2>
+<pre><code class="language-diff"># in the boot script — the database server goes, the client stays
+- dnf install -y postgresql16-server   # remove
+- postgresql-setup --initdb            # remove
+- systemctl enable --now postgresql    # remove
++ dnf install -y postgresql16          # keep the psql client
+
+terraform apply   # user_data_replace_on_change = true, so you get a new server
+</code></pre>
+<p><strong>Do not run <code>terraform destroy</code> here.</strong> The database now lives in the same folder as the app server, in its own file — and it's set to skip its final snapshot. <code>destroy</code> would take the database down with the server, undoing the exact move you just finished by hand. <code>apply</code> alone is enough: the repository already sets <code>user_data_replace_on_change = true</code>, so changing the boot script is enough to force a fresh machine, with an explicit line telling Terraform never to touch the database.</p>
+<p>This is the win: your app is running on a server that <strong>has never had a database on it</strong>, and the row with your name in it is still there.</p>
+<h2 id="then-backups-a-standby-and-the-rule-about-production">Then: Backups, a Standby, and the Rule About Production</h2>
+<p>The rest of the night answered the question a working database still raises: what happens when it, or the machine under it, gets damaged? Two numbers decide the answer for your own app — <strong>RPO</strong>, how much data you can afford to lose, and <strong>RTO</strong>, how long you can afford to be down. An <strong>automated backup</strong> runs on a schedule and expires; a <strong>snapshot</strong> is one you take yourself and it stays until you delete it; <strong>point-in-time recovery</strong> goes back to a moment, not a copy. All three hand you back a <em>new database with a new hostname</em> when you restore — never the old one, in place — which is exactly why that hostname lives in a secret and not in a file that rebuilds the server. A <strong>standby</strong> answers the job a lone server never could: the machine dies, the standby takes over, and the hostname doesn't move. A <strong>read replica</strong> is the different tool for reading — its own hostname, its own lag. And the rule underneath all of it: you never destroy a production database. You stop it, or you snapshot it and delete it — never the other way around.</p>
+<h2 id="after-class_16">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor. Most of tonight's after-class time went to one ladder, run over and over until it was automatic:</p>
+<ul>
+<li><strong><code>nc</code>, then <code>psql</code>, in that order</strong> — on your own endpoint, until a failure at either step tells you immediately which half is broken.</li>
+<li><strong>Read your own route tables</strong> — find the row for <code>0.0.0.0/0</code> on your public and private subnets, and say out loud which kind each one is before checking.</li>
+<li><strong>Run the cutover for real</strong> — edit your own environment file, restart your own service, and prove it with a change only the new database could show.</li>
+<li><strong>Say why <code>terraform apply</code> alone is now correct</strong> — and what <code>terraform destroy</code> would take with it, now that <code>database.tf</code> shares the folder.</li>
+</ul>
+<p><strong>What you know now:</strong> a subnet's name and address range tell you nothing about whether it's public — only the route table's <code>0.0.0.0/0</code> row does, and a <code>local</code> row is never a way out. <code>nc</code> before <code>psql</code> isolates a network failure from a credentials failure in one step each. The connection lives in one environment file the boot script writes and the app reads once at boot, so a cutover is exactly two actions — edit the file, restart the service — proven by a change the old database can't show. The data itself crosses exactly once, by hand, with <code>pg_dump</code> and <code>psql -f</code>. The host belongs in the same secret as the password, but the repository doesn't fetch it from there yet — that's your work, not a gap in what you were given. And once a database shares a Terraform folder with the server, <code>destroy</code> is no longer a safe reset — <code>apply</code> alone, backed by <code>user_data_replace_on_change</code>, is what rebuilds the server without touching the data you just spent the night moving.</p>
 
 </main>
 </body>

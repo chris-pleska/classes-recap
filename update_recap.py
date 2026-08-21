@@ -17,12 +17,30 @@ AUTO_PUSH = False   # set True once you trust the output; False lets you review 
 
 DEFAULT_STATE = {"recap": 0, "notes": 0, "quiz": 0}
 
+# Each entry is an independent content track: its own folder of session-N decks,
+# and its own recap/notes/quiz progress counters (session numbers restart at 1
+# inside each track, e.g. decks/scale/session-1). The AI prompts figure out the
+# next "Lesson N" for the output files themselves by counting existing headers,
+# so tracks can freely differ in numbering from each other and from the Lesson
+# numbers already written into recap.md / lesson1.md / quiz.html.
+SOURCES = [
+    {"key": "foundations", "dir": DECKS_DIR},
+    {"key": "scale", "dir": os.path.join(DECKS_DIR, "scale")},
+]
+
 
 def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE) as f:
-            return json.load(f)
-    return dict(DEFAULT_STATE)
+    if not os.path.exists(STATE_FILE):
+        return {src["key"]: dict(DEFAULT_STATE) for src in SOURCES}
+    with open(STATE_FILE) as f:
+        state = json.load(f)
+    # Migrate old flat {"recap": N, "notes": N, "quiz": N} files (pre-scale-track)
+    # into the new nested-by-source shape, filed under "foundations".
+    if "recap" in state and "foundations" not in state:
+        state = {"foundations": state}
+    for src in SOURCES:
+        state.setdefault(src["key"], dict(DEFAULT_STATE))
+    return state
 
 
 def save_state(state):
@@ -34,8 +52,8 @@ def session_number(path):
     return int(os.path.basename(path.rstrip("/")).split("-")[-1])
 
 
-def list_sessions():
-    folders = glob.glob(os.path.join(DECKS_DIR, "session-*"))
+def list_sessions(source_dir):
+    folders = glob.glob(os.path.join(source_dir, "session-*"))
     folders = [f for f in folders if os.path.isfile(os.path.join(f, "deck.html"))]
     return sorted(folders, key=session_number)
 
@@ -113,16 +131,17 @@ DB_RECORDERS = {
 }
 
 
-def process_target(name, sessions, state, build_prompt):
-    for folder in pending_sessions(sessions, state[name]):
+def process_target(track_key, name, sessions, state, build_prompt):
+    track_state = state[track_key]
+    for folder in pending_sessions(sessions, track_state[name]):
         n = session_number(folder)
-        print(f"[{name}] processing session-{n} ...")
+        print(f"[{track_key}/{name}] processing session-{n} ...")
         if not run_claude(build_prompt(folder, n)):
-            print(f"[{name}] FAILED on session-{n} — stopping this target, will retry next run")
+            print(f"[{track_key}/{name}] FAILED on session-{n} — stopping this target, will retry next run")
             return
-        state[name] = n
+        track_state[name] = n
         save_state(state)
-        print(f"[{name}] session-{n} done")
+        print(f"[{track_key}/{name}] session-{n} done")
 
         # Record the newly written section into study.db
         DB_RECORDERS[name](n)
@@ -175,16 +194,23 @@ def main():
     print("Pulling latest sessions...")
     subprocess.run(["git", "-C", DECKS_DIR, "pull"], check=False)
 
-    sessions = list_sessions()
-    if not sessions:
-        print("No session folders found — check the decks/ path.")
-        sys.exit(1)
-
     state = load_state()
+    found_any = False
 
-    process_target("recap", sessions, state, recap_prompt)
-    process_target("notes", sessions, state, notes_prompt)
-    process_target("quiz", sessions, state, quiz_prompt)
+    for src in SOURCES:
+        sessions = list_sessions(src["dir"])
+        if not sessions:
+            print(f"[{src['key']}] no session folders found under {src['dir']} — skipping.")
+            continue
+        found_any = True
+
+        process_target(src["key"], "recap", sessions, state, recap_prompt)
+        process_target(src["key"], "notes", sessions, state, notes_prompt)
+        process_target(src["key"], "quiz", sessions, state, quiz_prompt)
+
+    if not found_any:
+        print("No session folders found in any source — check the SOURCES paths.")
+        sys.exit(1)
 
     if AUTO_PUSH:
         subprocess.run(["git", "add", "-A"], cwd=BASE)

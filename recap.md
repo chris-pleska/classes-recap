@@ -982,3 +982,361 @@ __pycache__/    # Python leftovers
 It only stops a file from being saved *going forward* — a key already pushed has to be rotated, not just ignored.
 
 **Named for later, not taught yet:** `rebase` (moves your saves onto main's tip instead of joining them — one straight line, no merge commit) and `revert` (undoes an already-merged PR by adding a new PR, not erasing history). `git fetch` is the download-only half of `git pull`.
+
+---
+
+## Lesson 30: Infrastructure as Code — Terraform
+
+A click can't do three things: **repeat** it exactly, **review** it before it happens, or **rebuild** it once it's gone. **Infrastructure as code** = write the infrastructure you want into files, keep those files like code, and a program reads them and makes reality match. A script performs steps in order; this describes a destination and works out the steps itself.
+
+**The field, one difference each:** CloudFormation (AWS's own, AWS-only) · Pulumi/CDK (a real language — Python, TypeScript — produces the infra) · Ansible (not IaC at all — **configuration management**, for machines that already exist) · **Terraform** (describes what should exist, against any cloud — what this course teaches). Terraform's license changed in Aug 2023 (now IBM's, not open source); OpenTofu is the community fork. Still free to use for learning and work — you just can't resell a product that is Terraform.
+
+**Two new words that aren't commands:**
+- **provider** — a plug-in that speaks to one cloud; Terraform itself knows nothing about AWS until it's handed one.
+- **resource** — one thing that should exist (a network, a server, a firewall rule). Written as `resource "type" "name"` — the **type** is fixed by the provider, the **name** is yours alone and must be unique per type (copy-paste-forget-to-rename is the classic "Duplicate resource" error).
+
+```hcl
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_vpc" "scratch" {
+  cidr_block = "10.99.0.0/16"
+}
+```
+
+**The four commands:**
+```bash
+terraform init      # download the providers this folder needs — nothing created, nothing costs money
+terraform plan       # ask AWS what exists, compare to the file, print what it WOULD do — changes nothing
+terraform apply       # do what the plan said — shows the plan again, asks once, then changes your account
+terraform destroy     # delete everything this folder made, and nothing else — asks once
+```
+
+**Reading a plan — the last line first:**
+```
+Plan: 1 to add, 0 to change, 0 to destroy.
+```
+Symbols: `+` create · `-` destroy · `~` change in place · `-/+` destroy then recreate (read left to right — that's the order) · `+/-` create replacement first, then destroy old · `<=` read without touching · no symbol = not changing (most lines of a long plan). Stop and look if the destroy count isn't what you expected.
+
+**Install (macOS):**
+```bash
+brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+terraform version                    # confirms it's installed
+aws sts get-caller-identity          # Terraform borrows the same aws credentials you already set up
+```
+
+---
+
+## Lesson 31: Terraform — The Real Network, State & for_each
+Building the real VPC network resource by resource, then the two things every real Terraform setup depends on: state and saying things once.
+
+**Seven resources, one network:** `aws_vpc`, `aws_subnet` ×2, `aws_internet_gateway`, `aws_route_table`, `aws_route_table_association` ×2. `10.0.0.0/16` for the network, `10.0.1.0/24` and `10.0.2.0/24` for the subnets — both public here, so `public_a`/`public_b`, never `private`. AWS creates a **main route table** with every VPC on its own; Terraform didn't make it, so it never shows in a plan and can't be deleted — seeing it in the console isn't a sign anything's wrong.
+
+```hcl
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"   # anywhere outside this network — not a narrow range
+    gateway_id = aws_internet_gateway.gw.id
+  }
+}
+```
+
+Build one resource at a time: say it in a sentence, write it, `plan`, `apply`. Nothing in the file states an order — the subnet block *mentions* `aws_vpc.main.id`, so Terraform's **dependency graph** works the order out itself (and reads it backwards to delete safely).
+
+**Change vs. outage — one symbol decides which:** `~` changes something in place (e.g. a tag); `-/+` destroys and rebuilds (e.g. a subnet's CIDR) — safe here only because the subnets are empty. In the console the same edit just happens; Terraform is the one that tells you first.
+
+**Drift** = reality has moved away from what your file says, usually a console edit. Plain `terraform plan` finds it unasked ("Objects have changed outside of Terraform") and offers to put it back — nothing changes until someone runs `apply`.
+
+```bash
+terraform apply -auto-approve   # skips the plan and the yes/no prompt — for pipelines, not yet
+```
+
+**State — `terraform.tfstate` is Terraform's memory file:** for each resource it stores the name from your file beside the real AWS id. Move the file aside and `plan` wants to build everything again (`7 to add`) even though AWS is untouched; put it back and it remembers. Delete it for real and your infrastructure is still there, running and billing — Terraform has just forgotten it, so the next `apply` builds a second copy beside the first. State also stores every value AWS returns, including ones you wouldn't want stored — a database password lands in it in plain text, no extra step required.
+
+```bash
+# .gitignore
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+# NOT .terraform.lock.hcl — commit that one, it pins your provider version
+```
+
+**Remote state** keeps that memory in shared storage (S3, Azure storage, or Terraform Cloud) instead of one laptop, so it survives and more than one machine can use it:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket = "your-unique-bucket-name"   # this block is read before anything else — no variables allowed
+    key    = "unit1/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+```
+```bash
+terraform init                # first time: asks to copy existing state to the new backend
+terraform init -reconfigure   # every later change to this block
+```
+The bucket has to exist first — Terraform won't make it. `backend.tf` itself is committed to git; it holds the address of the memory, not the memory.
+
+**State locking** stops two people applying at once and silently clobbering each other's record. Off by default — add `use_lockfile = true` to turn it on, and nothing warns you it's missing.
+
+**Variables and outputs — say a value once:**
+```hcl
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
+
+availability_zone = "${var.region}a"   # ${ } required inside quotes, or AWS gets literal "var.region"
+
+output "subnet_a_id" {
+  value = aws_subnet.a.id
+}
+```
+A variable is a value going in; an output is a value Terraform prints back out (`terraform output`).
+
+**`for_each` — write the description once, not once per resource:**
+```hcl
+variable "subnets" {
+  type = map(string)
+  default = {
+    "us-east-1a" = "10.0.1.0/24"
+    "us-east-1b" = "10.0.2.0/24"
+  }
+}
+
+resource "aws_subnet" "main" {
+  for_each          = var.subnets
+  vpc_id            = aws_vpc.main.id
+  availability_zone = each.key
+  cidr_block        = each.value
+}
+```
+Not a loop — no order, both made at once. Converting existing resources to `for_each` destroys and rebuilds them (the names changed), and breaks anything that referenced the old names — `Reference to undeclared resource`, then `Missing resource instance key`. Fix by moving references the same way:
+```hcl
+resource "aws_route_table_association" "main" {
+  for_each       = aws_subnet.main
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.public.id
+}
+```
+
+---
+
+## Lesson 32: Terraform — Describing a Server
+Nobody configures a real environment by hand — people slip, it can't be reproduced, and real companies run thousands of machines at once. Describing one server means deciding five things: which OS, how big, where in the network, who may reach it, what it may do in AWS (the fifth is next session).
+
+**Decision 1 — the OS, via a data source instead of a pasted id.** An id is never worth writing down: it differs per region and Amazon replaces it whenever a newer image ships. A `data` block *reads* a fact from AWS; it creates nothing.
+```hcl
+data "aws_ami" "linux" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-x86_64"]
+  }
+}
+# read it as: data.aws_ami.linux.id
+```
+A wrong filter doesn't guess — `Your query returned no results` means the filter is wrong, not that the image is missing.
+
+**Decisions 2–3 — size and placement, both already familiar:**
+- **instance type** (`t3.micro`) — family (`t3`) + size (`micro`): family is what it's built for, size is how much of it. Bills by the hour from the moment it exists, whatever size.
+- **subnet** — which part of the network already built in Terraform it lands in.
+
+**Decision 4 — who may reach it, via a security group.** A machine created by code gets no outbound access unless you write it — unlike one clicked into existence. Without an egress rule the machine starts, lets you in, and installs nothing.
+```hcl
+resource "aws_security_group" "app" { vpc_id = aws_vpc.main.id }
+
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  security_group_id = aws_security_group.app.id
+  from_port = 22 , to_port = 22 , ip_protocol = "tcp"
+  cidr_ipv4 = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "out" {
+  security_group_id = aws_security_group.app.id
+  ip_protocol = "-1" , cidr_ipv4 = "0.0.0.0/0"
+}
+```
+One rule per port, each naming its group. Use `vpc_security_group_ids` in your own VPC — the other argument, `security_groups`, is for the default VPC only, and using it here makes Terraform destroy and rebuild the machine every time the group changes.
+
+**The machine, one block, four decisions in it:**
+```hcl
+resource "aws_instance" "app" {
+  ami                    = data.aws_ami.linux.id       # 1 which OS
+  instance_type          = "t3.micro"                  # 2 how big
+  subnet_id              = aws_subnet.public.id        # 3 where in the network
+  vpc_security_group_ids = [aws_security_group.app.id] # 4 who may reach it
+  # iam_instance_profile = ...                          # 5 what it may do — next session
+
+  key_name                    = "my-key"
+  associate_public_ip_address = true   # or there's no address to SSH to
+}
+```
+Read the plan before saying yes — changing `associate_public_ip_address` or the security-group argument on a machine that already exists makes Terraform destroy it and build another.
+
+**Two arguments any block can be told:**
+- `depends_on = [aws_subnet.public]` — spells out ordering by hand for the rare case Terraform can't work it out from one block naming another.
+- `lifecycle { ignore_changes = [tags] }` — tells Terraform to leave one value alone (set outside the file) while still managing the rest.
+
+**Outputs, revisited** — a variable is a value going in, an output is one Terraform prints back out, usually a real AWS id only it can tell you:
+```hcl
+output "subnet_a_id" {
+  value     = aws_subnet.a.id
+  sensitive = false   # true for a password: prints (sensitive value)
+}
+```
+```bash
+terraform output   # prints the real ids, ready to paste
+```
+
+**SSH onto it — and there's nothing there:**
+```bash
+ssh ec2-user@<the new machine>
+```
+No app, no packages, no database — a machine described in five lines, created by `apply`, and empty. Next: what puts the app on it.
+
+---
+
+## Lesson 33: One Server, Built From Code — Identity, Installing & Disposability
+Decision five, then how the app actually lands on the empty machine, then what it means that the machine can now be thrown away.
+
+**Decision 5 — what it may do in AWS.** The app has to read a secret out of Secrets Manager, so the machine needs an identity of its own. Your own access keys never go onto it — they're one person's, have to be copied on by hand, and expire. A **role** is an identity with permissions attached; an **instance profile** is the object AWS actually attaches to a machine — a machine can't hold a role directly.
+```hcl
+resource "aws_iam_role" "ec2_role" {                # 1 the identity
+  assume_role_policy = jsonencode({ ... })           # who may assume this role — the EC2 service
+}
+resource "aws_iam_role_policy" "ec2_policy" {        # 2 what it may do
+  role   = aws_iam_role.ec2_role.id
+  policy = jsonencode({ ... })                       # e.g. secretsmanager:GetSecretValue only
+}
+resource "aws_iam_instance_profile" "ec2_profile" {  # 3 the object AWS attaches
+  role = aws_iam_role.ec2_role.name
+}
+```
+```hcl
+# on the instance itself
+iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+```
+Proof it worked: `aws sts get-caller-identity` on the machine answers `assumed-role/ec2_role/i-0a1b2c3d` — the machine, not you. No keys anywhere on disk, nothing to rotate.
+
+**Two ways to get the app onto a fresh machine:**
+```hcl
+# 1. Amazon's image + a script that installs at boot
+resource "aws_instance" "app" {
+  ami                          = data.aws_ami.linux.id
+  user_data                    = file("install.sh")   # runs once, on first boot, as root
+  user_data_replace_on_change  = true                 # edit the script → build a new machine
+}
+```
+```bash
+aws ec2 create-image --instance-id <the machine you built> --name "app-with-everything-on-it"
+# 2. your own image — a machine launched from it installs nothing
+```
+The script installs packages, installs and starts the database, gets the code, writes the service file, starts the web server — every step you've already done by hand; the change is who types them. Pick by how often the company ships: frequent deploys favor install-at-boot (always current, slower to launch); rare/regulated deploys favor a pre-built image (fast to launch, only as current as the last rebuild).
+
+**The script can't hold the secret** — it's a file in the repo. Instead the machine fetches it at boot, using the identity from decision 5:
+```bash
+DB_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id app/db --query SecretString --output text)
+```
+The script's only job is to write that value where the app already looks — an environment variable, the same way it always read its config.
+
+**Disposable, proven:**
+```bash
+terraform destroy    # the machine is gone
+terraform apply      # a new one, and the app answers on it
+```
+The second machine isn't a copy of the first — both were built from the same file. That's what lets a machine be replaced instead of repaired, which means the app itself owes five things: start on boot, listen on a known port, take config from the environment (three already true), answer "are you working?", and ship its logs somewhere that outlives the machine (the two still open).
+
+**Health endpoint** (usually `/health`): answers only when the app can actually do its job — the only way to tell "running" from "working" from outside. It must not check the database — one database wobble would report every machine dead over a problem none of them had; check only what this machine is responsible for.
+
+---
+
+## Lesson 34: The Data Tier — Moving to Amazon RDS
+Your database moves off the app server to Amazon RDS, by hand, once. The point stays the same as Lesson 27/28's move: a server built from code can be destroyed and rebuilt — nothing rebuilds the data that was on it.
+
+**Five jobs any database needs done, wherever it lives:** install and patch the engine · back up and prove the restore · keep serving when the machine dies · hold the password out of the code · report whether it's healthy. You already did four of these by hand — the third (surviving the machine dying) had no answer, because the database and the app server were the same machine.
+
+**"Managed" means AWS does jobs off that list, and you cannot log in to the machine.** What it costs: no superuser, no OS access (no SSH, no shell), no `postgresql.conf` (settings go through a parameter group instead), and the same size machine costs more per hour.
+
+**An RDS instance is not an EC2 instance** — no SSH, no shell, just a hostname (the **endpoint**) plus port/user/password, the same things `psql` always wanted.
+
+**Networking:** hand RDS a **DB subnet group** spanning two availability zones (AWS requires two); the database itself still runs in one. No route to the internet, no NAT gateway, no public address — a database needs nothing from the internet. Only the app servers' security group may reach port 5432 (name the group, not an address range — servers get replaced, the group doesn't).
+
+**The master password lands in the Terraform state file as plain text**, however you produced it. Either protect the state file (encrypt the bucket, restrict who can read it) or skip storing it entirely with `manage_master_user_password`, which hands the password to Secrets Manager instead.
+
+**Prove you can reach it before moving any data, from the app server, in this order:**
+```bash
+nc -vz <the endpoint> 5432
+
+psql 'host=<the endpoint> port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -c "SELECT version();"
+```
+`nc` fails → nothing's listening (security group or network). `nc` works, `psql` fails → it's the user, password, or database name.
+
+**The connection** — host, port, user, password, database name — lives entirely in the app's secret; Terraform writes the host in because it created the database and knows the address. A hostname isn't secret; it's there because that's where the rest of the connection already is.
+
+**Move the data once, by hand:**
+```bash
+pg_dump -h 127.0.0.1 -U investment_app -d investment_app -f app.sql
+
+psql 'host=<the endpoint> port=5432 dbname=investment_app user=investment_app sslmode=require' \
+  -f app.sql
+```
+`-h 127.0.0.1` matters — without it `pg_dump` uses the local socket, which requires your Linux username to match the database username.
+
+**Then remove Postgres from the app server for good** (keep just the client) and rebuild:
+```bash
+# boot script: drop postgresql16-server / initdb / enable --now postgresql
+# keep:        dnf install -y postgresql16   (the psql client only)
+
+terraform destroy   # then   terraform apply
+```
+
+**Health checks must not query the database** — if they do, one slow database makes every app server report itself dead at the same moment.
+
+**Two questions decide the rest of the session:** how much data can you afford to lose (**RPO**, recovery point objective), and how long can you afford to be down (**RTO**, recovery time objective). The numbers come from the business; the engineering follows them.
+
+**Backups, snapshots, and point-in-time recovery are three different things:** automated backups run on a schedule you set and expire after N days; a snapshot is one copy you take that stays until you delete it; point-in-time recovery goes back to a moment inside the retention window. Restoring any of them gives you a **new database with a new hostname**, never the old one back in place — which is why the hostname lives in the secret, not in a file that rebuilds the server.
+
+**A standby** (job 3, the one with no answer on your own server) is a synchronous second copy in the other zone; if the machine dies, the standby takes over and **the hostname does not change**. Roughly doubles the price — turn it on to prove it, then off. **A read replica** is different: its own hostname, readable, and it lags — a value you just wrote may still show old there.
+
+**Never destroy a production database.** Stop it (up to 7 days, then it restarts itself) or snapshot it and delete it — deleting always asks for a final snapshot first; skip that only on scratch/dev databases.
+
+---
+
+## Lesson 35: The Data Tier — Reading Route Tables & the Cutover
+Continuing Lesson 34's move to RDS: how to tell a subnet's network posture from the route table alone, then the actual cutover from the app server's own Postgres to the new database.
+
+**Only the route table tells you whether a subnet is public or private** — not the name (you can call a subnet `public-a` and still give it no way out) and not the address range (every subnet sits inside the VPC's block regardless). Read the `0.0.0.0/0` line: pointing at an internet gateway means public; pointing at a NAT gateway means still private (a server here can reach out, nothing can reach in); no such line at all means private — what the database subnets are. Every route table also carries a `local` line AWS adds and you can't remove — it means "stays inside this VPC," not a route to the internet.
+
+**The connection is five pieces — host, port, user, password, database name** — read from one file the boot script writes and the app reads once, at startup:
+```
+# /etc/investment-app.env, written by the boot script
+DB_HOST=127.0.0.1          # the only line that changes
+DB_PORT=5432
+DB_NAME=investment_app
+DB_USER=investment_app
+DB_PASSWORD=...            # fetched from Secrets Manager at boot
+```
+
+**The cutover — edit the file, then restart, because the app only reads it once at startup:**
+```bash
+sudo vi /etc/investment-app.env   # DB_HOST=127.0.0.1  ->  DB_HOST=<the endpoint>
+sudo systemctl restart investment-app
+```
+Prove it by buying one more share: the new database gets the new row, and the database still sitting on the app server is frozen with whatever it had at cutover — it will never change again.
+
+**The host belongs in the same secret as the password** — Terraform put it there because it created the database and knows the address. A hostname isn't secret; it goes there so there's one place to change when the database moves again. The boot script doesn't read it from there yet — today's edit was by hand, and a rebuilt server would go right back to looking for `127.0.0.1` until that gap is closed.
+
+**Removing Postgres from the app server for good:** drop `postgresql16-server`, `initdb`, and `enable --now postgresql` from the boot script; keep just `postgresql16` for the `psql` client. Then `terraform apply` alone — not `destroy` then `apply`. `database.tf` now lives in the same folder with `skip_final_snapshot = true`, so a `destroy` here would delete the database you just migrated data into. `user_data_replace_on_change = true` is what gets you a rebuilt server from `apply` by itself.
