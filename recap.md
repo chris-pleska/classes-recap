@@ -1340,3 +1340,39 @@ Prove it by buying one more share: the new database gets the new row, and the da
 **The host belongs in the same secret as the password** — Terraform put it there because it created the database and knows the address. A hostname isn't secret; it goes there so there's one place to change when the database moves again. The boot script doesn't read it from there yet — today's edit was by hand, and a rebuilt server would go right back to looking for `127.0.0.1` until that gap is closed.
 
 **Removing Postgres from the app server for good:** drop `postgresql16-server`, `initdb`, and `enable --now postgresql` from the boot script; keep just `postgresql16` for the `psql` client. Then `terraform apply` alone — not `destroy` then `apply`. `database.tf` now lives in the same folder with `skip_final_snapshot = true`, so a `destroy` here would delete the database you just migrated data into. `user_data_replace_on_change = true` is what gets you a rebuilt server from `apply` by itself.
+
+---
+
+## Lesson 36: The Data Tier, Finished — Health Checks & Running vs. Answering
+
+Closes out the data tier (jobs 2 and 3 — backups and the standby, both recapped) and opens the next arc: a machine can be running and still unable to answer a request, which is what a health check exists to catch.
+
+**Health checks must never query the database** — if they do, one slow database makes every app server report itself dead at the same moment, turning one problem into a total outage. A health check answers exactly one question: is *this* server able to serve, not whether something farther away is fine.
+
+**Two questions decide the rest of the data tier, for your app specifically, not in general:** how much data can you afford to lose (**RPO**, recovery point objective — decides how often backups run) and how long can you afford to be down (**RTO**, recovery time objective — decides what you build). The numbers come from the business; the engineering follows them.
+
+**Restoring a backup, snapshot, or point-in-time recovery always gives you a new database with a new hostname** — never the old one back in place. Recovery is three steps: restore it, check it's right, then point the app at the new hostname — why the hostname lives in the secret.
+
+**Running and able to answer are two different facts about one machine.** EC2 answers the first; only the application can answer the second:
+```bash
+# is the service running? — EC2's view of the machine
+sudo systemctl is-active investment-app
+
+# can it answer a request? — the application's own view
+curl -i localhost:PORT/HEALTH_PATH
+```
+An application can die (`sudo systemctl stop investment-app`) while its instance state stays `running` — the console never notices.
+
+**Health endpoint vs. health check:** the endpoint is a small path the application serves for one purpose, to say it's working; the check is something outside the machine asking for that path on a timer and keeping score.
+
+**Five settings, and nothing else decides whether a machine is on the list or off it:** path (default `/`), interval (30s), timeout (5s), unhealthy threshold — consecutive failures before removal (2), healthy threshold — consecutive successes before it's added back (5). A check that **times out counts as a failure**, same as a bad status code. Only `200` passes by default — a redirect fails the check (`Target.ResponseCodeMismatch`) exactly like silence does (`Target.Timeout`).
+
+**An application has to listen on every address the machine has, not just its own:**
+```bash
+ss -tulnp
+# 0.0.0.0:80     -> every address this machine has; a check from outside reaches it
+# 127.0.0.1:5432 -> this machine only; nothing outside can reach it
+```
+A check always comes from outside the machine, so an app bound only to `127.0.0.1` fails every check while looking perfectly healthy from a shell on the box.
+
+**Homework:** turn on automated backups with a retention period and a maintenance window in your app's quiet hours; add `multi_az = true` once to see the standby, then turn it back off (it roughly doubles the price); and on your own server, run `systemctl is-active` then `curl -i localhost:80`, break the app on purpose, watch the two answers disagree, then fix it.

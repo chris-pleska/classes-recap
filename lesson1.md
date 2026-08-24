@@ -6095,3 +6095,182 @@ Optional practice and Q&A held after the main lecture — less structured, stude
 - **Then prove the restore, for real** — next time you need it, restore from your own snapshot. Connect, run `\dt` and `\du`, and put the **new hostname** into your secret.
 
 **What you know now:** a database needs five jobs done no matter where it lives — install and patch the engine, back it up and prove the restore, keep serving when the machine dies, hold the password out of the code, and report whether it's healthy — and "managed" means another company does some of them from a list, not a quality level. Amazon RDS is not an EC2 instance: no SSH, no shell, only a hostname (the **endpoint**), a port, a user and a password, running across a subnet group that spans two availability zones even though the database itself lives in one. The database needs nothing from the internet, so its subnets get no route out, no NAT gateway, and no public address, and only the app servers' security group is allowed to reach it. The master password Terraform sets lands in the state file as plain text unless `manage_master_user_password` keeps it out entirely — the state file is as sensitive as the secrets inside it. The connection — host, port, user, password, database name — lives together in one secret, and moving it is the developer's job: change what the app reads, not what the platform runs. The data itself moves exactly once, by hand, with `pg_dump` and `psql -f`, after which Postgres comes off the app server's boot script for good. Backups, snapshots, and point-in-time recovery are three different things, but all three hand you back a **new database with a new hostname** — recovery is restore, verify, then repoint, never an in-place fix. A standby answers job 3 by keeping the hostname stable when the machine dies; a read replica is a separate, laggy copy you can actually query. You never destroy a production database — you stop it or snapshot it — and by the end, two of the five jobs have moved to AWS, two moved halfway, and one, the password, never left you.
+
+---
+
+# Lesson 37 — When It Breaks, and When It Can't Answer: Backups, Standbys & the Health Check
+
+## Where We Left Off
+
+The cutover from last session proved itself: edit the environment file, restart the service, and a row count that only the new database could show. The database now lives in RDS, off the app server for good. Two questions were still open. First, the one a working database always raises next — what happens when it, or the machine under it, gets damaged? Second, one that has nothing to do with the database at all: a machine can be reported as running and still be unable to answer a single request.
+
+## The Health Check Still Must Not Ask the Database
+
+A health check answers exactly one question: is this server able to serve? If it queries the database to decide, a slow database makes every server report itself as dead at the same moment, and one problem becomes a total outage. Check what this machine is responsible for, and nothing further away.
+
+AWS already publishes whether the database itself is up, along with its basic numbers — that's half of **job 5**, handed over the moment you moved to RDS. Deciding what counts as unhealthy for your own application, and being told about it, is a different topic — the one the rest of this lesson builds toward.
+
+## Two Questions Decide Everything: RPO and RTO
+
+Before choosing anything that follows, answer both for the app you built — not in general, for yours.
+
+| Question | What it decides |
+|---|---|
+| **How much data can you afford to lose?** | An hour of orders? A day? This decides how often backups happen. The real term is **recovery point objective**, RPO |
+| **How long can you afford to be down?** | Ten minutes? A morning? This decides what you build, not what you back up. The real term is **recovery time objective**, RTO |
+
+A hospital can't restore from yesterday. An airline is busy at every hour, so there's no safe time to be down. The numbers come from the business, and the engineering follows them.
+
+## Backups, Snapshots & Point-in-Time Recovery Are Three Different Things
+
+| | What it is |
+|---|---|
+| **Automated backup** | Runs on a window you set and **expires** after the number of days you chose. You don't take it; it happens |
+| **Snapshot** | One copy, taken by you, that **stays until you delete it** — the same word you used for disks |
+| **Point-in-time recovery** | RDS does this. Go back to **any moment** inside the retention window, not to a copy someone took — it ships the transaction log to S3 every five minutes |
+
+This is **job 2**, the one you proved by hand with `pg_dump`. It's running from the moment the database exists, and you didn't have to remember.
+
+## Restoring Gives You a New Database, Not the Old One Back
+
+All three behave the same way when you restore: you get a **new database with a new hostname**, running beside the one you already have. Nothing is ever put back in place.
+
+So recovery is three steps, not one: restore it, check it's right, then *point the app at the new hostname*. That's exactly why the hostname lives in the secret and not in a file that rebuilds the server.
+
+## A Standby Survives the Machine Dying — Job 3
+
+Turn it on with `multi_az = true` and AWS keeps a full copy of your database in the other availability zone, always up to date. If the machine running your database fails, the standby becomes the database.
+
+| What the failover does | What your application sees |
+|---|---|
+| The hostname stays the same | Nothing to edit, nothing to redeploy |
+| Open connections are dropped | Every live connection breaks and has to be made again |
+| It takes 60 to 120 seconds | Requests fail for that long — this is not invisible |
+| Nothing moves back afterward | The promoted standby stays the database. The machine that failed returns as the new standby |
+
+This is **job 3** — the one that had no answer when the database lived on your own server. Watch this one; don't build it. A standby is a second database, and it roughly **doubles the price**.
+
+## Read Replicas Are for Reading — Standbys Are Not
+
+The standby has no address you can connect to. A **read replica** is a different thing: a copy with its own hostname that you *can* read from — and it **lags**, so a value you just wrote may still show the old one.
+
+A third shape has its own name, a **Multi-AZ DB cluster**: one writer and two readers across three zones, behind one set of endpoints. Named here, not built. You build none of these tonight — each one is an extra database, billing by the hour from the moment it exists.
+
+## You Never Destroy a Production Database
+
+That's the rule, and it's the reason the data had to move off a server you throw away. A **development** database is a different matter — and even then, if you're not certain, take a backup first.
+
+Two ways to stop paying for a database you're done with:
+
+- **Stop it** — a database can be stopped for **up to seven days**, then it starts itself again. You stop paying for the machine; storage and snapshots still cost a little.
+- **Snapshot it, then delete it** — the snapshot keeps your data. When you need the database again, restore it, and you'll get a **new hostname**, exactly as above.
+
+Deleting a database asks you one more question: **take a final snapshot first?** On a practice database you can skip it. On a production database you always take it.
+
+## Five Jobs. Where Each One Went
+
+| The job | Who does it now |
+|---|---|
+| Install and patch the engine | AWS, inside a window you choose |
+| Keep it serving when the machine dies | AWS, if you turn the standby on |
+| Back up, and prove the restore | AWS takes them. **Proving the restore is still yours** |
+| Report whether it is healthy | AWS publishes the numbers. **Deciding what's wrong is still yours** |
+| Hold the password out of the code | You. This one didn't move |
+
+Two moved, two moved halfway, and one stayed with you. That's what "managed" bought you, and now you can say exactly what it costs — the data tier is done.
+
+## More Than One App Server
+
+One address in front of two machines, a check that decides which machine receives requests, and a group that keeps the number of machines running — that's the whole shape of what's ahead. An **Application Load Balancer** in front of a second app server, and an **Auto Scaling group** to keep the right number of them running, are named here and built later. What gets proven tonight is the thing they both depend on: deciding, correctly, whether a single machine can actually serve.
+
+## Running Is Not Answering
+
+Some of you have already had a site stop answering while the machine was fine. You opened the page and nothing came back. You connected to the machine over SSH and it was perfectly healthy — you could type on it, the console said `running`, nothing looked wrong.
+
+What had happened: the application on it had died. **The machine kept reporting that it was running.** A machine can be running and still be unable to answer a request.
+
+## Two Different Facts About One Machine
+
+| | Who answers it |
+|---|---|
+| **Is it running?** | EC2. It's a fact about the machine |
+| **Can it answer a request?** | Only the application. It's a fact about the software on the machine |
+
+Two commands, one for each question, run from the app server itself:
+
+```bash
+# is the service running? — this asks EC2's view of the machine
+sudo systemctl is-active investment-app
+
+# can it answer a request? — this asks the application itself
+curl -i localhost:PORT/HEALTH_PATH
+```
+
+## A Health Endpoint Is a Path. A Health Check Is Someone Asking For It.
+
+**Health endpoint** — a small path your application serves for one purpose: to answer that it's working. It does no other job.
+
+**Health check** — something outside the machine asking for that path, on a timer, and keeping score of the answers.
+
+## An Application Can Die While Its Machine Keeps Running
+
+```bash
+sudo systemctl stop investment-app
+# the instance state stays running. The console still says running.
+
+sudo systemctl start investment-app
+```
+
+Stopping the service doesn't touch EC2's view of the machine at all — the console keeps saying `running` the whole time. Only a request to the health path shows the difference.
+
+## The Five Settings a Health Check Has
+
+| Setting | What it means | If you set nothing |
+|---|---|---|
+| **Path** | The path asked for | `/` |
+| **Interval** | How long between one check and the next | 30 s |
+| **Timeout** | How long to wait for an answer before that single check counts as a failure | 5 s |
+| **Unhealthy threshold** | How many failures in a row before the machine is taken off the list | 2 |
+| **Healthy threshold** | How many successes in a row before it's put back on | 5 |
+
+These five are the whole configuration. Nothing else decides whether a machine is on the list or off it.
+
+## Counting Failures Until the Machine Comes Off the List
+
+Picture a check firing every interval. Two checks answer 200, so the count of consecutive failures stays at nought. The next check answers nothing before the timeout runs out, so the count becomes 1. The check after that fails too — the count reaches **2**, and 2 is the unhealthy threshold, so the machine comes off the list. **A check that times out is a failed check**, counted exactly like an error code — silence and an error move the count the same way.
+
+## What Counts as an Answer, and What Doesn't
+
+| Response | Result |
+|---|---|
+| **200** | The check **passes**. Unless you configured other codes, 200 is the only one that does |
+| **A redirect** | The check **fails** — the console calls it `Target.ResponseCodeMismatch` |
+| **No answer at all** | The check **fails** — the timeout ran out; the console calls it `Target.Timeout` |
+
+A failed check is a failed check either way. A redirect and a silence both count toward the unhealthy threshold, exactly like an error code does.
+
+## An Application Has to Listen on Every Address the Machine Has
+
+```bash
+# on your own app server — what's listening, and on which address
+ss -tulnp
+# the number before the colon is the address it accepts connections on
+0.0.0.0:80      → every address this machine has. A check from outside reaches it.
+127.0.0.1:5432  → this machine only. Nothing outside can ask it anything.
+```
+
+The check comes from **outside** the machine, so an application listening only on `127.0.0.1` fails every check while looking perfectly healthy from a shell on the box itself.
+
+## Why More Than One, Asked About Nine Real Industries
+
+The matrix exercise ran four questions across nine real industries, one cell at a time: who uses it, when it peaks, could one server do it, and what stops if it dies. Then back to your own account: **you have exactly one machine, and it is the whole site** — exactly the gap the health check, the load balancer, and the Auto Scaling group close, in that order, starting next session.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Turn the backups on** — automated backups are off on the database you built. Choose a retention period, and a maintenance window in the hours your own application is least busy.
+- **Try the standby once** — add `multi_az = true` to the database resource and apply it. It's a second database at roughly double the cost, so turn it off again once you've seen it.
+- **Ask your app the two questions** — on your own server: `systemctl is-active`, then `curl -i localhost:80`. Break it on purpose, watch the two answers disagree, then put it back.
+
+**What you know now:** two numbers — RPO, how much data you can afford to lose, and RTO, how long you can afford to be down — decide everything about how a database is protected, before any tool gets chosen. Backups, snapshots, and point-in-time recovery are three different things, but all three hand you back a **new database with a new hostname**, never the old one in place. A standby answers job 3 by keeping the hostname stable through a 60-to-120-second failover when the machine dies; a read replica is a separate, laggy copy you can actually query, and a Multi-AZ DB cluster is a third shape, named but not built. You never destroy a production database — you stop it or snapshot it first. And a machine being **running** and a machine being **able to answer** are two separate facts, answered by two separate things — EC2 for one, a health endpoint for the other — checked on a timer with five settings (path, interval, timeout, unhealthy threshold, healthy threshold) that decide, on their own, whether a machine stays on the list. A timeout counts as a failure exactly like a wrong status code does, and none of it works if the application only listens on `127.0.0.1` instead of every address the machine has.
