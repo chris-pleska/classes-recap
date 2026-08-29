@@ -6274,3 +6274,294 @@ Optional practice and Q&A held after the main lecture — less structured, stude
 - **Ask your app the two questions** — on your own server: `systemctl is-active`, then `curl -i localhost:80`. Break it on purpose, watch the two answers disagree, then put it back.
 
 **What you know now:** two numbers — RPO, how much data you can afford to lose, and RTO, how long you can afford to be down — decide everything about how a database is protected, before any tool gets chosen. Backups, snapshots, and point-in-time recovery are three different things, but all three hand you back a **new database with a new hostname**, never the old one in place. A standby answers job 3 by keeping the hostname stable through a 60-to-120-second failover when the machine dies; a read replica is a separate, laggy copy you can actually query, and a Multi-AZ DB cluster is a third shape, named but not built. You never destroy a production database — you stop it or snapshot it first. And a machine being **running** and a machine being **able to answer** are two separate facts, answered by two separate things — EC2 for one, a health endpoint for the other — checked on a timer with five settings (path, interval, timeout, unhealthy threshold, healthy threshold) that decide, on their own, whether a machine stays on the list. A timeout counts as a failure exactly like a wrong status code does, and none of it works if the application only listens on `127.0.0.1` instead of every address the machine has.
+
+---
+
+# Lesson 38: More Than One App Server — the Application Load Balancer
+
+## Where We Left Off
+
+Last session proved the difference between a machine that's running and a machine that can answer, and named the gap it opens: one machine is the whole site. Two things were named but not built — the Application Load Balancer and the Auto Scaling group. Tonight builds the first one, plus the piece of Terraform that makes a second machine possible at all: `for_each`.
+
+## `for_each` Has Been in Your Files Since the Network
+
+`for_each` repeats one resource block once per entry in a set you give it — no chapter had taught it, even though it was already sitting in your Terraform since the networking unit.
+
+```hcl
+for_each = {
+  frontend = "red"
+  backend  = "green"
+  worker   = "blue"
+}
+
+name = each.key                 # frontend, backend, worker
+tags = { color = each.value }   # red, green, blue
+```
+
+Add a line, get a resource. Delete a line, Terraform destroys that one and leaves the others alone. Yours has two entries, one per public subnet, so the two app servers land in two different availability zones.
+
+## Turning One Machine Into a Set Proposes Destroying It
+
+Terraform identifies a resource **by its name**. Change how a resource is named — a single `aws_instance.app` becoming an `aws_instance.app` with `for_each` — and Terraform sees a different resource. `terraform plan` proposes destroying the old one and creating the new ones in its place.
+
+That's fine here. These app servers hold no data. Replacing one costs boot time and nothing else — and that's only true because the database moved off them onto RDS last session.
+
+## Two Machines Have Two Addresses. A Customer Has One Name to Type.
+
+Two app servers means two addresses, and nothing yet decides which one a request reaches. A customer types one domain name. Something has to sit between that name and the two machines and choose.
+
+## An Application Load Balancer Is One Address That Hands Off to a Machine That Can Answer
+
+**Application Load Balancer (ALB)** — one address that accepts requests, keeps a list of the machines behind it, and gives each request to one machine that is currently answering.
+
+## Four Kinds of Load Balancer, and Yours Reads HTTP
+
+| Kind | What it works on | What it is for |
+|---|---|---|
+| **Application** | HTTP and HTTPS | Reads the request, so it can route on the host name or the path. **Ours.** |
+| **Network** | TCP | Faster and simpler. Does not read the request. |
+| **Gateway** | Traffic passing through | Sends traffic to inspection appliances. |
+| **Classic** | The old one | Still in real accounts you'll inherit. Not used for new work. |
+
+Ours is **internet-facing** rather than internal, because the customers are outside.
+
+## Which of the Four You'll Actually Meet
+
+Roughly eight in ten load balancers you meet in the real world are Application or Network, and about half of those are Application. **Application** is the one you'll work with most — nearly every website you use is behind one. **Network** is the other one you'll actually meet, used more often between services inside a network than facing customers. **Gateway** and **Classic** are rare enough that working engineers go years without configuring one, or you inherit one someone else built. Learn Application and Network properly; recognize the other two by name and move on.
+
+## The Balancer Is Not a Machine, and It Has No Address You Keep
+
+- **Not a machine** — nothing to SSH into.
+- **Two zones, minimum** — one is not allowed.
+- **A name, not an address** — you never write an address down; you get a DNS name that AWS owns.
+
+It bills by the hour for existing, plus a usage unit called an **LCU**, a Load Balancer Capacity Unit — not per request.
+
+## A Balancer Has Three Parts, and Each One Has a Name
+
+- **Listener** — the port and protocol the balancer accepts on.
+- **Rule** — what the listener consults to decide which target group a request goes to.
+- **Target group** — the list of machines, and the health check that decides who is on that list.
+
+You'll type all three of these words into the console, and an interviewer will use all three.
+
+## The Request Goes Straight From the Balancer to One Machine
+
+The part that gets drawn wrong most often: the listener and the rule are **inside** the balancer, and the target group is a list the balancer reads. **None of the three is a machine the request passes through.** One request arrives at the balancer, the balancer consults its listener and rule, reads its target group list, and sends the request straight to the one machine it chose.
+
+## How the Balancer Picks Which Machine
+
+| Algorithm | How it decides |
+|---|---|
+| **Round robin** (default) | First request to the first machine, second to the second, then back to the first. Doesn't look at how busy either machine is. With two machines running the same application, this is the right answer, and you leave it alone. |
+| **Least outstanding requests** | The request goes to whichever machine has the fewest requests still in flight. Worth changing to when some requests take far longer than others. |
+
+This is a setting on the **target group**, not the balancer — the interview word for it is the **routing algorithm**. Neither algorithm ever picks a machine that's off the list. **The health check decides who is on the list; the algorithm only chooses between the machines already on it.**
+
+## What a Rule Routes On, and What a Target Group Can Hold
+
+A **rule** routes on the **host name** or the **path**. It can also answer by itself — a **fixed response**, which serves a maintenance page with no machine behind it, or a **redirect**.
+
+A **target group** can hold **instances**, plain **IP addresses**, or a **Lambda function** — so one balancer can front things that aren't servers at all. Three more settings live on it: **cross-zone** (spread evenly across zones), **stickiness** (one person returns to one machine), and **idle timeout** (how long a quiet connection is held). Access logs to S3 exist and are **off by default** — reading them is a later topic; knowing the setting exists is this one.
+
+## A Load Balancer Does Not Go in Front of Your Database
+
+Your two app servers are interchangeable — neither keeps anything, so a request sent to either gets the same answer, and spreading requests between them is safe. A database keeps the data. Put two behind a balancer and one purchase gets written to one of them; the other has never heard of it, and there's no longer a single true answer to "how many shares do I own." That's why one primary takes every write, and why the standby and read replica from last session aren't a way around it — the standby serves no traffic at all, and a read replica answers reads only.
+
+## One Machine Registers First, So a Second Can't Hide a Problem
+
+Targets register in order: one is added to the target group and has to clear the unhealthy threshold and reach **healthy** before the second is added. That way a healthy first machine can never mask a second one that never comes up.
+
+## Proving Which Machine Answered
+
+Both app servers run the same application and return the same page, so you can't tell which one answered from the response alone — unless the application says so:
+
+```python
+import socket
+
+# on GET /health
+return {"status": "ok", "server": socket.gethostname()}
+```
+
+```bash
+curl http://<balancer-dns-name>/health
+# {"status":"ok","server":"ip-10-0-1-42"}
+curl http://<balancer-dns-name>/health
+# {"status":"ok","server":"ip-10-0-2-17"}
+```
+
+Two different names in two calls is round robin, seen directly. It's also the quickest way to prove a machine has come off the list: **its name stops appearing.**
+
+## Five Reasons a Target Goes Unhealthy, and the One Check for Each
+
+All five are configuration, not bad luck, and each one has a single check that settles it:
+
+| Why every target is unhealthy | The one check that tells you |
+|---|---|
+| The health path answers with a redirect | Ask for the path from off the machine and read the status |
+| The application listens only on localhost | Check what address it is listening on |
+| The security group doesn't let the balancer through | Check the rule from the balancer to the machine, not the reverse |
+| The grace period is shorter than the boot | Time how long the machine takes to answer after it starts |
+| The health check asks on one port and the application listens on another | Compare the four ports: listener, security group, health check, application |
+
+While you're learning, keep **one port all the way across** — 80 on the listener, 80 in the security group, 80 on the health check, 80 in the application. A port that doesn't match is the most common of the five and the least interesting to debug.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Pull main and apply the balancer** — the `alb.tf` written in class is merged. Pull it, then change two things to your own before you apply: the S3 bucket in the backend block, and the key name on the instances.
+- **Open the balancer's name, not an IP** — check the target group first. Both targets have to read **healthy** before the name answers. If one doesn't, it's one of the five reasons, and the port is the most likely.
+- **Stop hard-coding the database address** — the endpoint was pasted in by hand in class. Take it from the database resource instead, so a rebuilt database doesn't leave the application pointing at an address that's gone.
+
+**What you know now:** `for_each` repeats one resource block per entry in a set, and changing a resource's name — including turning a single instance into a set — makes Terraform propose destroying the old one and building new ones, which is safe here only because these app servers hold no data. An Application Load Balancer is one address, made of three named parts — **listener**, **rule**, **target group** — none of which is a machine the request passes through; it reads from HTTP and HTTPS, one of four kinds of load balancer alongside Network, Gateway, and Classic. The **target group** decides who's on the list, via its health check, and separately decides how to split traffic between them, via its **routing algorithm** — round robin by default, least outstanding requests when work is uneven. A balancer never goes in front of a database, because app servers are interchangeable and a database is not. And when a target goes unhealthy, it's always one of five configuration causes — a redirect on the health path, an address bound to localhost only, a security group blocking the balancer, a grace period shorter than boot time, or a port that doesn't match all the way across — never bad luck.
+
+---
+
+# Lesson 39: The Group That Keeps the Count — EC2 Auto Scaling
+
+## Where We Left Off
+
+Last session built the balancer: one address, three named parts, a health check deciding who's on the list. Two things it exposed were named but not explained — what the balancer actually does when *every* target fails the check, and what happens to a person's login when their next request lands on a different machine. Tonight closes both, then builds the piece that makes a second machine automatic instead of something you type by hand: the Auto Scaling group.
+
+## The Balancer Fails Open — It Never Refuses Everything
+
+| Situation | What happens |
+|---|---|
+| **Some targets unhealthy** | The balancer sends requests only to the healthy ones. The site keeps answering and nobody outside notices. |
+| **All targets unhealthy** | The balancer **sends requests to all of them anyway**. It isn't allowed to refuse every request, so it tries. You see whatever a dead application produces — a **502** if the connection is refused, a **504** if it never answers. |
+| **A real 503** | Means something different: the target group has **no registered targets at all**. Not unhealthy machines — no machines. |
+
+AWS calls the middle row **failing open**. Refusing every request is worse than trying a machine that might still answer, so the balancer stops filtering. An unhealthy target is not the same thing as no target.
+
+## `initial` Is Not a Failure — It's the Check Arriving Before the Machine Is Ready
+
+Identical machines built from the same launch template can show different health for one reason: the check ran on one of them before its application finished starting.
+
+**initial** — the target is registered and its first health check hasn't finished. This is not a failure. AWS gives it the reason code `Elb.InitialHealthChecking`.
+
+| Setting | Where it lives, and what it controls | This deck's value |
+|---|---|---|
+| `interval` | Target group. Seconds between checks on one machine. Range 5–300. | 30 |
+| `unhealthy_threshold` | Target group. Failures in a row before the machine is taken out. Range 2–10. | 2 |
+| `health_check_grace_period` | Auto Scaling group. Seconds a new machine is left alone before the group judges it. | 300 |
+
+Every machine in the group is built from the same launch template. A split result across two of them is the check arriving early on one, not two machines in different condition.
+
+## An Unhealthy Target and an Error Page Are Two Different Problems
+
+| | What it means |
+|---|---|
+| **Target unhealthy** | The machine is the problem. The request never reaches the application. |
+| **Target healthy, error page** | Something the machine depends on is the problem — most often the database. |
+
+If you still can't reach your own database, this is that same problem again, not a new one. Start by pasting the health status into Claude.
+
+## One Person, One Machine, and the Next Request Lands Somewhere Else
+
+You're not logged in. You put a T-shirt in a basket, close the browser, come back an hour later, and it's still there. Something remembered you, and it wasn't your account.
+
+**stateless** — the machine keeps nothing that the next request needs. So it doesn't matter which machine gets that request.
+
+With two app servers and a balancer choosing between them by round robin, a login held on one machine is invisible to the other. The next request just doesn't know you.
+
+## Sticky Sessions Treats the Symptom. A Shared Session Store Fixes the Cause.
+
+| | What it is |
+|---|---|
+| **Sticky sessions** | One setting on the target group. The same person keeps going back to the same machine. |
+| **What it costs** | That machine failing now takes their session with it, and the machines stop being evenly loaded. |
+| **The real fix** | A **shared session store** — the state moves off both machines into something both of them read. Named here; built in a later topic. |
+
+**Connection pooling**, mentioned alongside it: several app servers each hold open connections, and the database allows only a finite number. The tool is **RDS Proxy**. Not built here.
+
+## An Auto Scaling Group Keeps a Stated Number of Machines Running
+
+**launch template** — the recipe a new machine is built from, so something other than a person can make one.
+
+**Auto Scaling group (ASG)** — keeps a stated number of machines running, building each one from that template.
+
+## A Launch Template Is a Definition. Nothing Runs Until Something Builds a Machine From It.
+
+| | |
+|---|---|
+| **What it is** | Saved answers to the questions the EC2 launch screen asks. It costs nothing and it isn't running. |
+| **What it isn't** | Not a machine, and not an AMI. A machine built from it is an ordinary EC2, the same as one launched by hand. |
+
+Two different things build a machine from the same template:
+
+```
+# a person, in the console
+Actions → Launch instance from template
+
+# the Auto Scaling group, with nobody logged in
+launch_template { id = aws_launch_template.app.id }
+```
+
+The template **holds** an AMI id. It isn't built from an AMI and it doesn't replace one.
+
+## What a Launch Template Holds Is the Same List You'd Fill In for One EC2
+
+```hcl
+# launch-template.tf
+resource "aws_launch_template" "app" {
+  image_id      = data.aws_ami.al2023.id   # which operating system
+  instance_type = var.instance_type        # how big
+  key_name      = var.key_name             # which SSH key
+
+  iam_instance_profile { ... }             # what it's allowed to read
+  network_interfaces   { ... }             # public IP, security group
+  user_data            = ...               # what it installs while booting
+}
+```
+
+There's no subnet in it. The **Auto Scaling group** holds the subnets, because the group is the one deciding where each machine goes.
+
+## Minimum, Desired and Maximum Are Three Separate Instructions, Not Three Levels
+
+| | What it does |
+|---|---|
+| **Minimum** | Never go below this. The group builds a machine to stay at it. |
+| **Desired** | The number it actually keeps right now. This is the one you change by hand. |
+| **Maximum** | Never go above this, whatever else happens. |
+
+Change desired from 2 to 3, and a third machine you never touched starts answering on the same address.
+
+## Changing Desired by Hand Is Scaling — the Same Number a Policy Changes
+
+| | |
+|---|---|
+| **You change it** | Edit desired in the console or in `asg.tf`. The group builds or removes machines to reach the new number. |
+| **A policy changes it** | Same number, moved by a metric instead of a person. Nothing else about the group is different. |
+
+Desired has to sit between the other two — the console refuses `minimum 2, desired 1` before it will create the group. With desired set to 4, two more machines start, register in the target group, pass the check, and take requests. **No policy is involved in any of it.**
+
+## The Group Registers Every Machine It Builds Into the Target Group
+
+```hcl
+# asg.tf — the line that joins the two halves
+resource "aws_autoscaling_group" "app" {
+  target_group_arns = [aws_lb_target_group.app.arn]
+}
+```
+
+Without that line, the group still builds machines and the balancer never sends them a request. The group registers each one, the health check runs, and only then does traffic arrive.
+
+## When the Group Builds the Machines, the Instance Resource Comes Out of Your Code
+
+| | |
+|---|---|
+| **Before** | `aws_instance` with `for_each`, plus one `aws_lb_target_group_attachment` for each machine. Two machines exist because the file says two. |
+| **After** | `aws_autoscaling_group` with a desired capacity and `target_group_arns`. Machines exist because the group keeps that number. |
+
+Keep both and you have two machines the group doesn't manage, running and billed beside the ones it does. Delete the instance block and the attachments, then apply.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Pull main, then point the backend at your own bucket** — `launch-template.tf` and `asg.tf` were pushed during class. The backend block in `providers.tf` still names the bucket used on screen, so `terraform init` fails on the state file until you put yours back.
+- **Delete your own instance block** — the group builds the machines now. Leaving `aws_instance` in place leaves two machines running and billed that the group doesn't manage. The `aws_lb_target_group_attachment` resources go with it.
+- **Terminate one machine and watch it come back** — the group builds a replacement to hold its desired count. Check the target group while it happens: the new machine reads **initial** first, and only takes requests once it has passed the check.
+
+**What you know now:** the balancer fails open — when every target is unhealthy it still tries to send requests, producing a 502 or 504, and a real 503 means the target group has no registered targets at all, not unhealthy ones. `initial` is the check arriving before a freshly built machine is ready, not a failure, and it's told apart from a real problem by five settings split across two resources — `interval` and `unhealthy_threshold` on the target group, `health_check_grace_period` on the Auto Scaling group. A target that's unhealthy and a target that's healthy but returning an error page are different problems — one is the machine, the other is usually the database behind it. Statelessness means the next request doesn't care which machine answers it; sticky sessions patches around a machine that isn't stateless, at the cost of uneven load and a session that dies with its machine, where the real fix is a shared session store. An Auto Scaling group keeps a stated number of machines running, built from a **launch template** — a definition that costs nothing until something builds from it — with minimum, desired and maximum as three separate instructions rather than a range, `target_group_arns` as the line that puts every machine the group builds onto the balancer's list, and the `aws_instance` block coming out of your code entirely once the group is what's building machines.

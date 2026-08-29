@@ -74,6 +74,8 @@
 <li><a href="#lesson-35-the-data-tier-amazon-rds-managed-databases-moving-your-data">Lesson 35: The Data Tier — Amazon RDS, Managed Databases &amp; Moving Your Data</a></li>
 <li><a href="#lesson-36-the-cutover-moving-your-data-reading-a-route-table-when-it-goes-wrong">Lesson 36 — The Cutover: Moving Your Data, Reading a Route Table &amp; When It Goes Wrong</a></li>
 <li><a href="#lesson-37-when-it-breaks-and-when-it-cant-answer-backups-standbys-the-health-check">Lesson 37 — When It Breaks, and When It Can't Answer: Backups, Standbys &amp; the Health Check</a></li>
+<li><a href="#lesson-38-more-than-one-app-server-the-application-load-balancer">Lesson 38: More Than One App Server — the Application Load Balancer</a></li>
+<li><a href="#lesson-39-the-group-that-keeps-the-count-ec2-auto-scaling">Lesson 39: The Group That Keeps the Count — EC2 Auto Scaling</a></li>
   </ul>
 </nav>
 <main>
@@ -7087,6 +7089,389 @@ ss -tulnp
 <li><strong>Ask your app the two questions</strong> — on your own server: <code>systemctl is-active</code>, then <code>curl -i localhost:80</code>. Break it on purpose, watch the two answers disagree, then put it back.</li>
 </ul>
 <p><strong>What you know now:</strong> two numbers — RPO, how much data you can afford to lose, and RTO, how long you can afford to be down — decide everything about how a database is protected, before any tool gets chosen. Backups, snapshots, and point-in-time recovery are three different things, but all three hand you back a <strong>new database with a new hostname</strong>, never the old one in place. A standby answers job 3 by keeping the hostname stable through a 60-to-120-second failover when the machine dies; a read replica is a separate, laggy copy you can actually query, and a Multi-AZ DB cluster is a third shape, named but not built. You never destroy a production database — you stop it or snapshot it first. And a machine being <strong>running</strong> and a machine being <strong>able to answer</strong> are two separate facts, answered by two separate things — EC2 for one, a health endpoint for the other — checked on a timer with five settings (path, interval, timeout, unhealthy threshold, healthy threshold) that decide, on their own, whether a machine stays on the list. A timeout counts as a failure exactly like a wrong status code does, and none of it works if the application only listens on <code>127.0.0.1</code> instead of every address the machine has.</p>
+
+<h1 id="lesson-38-more-than-one-app-server-the-application-load-balancer">Lesson 38: More Than One App Server — the Application Load Balancer</h1>
+<h2 id="where-we-left-off_3">Where We Left Off</h2>
+<p>Last session proved the difference between a machine that's running and a machine that can answer, and named the gap it opens: one machine is the whole site. Two things were named but not built — the Application Load Balancer and the Auto Scaling group. Tonight builds the first one, plus the piece of Terraform that makes a second machine possible at all: <code>for_each</code>.</p>
+<h2 id="for_each-has-been-in-your-files-since-the-network"><code>for_each</code> Has Been in Your Files Since the Network</h2>
+<p><code>for_each</code> repeats one resource block once per entry in a set you give it — no chapter had taught it, even though it was already sitting in your Terraform since the networking unit.</p>
+<pre><code class="language-hcl">for_each = {
+  frontend = "red"
+  backend  = "green"
+  worker   = "blue"
+}
+
+name = each.key                 # frontend, backend, worker
+tags = { color = each.value }   # red, green, blue
+</code></pre>
+<p>Add a line, get a resource. Delete a line, Terraform destroys that one and leaves the others alone. Yours has two entries, one per public subnet, so the two app servers land in two different availability zones.</p>
+<h2 id="turning-one-machine-into-a-set-proposes-destroying-it">Turning One Machine Into a Set Proposes Destroying It</h2>
+<p>Terraform identifies a resource <strong>by its name</strong>. Change how a resource is named — a single <code>aws_instance.app</code> becoming an <code>aws_instance.app</code> with <code>for_each</code> — and Terraform sees a different resource. <code>terraform plan</code> proposes destroying the old one and creating the new ones in its place.</p>
+<p>That's fine here. These app servers hold no data. Replacing one costs boot time and nothing else — and that's only true because the database moved off them onto RDS last session.</p>
+<h2 id="two-machines-have-two-addresses-a-customer-has-one-name-to-type">Two Machines Have Two Addresses. A Customer Has One Name to Type.</h2>
+<p>Two app servers means two addresses, and nothing yet decides which one a request reaches. A customer types one domain name. Something has to sit between that name and the two machines and choose.</p>
+<h2 id="an-application-load-balancer-is-one-address-that-hands-off-to-a-machine-that-can-answer">An Application Load Balancer Is One Address That Hands Off to a Machine That Can Answer</h2>
+<p><strong>Application Load Balancer (ALB)</strong> — one address that accepts requests, keeps a list of the machines behind it, and gives each request to one machine that is currently answering.</p>
+<h2 id="four-kinds-of-load-balancer-and-yours-reads-http">Four Kinds of Load Balancer, and Yours Reads HTTP</h2>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>What it works on</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Application</strong></td>
+<td>HTTP and HTTPS</td>
+<td>Reads the request, so it can route on the host name or the path. <strong>Ours.</strong></td>
+</tr>
+<tr>
+<td><strong>Network</strong></td>
+<td>TCP</td>
+<td>Faster and simpler. Does not read the request.</td>
+</tr>
+<tr>
+<td><strong>Gateway</strong></td>
+<td>Traffic passing through</td>
+<td>Sends traffic to inspection appliances.</td>
+</tr>
+<tr>
+<td><strong>Classic</strong></td>
+<td>The old one</td>
+<td>Still in real accounts you'll inherit. Not used for new work.</td>
+</tr>
+</tbody>
+</table>
+<p>Ours is <strong>internet-facing</strong> rather than internal, because the customers are outside.</p>
+<h2 id="which-of-the-four-youll-actually-meet">Which of the Four You'll Actually Meet</h2>
+<p>Roughly eight in ten load balancers you meet in the real world are Application or Network, and about half of those are Application. <strong>Application</strong> is the one you'll work with most — nearly every website you use is behind one. <strong>Network</strong> is the other one you'll actually meet, used more often between services inside a network than facing customers. <strong>Gateway</strong> and <strong>Classic</strong> are rare enough that working engineers go years without configuring one, or you inherit one someone else built. Learn Application and Network properly; recognize the other two by name and move on.</p>
+<h2 id="the-balancer-is-not-a-machine-and-it-has-no-address-you-keep">The Balancer Is Not a Machine, and It Has No Address You Keep</h2>
+<ul>
+<li><strong>Not a machine</strong> — nothing to SSH into.</li>
+<li><strong>Two zones, minimum</strong> — one is not allowed.</li>
+<li><strong>A name, not an address</strong> — you never write an address down; you get a DNS name that AWS owns.</li>
+</ul>
+<p>It bills by the hour for existing, plus a usage unit called an <strong>LCU</strong>, a Load Balancer Capacity Unit — not per request.</p>
+<h2 id="a-balancer-has-three-parts-and-each-one-has-a-name">A Balancer Has Three Parts, and Each One Has a Name</h2>
+<ul>
+<li><strong>Listener</strong> — the port and protocol the balancer accepts on.</li>
+<li><strong>Rule</strong> — what the listener consults to decide which target group a request goes to.</li>
+<li><strong>Target group</strong> — the list of machines, and the health check that decides who is on that list.</li>
+</ul>
+<p>You'll type all three of these words into the console, and an interviewer will use all three.</p>
+<h2 id="the-request-goes-straight-from-the-balancer-to-one-machine">The Request Goes Straight From the Balancer to One Machine</h2>
+<p>The part that gets drawn wrong most often: the listener and the rule are <strong>inside</strong> the balancer, and the target group is a list the balancer reads. <strong>None of the three is a machine the request passes through.</strong> One request arrives at the balancer, the balancer consults its listener and rule, reads its target group list, and sends the request straight to the one machine it chose.</p>
+<h2 id="how-the-balancer-picks-which-machine">How the Balancer Picks Which Machine</h2>
+<table>
+<thead>
+<tr>
+<th>Algorithm</th>
+<th>How it decides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Round robin</strong> (default)</td>
+<td>First request to the first machine, second to the second, then back to the first. Doesn't look at how busy either machine is. With two machines running the same application, this is the right answer, and you leave it alone.</td>
+</tr>
+<tr>
+<td><strong>Least outstanding requests</strong></td>
+<td>The request goes to whichever machine has the fewest requests still in flight. Worth changing to when some requests take far longer than others.</td>
+</tr>
+</tbody>
+</table>
+<p>This is a setting on the <strong>target group</strong>, not the balancer — the interview word for it is the <strong>routing algorithm</strong>. Neither algorithm ever picks a machine that's off the list. <strong>The health check decides who is on the list; the algorithm only chooses between the machines already on it.</strong></p>
+<h2 id="what-a-rule-routes-on-and-what-a-target-group-can-hold">What a Rule Routes On, and What a Target Group Can Hold</h2>
+<p>A <strong>rule</strong> routes on the <strong>host name</strong> or the <strong>path</strong>. It can also answer by itself — a <strong>fixed response</strong>, which serves a maintenance page with no machine behind it, or a <strong>redirect</strong>.</p>
+<p>A <strong>target group</strong> can hold <strong>instances</strong>, plain <strong>IP addresses</strong>, or a <strong>Lambda function</strong> — so one balancer can front things that aren't servers at all. Three more settings live on it: <strong>cross-zone</strong> (spread evenly across zones), <strong>stickiness</strong> (one person returns to one machine), and <strong>idle timeout</strong> (how long a quiet connection is held). Access logs to S3 exist and are <strong>off by default</strong> — reading them is a later topic; knowing the setting exists is this one.</p>
+<h2 id="a-load-balancer-does-not-go-in-front-of-your-database">A Load Balancer Does Not Go in Front of Your Database</h2>
+<p>Your two app servers are interchangeable — neither keeps anything, so a request sent to either gets the same answer, and spreading requests between them is safe. A database keeps the data. Put two behind a balancer and one purchase gets written to one of them; the other has never heard of it, and there's no longer a single true answer to "how many shares do I own." That's why one primary takes every write, and why the standby and read replica from last session aren't a way around it — the standby serves no traffic at all, and a read replica answers reads only.</p>
+<h2 id="one-machine-registers-first-so-a-second-cant-hide-a-problem">One Machine Registers First, So a Second Can't Hide a Problem</h2>
+<p>Targets register in order: one is added to the target group and has to clear the unhealthy threshold and reach <strong>healthy</strong> before the second is added. That way a healthy first machine can never mask a second one that never comes up.</p>
+<h2 id="proving-which-machine-answered">Proving Which Machine Answered</h2>
+<p>Both app servers run the same application and return the same page, so you can't tell which one answered from the response alone — unless the application says so:</p>
+<pre><code class="language-python">import socket
+
+# on GET /health
+return {"status": "ok", "server": socket.gethostname()}
+</code></pre>
+<pre><code class="language-bash">curl http://&lt;balancer-dns-name&gt;/health
+# {"status":"ok","server":"ip-10-0-1-42"}
+curl http://&lt;balancer-dns-name&gt;/health
+# {"status":"ok","server":"ip-10-0-2-17"}
+</code></pre>
+<p>Two different names in two calls is round robin, seen directly. It's also the quickest way to prove a machine has come off the list: <strong>its name stops appearing.</strong></p>
+<h2 id="five-reasons-a-target-goes-unhealthy-and-the-one-check-for-each">Five Reasons a Target Goes Unhealthy, and the One Check for Each</h2>
+<p>All five are configuration, not bad luck, and each one has a single check that settles it:</p>
+<table>
+<thead>
+<tr>
+<th>Why every target is unhealthy</th>
+<th>The one check that tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The health path answers with a redirect</td>
+<td>Ask for the path from off the machine and read the status</td>
+</tr>
+<tr>
+<td>The application listens only on localhost</td>
+<td>Check what address it is listening on</td>
+</tr>
+<tr>
+<td>The security group doesn't let the balancer through</td>
+<td>Check the rule from the balancer to the machine, not the reverse</td>
+</tr>
+<tr>
+<td>The grace period is shorter than the boot</td>
+<td>Time how long the machine takes to answer after it starts</td>
+</tr>
+<tr>
+<td>The health check asks on one port and the application listens on another</td>
+<td>Compare the four ports: listener, security group, health check, application</td>
+</tr>
+</tbody>
+</table>
+<p>While you're learning, keep <strong>one port all the way across</strong> — 80 on the listener, 80 in the security group, 80 on the health check, 80 in the application. A port that doesn't match is the most common of the five and the least interesting to debug.</p>
+<h2 id="after-class_18">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Pull main and apply the balancer</strong> — the <code>alb.tf</code> written in class is merged. Pull it, then change two things to your own before you apply: the S3 bucket in the backend block, and the key name on the instances.</li>
+<li><strong>Open the balancer's name, not an IP</strong> — check the target group first. Both targets have to read <strong>healthy</strong> before the name answers. If one doesn't, it's one of the five reasons, and the port is the most likely.</li>
+<li><strong>Stop hard-coding the database address</strong> — the endpoint was pasted in by hand in class. Take it from the database resource instead, so a rebuilt database doesn't leave the application pointing at an address that's gone.</li>
+</ul>
+<p><strong>What you know now:</strong> <code>for_each</code> repeats one resource block per entry in a set, and changing a resource's name — including turning a single instance into a set — makes Terraform propose destroying the old one and building new ones, which is safe here only because these app servers hold no data. An Application Load Balancer is one address, made of three named parts — <strong>listener</strong>, <strong>rule</strong>, <strong>target group</strong> — none of which is a machine the request passes through; it reads from HTTP and HTTPS, one of four kinds of load balancer alongside Network, Gateway, and Classic. The <strong>target group</strong> decides who's on the list, via its health check, and separately decides how to split traffic between them, via its <strong>routing algorithm</strong> — round robin by default, least outstanding requests when work is uneven. A balancer never goes in front of a database, because app servers are interchangeable and a database is not. And when a target goes unhealthy, it's always one of five configuration causes — a redirect on the health path, an address bound to localhost only, a security group blocking the balancer, a grace period shorter than boot time, or a port that doesn't match all the way across — never bad luck.</p>
+
+<h1 id="lesson-39-the-group-that-keeps-the-count-ec2-auto-scaling">Lesson 39: The Group That Keeps the Count — EC2 Auto Scaling</h1>
+<h2 id="where-we-left-off_4">Where We Left Off</h2>
+<p>Last session built the balancer: one address, three named parts, a health check deciding who's on the list. Two things it exposed were named but not explained — what the balancer actually does when <em>every</em> target fails the check, and what happens to a person's login when their next request lands on a different machine. Tonight closes both, then builds the piece that makes a second machine automatic instead of something you type by hand: the Auto Scaling group.</p>
+<h2 id="the-balancer-fails-open-it-never-refuses-everything">The Balancer Fails Open — It Never Refuses Everything</h2>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Some targets unhealthy</strong></td>
+<td>The balancer sends requests only to the healthy ones. The site keeps answering and nobody outside notices.</td>
+</tr>
+<tr>
+<td><strong>All targets unhealthy</strong></td>
+<td>The balancer <strong>sends requests to all of them anyway</strong>. It isn't allowed to refuse every request, so it tries. You see whatever a dead application produces — a <strong>502</strong> if the connection is refused, a <strong>504</strong> if it never answers.</td>
+</tr>
+<tr>
+<td><strong>A real 503</strong></td>
+<td>Means something different: the target group has <strong>no registered targets at all</strong>. Not unhealthy machines — no machines.</td>
+</tr>
+</tbody>
+</table>
+<p>AWS calls the middle row <strong>failing open</strong>. Refusing every request is worse than trying a machine that might still answer, so the balancer stops filtering. An unhealthy target is not the same thing as no target.</p>
+<h2 id="initial-is-not-a-failure-its-the-check-arriving-before-the-machine-is-ready"><code>initial</code> Is Not a Failure — It's the Check Arriving Before the Machine Is Ready</h2>
+<p>Identical machines built from the same launch template can show different health for one reason: the check ran on one of them before its application finished starting.</p>
+<p><strong>initial</strong> — the target is registered and its first health check hasn't finished. This is not a failure. AWS gives it the reason code <code>Elb.InitialHealthChecking</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Where it lives, and what it controls</th>
+<th>This deck's value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interval</code></td>
+<td>Target group. Seconds between checks on one machine. Range 5–300.</td>
+<td>30</td>
+</tr>
+<tr>
+<td><code>unhealthy_threshold</code></td>
+<td>Target group. Failures in a row before the machine is taken out. Range 2–10.</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>health_check_grace_period</code></td>
+<td>Auto Scaling group. Seconds a new machine is left alone before the group judges it.</td>
+<td>300</td>
+</tr>
+</tbody>
+</table>
+<p>Every machine in the group is built from the same launch template. A split result across two of them is the check arriving early on one, not two machines in different condition.</p>
+<h2 id="an-unhealthy-target-and-an-error-page-are-two-different-problems">An Unhealthy Target and an Error Page Are Two Different Problems</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Target unhealthy</strong></td>
+<td>The machine is the problem. The request never reaches the application.</td>
+</tr>
+<tr>
+<td><strong>Target healthy, error page</strong></td>
+<td>Something the machine depends on is the problem — most often the database.</td>
+</tr>
+</tbody>
+</table>
+<p>If you still can't reach your own database, this is that same problem again, not a new one. Start by pasting the health status into Claude.</p>
+<h2 id="one-person-one-machine-and-the-next-request-lands-somewhere-else">One Person, One Machine, and the Next Request Lands Somewhere Else</h2>
+<p>You're not logged in. You put a T-shirt in a basket, close the browser, come back an hour later, and it's still there. Something remembered you, and it wasn't your account.</p>
+<p><strong>stateless</strong> — the machine keeps nothing that the next request needs. So it doesn't matter which machine gets that request.</p>
+<p>With two app servers and a balancer choosing between them by round robin, a login held on one machine is invisible to the other. The next request just doesn't know you.</p>
+<h2 id="sticky-sessions-treats-the-symptom-a-shared-session-store-fixes-the-cause">Sticky Sessions Treats the Symptom. A Shared Session Store Fixes the Cause.</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sticky sessions</strong></td>
+<td>One setting on the target group. The same person keeps going back to the same machine.</td>
+</tr>
+<tr>
+<td><strong>What it costs</strong></td>
+<td>That machine failing now takes their session with it, and the machines stop being evenly loaded.</td>
+</tr>
+<tr>
+<td><strong>The real fix</strong></td>
+<td>A <strong>shared session store</strong> — the state moves off both machines into something both of them read. Named here; built in a later topic.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Connection pooling</strong>, mentioned alongside it: several app servers each hold open connections, and the database allows only a finite number. The tool is <strong>RDS Proxy</strong>. Not built here.</p>
+<h2 id="an-auto-scaling-group-keeps-a-stated-number-of-machines-running">An Auto Scaling Group Keeps a Stated Number of Machines Running</h2>
+<p><strong>launch template</strong> — the recipe a new machine is built from, so something other than a person can make one.</p>
+<p><strong>Auto Scaling group (ASG)</strong> — keeps a stated number of machines running, building each one from that template.</p>
+<h2 id="a-launch-template-is-a-definition-nothing-runs-until-something-builds-a-machine-from-it">A Launch Template Is a Definition. Nothing Runs Until Something Builds a Machine From It.</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>What it is</strong></td>
+<td>Saved answers to the questions the EC2 launch screen asks. It costs nothing and it isn't running.</td>
+</tr>
+<tr>
+<td><strong>What it isn't</strong></td>
+<td>Not a machine, and not an AMI. A machine built from it is an ordinary EC2, the same as one launched by hand.</td>
+</tr>
+</tbody>
+</table>
+<p>Two different things build a machine from the same template:</p>
+<pre><code># a person, in the console
+Actions → Launch instance from template
+
+# the Auto Scaling group, with nobody logged in
+launch_template { id = aws_launch_template.app.id }
+</code></pre>
+<p>The template <strong>holds</strong> an AMI id. It isn't built from an AMI and it doesn't replace one.</p>
+<h2 id="what-a-launch-template-holds-is-the-same-list-youd-fill-in-for-one-ec2">What a Launch Template Holds Is the Same List You'd Fill In for One EC2</h2>
+<pre><code class="language-hcl"># launch-template.tf
+resource "aws_launch_template" "app" {
+  image_id      = data.aws_ami.al2023.id   # which operating system
+  instance_type = var.instance_type        # how big
+  key_name      = var.key_name             # which SSH key
+
+  iam_instance_profile { ... }             # what it's allowed to read
+  network_interfaces   { ... }             # public IP, security group
+  user_data            = ...               # what it installs while booting
+}
+</code></pre>
+<p>There's no subnet in it. The <strong>Auto Scaling group</strong> holds the subnets, because the group is the one deciding where each machine goes.</p>
+<h2 id="minimum-desired-and-maximum-are-three-separate-instructions-not-three-levels">Minimum, Desired and Maximum Are Three Separate Instructions, Not Three Levels</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Minimum</strong></td>
+<td>Never go below this. The group builds a machine to stay at it.</td>
+</tr>
+<tr>
+<td><strong>Desired</strong></td>
+<td>The number it actually keeps right now. This is the one you change by hand.</td>
+</tr>
+<tr>
+<td><strong>Maximum</strong></td>
+<td>Never go above this, whatever else happens.</td>
+</tr>
+</tbody>
+</table>
+<p>Change desired from 2 to 3, and a third machine you never touched starts answering on the same address.</p>
+<h2 id="changing-desired-by-hand-is-scaling-the-same-number-a-policy-changes">Changing Desired by Hand Is Scaling — the Same Number a Policy Changes</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>You change it</strong></td>
+<td>Edit desired in the console or in <code>asg.tf</code>. The group builds or removes machines to reach the new number.</td>
+</tr>
+<tr>
+<td><strong>A policy changes it</strong></td>
+<td>Same number, moved by a metric instead of a person. Nothing else about the group is different.</td>
+</tr>
+</tbody>
+</table>
+<p>Desired has to sit between the other two — the console refuses <code>minimum 2, desired 1</code> before it will create the group. With desired set to 4, two more machines start, register in the target group, pass the check, and take requests. <strong>No policy is involved in any of it.</strong></p>
+<h2 id="the-group-registers-every-machine-it-builds-into-the-target-group">The Group Registers Every Machine It Builds Into the Target Group</h2>
+<pre><code class="language-hcl"># asg.tf — the line that joins the two halves
+resource "aws_autoscaling_group" "app" {
+  target_group_arns = [aws_lb_target_group.app.arn]
+}
+</code></pre>
+<p>Without that line, the group still builds machines and the balancer never sends them a request. The group registers each one, the health check runs, and only then does traffic arrive.</p>
+<h2 id="when-the-group-builds-the-machines-the-instance-resource-comes-out-of-your-code">When the Group Builds the Machines, the Instance Resource Comes Out of Your Code</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Before</strong></td>
+<td><code>aws_instance</code> with <code>for_each</code>, plus one <code>aws_lb_target_group_attachment</code> for each machine. Two machines exist because the file says two.</td>
+</tr>
+<tr>
+<td><strong>After</strong></td>
+<td><code>aws_autoscaling_group</code> with a desired capacity and <code>target_group_arns</code>. Machines exist because the group keeps that number.</td>
+</tr>
+</tbody>
+</table>
+<p>Keep both and you have two machines the group doesn't manage, running and billed beside the ones it does. Delete the instance block and the attachments, then apply.</p>
+<h2 id="after-class_19">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Pull main, then point the backend at your own bucket</strong> — <code>launch-template.tf</code> and <code>asg.tf</code> were pushed during class. The backend block in <code>providers.tf</code> still names the bucket used on screen, so <code>terraform init</code> fails on the state file until you put yours back.</li>
+<li><strong>Delete your own instance block</strong> — the group builds the machines now. Leaving <code>aws_instance</code> in place leaves two machines running and billed that the group doesn't manage. The <code>aws_lb_target_group_attachment</code> resources go with it.</li>
+<li><strong>Terminate one machine and watch it come back</strong> — the group builds a replacement to hold its desired count. Check the target group while it happens: the new machine reads <strong>initial</strong> first, and only takes requests once it has passed the check.</li>
+</ul>
+<p><strong>What you know now:</strong> the balancer fails open — when every target is unhealthy it still tries to send requests, producing a 502 or 504, and a real 503 means the target group has no registered targets at all, not unhealthy ones. <code>initial</code> is the check arriving before a freshly built machine is ready, not a failure, and it's told apart from a real problem by five settings split across two resources — <code>interval</code> and <code>unhealthy_threshold</code> on the target group, <code>health_check_grace_period</code> on the Auto Scaling group. A target that's unhealthy and a target that's healthy but returning an error page are different problems — one is the machine, the other is usually the database behind it. Statelessness means the next request doesn't care which machine answers it; sticky sessions patches around a machine that isn't stateless, at the cost of uneven load and a session that dies with its machine, where the real fix is a shared session store. An Auto Scaling group keeps a stated number of machines running, built from a <strong>launch template</strong> — a definition that costs nothing until something builds from it — with minimum, desired and maximum as three separate instructions rather than a range, <code>target_group_arns</code> as the line that puts every machine the group builds onto the balancer's list, and the <code>aws_instance</code> block coming out of your code entirely once the group is what's building machines.</p>
 
 </main>
 </body>
