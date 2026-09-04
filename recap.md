@@ -1467,3 +1467,187 @@ resource "aws_autoscaling_group" "app" {
 That line is what joins the two halves — without it the group still builds machines, but the balancer never sends them a request. Moving to an ASG means `aws_instance` (with its `for_each`) and the per-machine `aws_lb_target_group_attachment` resources come out of the code entirely; leaving them in means paying for machines the group doesn't manage.
 
 **Before next class:** pull main, then point the backend block in `providers.tf` at your own S3 bucket. Delete your own `aws_instance` block and its `aws_lb_target_group_attachment` resources — the group builds machines now. Terminate one machine and watch the group replace it: the new one reads `initial` first and only takes requests once it passes the health check.
+
+---
+
+## Lesson 39: Closing the Unit — Target Tracking & the Certificate on the Balancer
+
+Two settings finish the group, then the certificate finishes the domain.
+
+**Setting the health check type to ELB adds the application's own answer on top of the instance's status check — it isn't a choice between the two:**
+- **EC2 status check** — is the instance alive? The group always uses this. A dead application passes it *forever*.
+- **health check type ELB** — adds the target group's answer on top of the status check.
+- **saturation** — all of the CPU, or all of the RAM, fully used. The process is alive and stops answering anyway; this is the failure the ELB check catches that the status check can't.
+
+**A target tracking policy holds one number and changes the count in both directions:**
+
+| Setting | What it does |
+|---|---|
+| `ASGAverageCPUUtilization` | The predefined metric — average CPU across the machines in the group. |
+| Target value | The number the group holds the metric at. Higher works the machines harder and leaves less spare for a sudden increase. |
+| Instance warmup | Seconds before a new machine is counted in that average, so a machine still booting doesn't drag it down. |
+| The other three | Step · simple · predictive. Scheduled scaling changes the count by clock time and is a scheduled action, not a policy. |
+
+AWS creates and manages the CloudWatch alarms behind the policy — you don't write or edit them. One policy scales both ways: out above the target, in below it. Minimum and maximum still hold — a policy can't take the group past either.
+
+**The certificate goes on the balancer, not on any app server:**
+- **ACM (AWS Certificate Manager)** — the certificate is free, lives in one region, and has to be in the *balancer's* region. Validate it once with a DNS record; it renews itself as long as that record stays.
+- **The redirect, and where HTTPS stops** — a redirect action on the port-80 listener sends a request without the `s` back as HTTPS. The balancer decrypts there and forwards to your machines over plain HTTP — **TLS termination**.
+
+**Before next class:**
+- Pull main, then put your own domain in. The certificate and HTTPS listener were built in the console in class and written to Terraform afterward — `dns.tf` and `alb.tf` name the instructor's domain. Replace it with yours in the certificate, the validation record and the alias record before you apply, and put your own bucket back in the backend block.
+- Open your own site over `http://`, not `https://` — the browser should come back showing `https://` instead. Stuck on port 80 reading "not secure" means the redirect action on the port-80 listener is missing; nothing answering on 443 at all means check the balancer's security group first, not the machines.
+- The scaling policy is not in the code — it was created in the console and no `aws_autoscaling_policy` was pushed. Applying from main gives you the ELB health check and the certificate; the count still only changes when you change `desired` yourself.
+
+---
+
+## Lesson 40: Metrics, Log Events & the CloudWatch Agent
+
+The group deletes a machine's disk when it replaces the machine, so any log file the app wrote there goes with it. **CloudWatch** is where the numbers and the log lines go instead, and a program running on the machine is what sends them.
+
+**A metric and a log event answer different questions — neither substitutes for the other:**
+
+| | A metric | A log event |
+|---|---|---|
+| Answers | How many answers were errors, and when | Which request failed, and what the app said |
+| Shape | A name plus a series of numbers, each carrying a time | One record, usually one line, written when one thing happened |
+| Cost | Cheap to total, cheap to alarm on | Keeps the detail; costs more to store and search |
+
+**Four tools do this job; ours is CloudWatch because it's already in the account** — no server of your own to run, patch, or pay for separately (the alternatives: Datadog, paid and per-host; Grafana+Prometheus and the ELK stack, both open source but self-hosted).
+
+**Seven metrics already exist with nothing installed**, published by the balancer or the instance itself:
+```
+RequestCount                 HealthyHostCount
+TargetResponseTime           UnHealthyHostCount
+HTTPCode_Target_5XX_Count    CPUUtilization
+HTTPCode_ELB_5XX_Count
+```
+The two 5xx metrics are different questions — `Target` means your application returned the error, `ELB` means the balancer couldn't get an answer to hand back. A metric is identified by three things: its name, its **namespace** (which service published it — `AWS/ApplicationELB` vs `AWS/EC2`), and its **dimensions** (which particular thing it's about — which balancer, which target group). Ask for a combination that was never published and CloudWatch returns an empty result, not an error — an empty graph usually means the dimensions are wrong, not that nothing happened.
+
+**Anything measured inside the machine needs a program running inside the machine.** AWS counts requests and CPU from outside the operating system, which is why they arrive free. RAM used, disk space used, and whatever the app wrote to a file are known only inside the OS — nothing outside can see them without help.
+
+**The CloudWatch agent is that program.** It reads files you name and numbers measured inside the OS, and sends both to CloudWatch — it does two jobs, not one, even though the room usually assumes it's just a log tool.
+
+**A log group is a named container; a log stream is one source's sequence inside it.** Retention and read access are set on the group, not on individual events. Each machine writes its own stream, so one group ends up holding one stream per instance id — what CloudWatch holds is a copy, so it survives the machine being terminated.
+
+**Create the log group in Terraform first — order matters:**
+```hcl
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "investment-app"
+  retention_in_days = 14
+}
+```
+If a machine starts sending before the group exists, the agent creates it itself — and a later `apply` declaring the same name then fails, because Terraform didn't make it. **Log storage bills on volume, not resources:** charged per gigabyte the moment data arrives, and per gigabyte per month for as long as retention keeps it. Leaving retention unset means keep forever — a decision, not a neutral default.
+
+**The agent can't send anything until the machine's role allows it:**
+```hcl
+resource "aws_iam_role_policy_attachment" "cw_agent" {
+  role       = aws_iam_role.app.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+```
+Without it: the agent installs, starts, reports itself healthy, and sends nothing — no error in the console, no data in CloudWatch. The only complaint lands in the agent's own log file on the machine.
+
+**The agent's config names which files, which numbers, and which log group:**
+```json
+{
+  "logs": { "logs_collected": { "files": { "collect_list": [
+      { "file_path": "/var/log/investment-app-install.log",
+        "log_group_name": "investment-app",
+        "log_stream_name": "{instance_id}" } ] } } },
+  "metrics": { "metrics_collected": {
+      "mem":  { "measurement": ["mem_used_percent"] },
+      "disk": { "measurement": ["used_percent"] } } }
+}
+```
+`mem` is the agent's key for RAM. A JSON mistake here is a second way to get healthy machines and no data — the agent fails to start with `cannot translate json` in its own log.
+
+**Install, point it at the config, start it:**
+```bash
+sudo dnf install -y amazon-cloudwatch-agent
+
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+```
+Those two lines then go into the launch template's boot script, so every machine the group launches arrives with the agent already running — nobody installs this by hand on a machine they intend to keep.
+
+**Finding one machine's log events, in three steps:** open the log group for the app → pick the stream whose name is the instance id you care about → move to the time the problem happened and read forward. No login required, and it still works after the machine that wrote those lines has been terminated and replaced.
+
+---
+
+## Lesson 41: The Dashboard, the Alarm, and Your Inbox
+
+Machines already send metrics and log events to CloudWatch — tonight a person gets to see them.
+
+**A dashboard is one saved page of graphs**, picking the right statistic per metric:
+```
+Request count        Sum       — total for the period
+Target response time p95       — 95 of 100 requests came in under this; average hides the slow ones
+5xx count             Sum       — errors, totalled
+Healthy host count    Minimum   — the worst view any balancer node had
+CPU                   Average   — across the machines
+```
+
+```hcl
+resource "aws_cloudwatch_dashboard" "app" {
+  dashboard_name = "investment-app"
+  dashboard_body = jsonencode({
+    widgets = [{
+      type = "metric"
+      properties = {
+        metrics = [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.app.arn_suffix]]
+        stat   = "Sum"
+        region = var.region   # required inside the widget, or apply fails
+      }
+    }]
+  })
+}
+```
+
+**An alarm watches one metric against a threshold.** Four settings decide whether it ever fires:
+```
+period               — seconds each datapoint covers (60 = one number per minute)
+evaluation_periods   — how many datapoints the alarm looks at
+datapoints_to_alarm  — how many of those must breach
+treat_missing_data   — what to do when a datapoint doesn't exist at all
+```
+
+**The trap: a count metric (like 5xx) is only published when it's non-zero** — on a quiet stack there are no numbers, not zeroes. Left on the default, the alarm sits in `INSUFFICIENT_DATA` and never fires. Set `treat_missing_data = "notBreaching"`. Healthy host count doesn't have this problem — it's published whenever targets are registered.
+
+**Alarm a person on what a person using the site would notice** — response time up, errors up, healthy host count down. CPU at 90% is a good input for a scaling policy, not a reason to wake anyone. Deciding how many machines to run and deciding when to wake a person are two different decisions.
+
+**On call** = the named person an alarm reaches, nights and weekends included, usually shared in a team rotation. An **escalation policy** is what happens when nobody answers — a paging tool (PagerDuty, Opsgenie) calls, waits, calls again, then calls the manager.
+
+**An SNS topic is a named list; a subscription is one address on it, and it must confirm before anything arrives:**
+```hcl
+resource "aws_sns_topic" "alerts" {
+  name = "app-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email_alerts" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = "you@example.com"   # here, an email address — not a URL or hostname
+}
+```
+Until the address clicks the confirmation link (check spam), no alarm mail is delivered — a clean `apply` and a silent inbox is expected, not a bug.
+
+**The alarm itself, pointed at that topic:**
+```hcl
+resource "aws_cloudwatch_metric_alarm" "errors" {
+  alarm_name          = "app-5xx"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  dimensions          = { LoadBalancer = aws_lb.app.arn_suffix }
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 2
+  threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]   # sends the "recovered" mail too
+}
+```
+Beside every alarm, write the action a person takes when it fires.

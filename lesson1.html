@@ -76,6 +76,9 @@
 <li><a href="#lesson-37-when-it-breaks-and-when-it-cant-answer-backups-standbys-the-health-check">Lesson 37 — When It Breaks, and When It Can't Answer: Backups, Standbys &amp; the Health Check</a></li>
 <li><a href="#lesson-38-more-than-one-app-server-the-application-load-balancer">Lesson 38: More Than One App Server — the Application Load Balancer</a></li>
 <li><a href="#lesson-39-the-group-that-keeps-the-count-ec2-auto-scaling">Lesson 39: The Group That Keeps the Count — EC2 Auto Scaling</a></li>
+<li><a href="#lesson-40-closing-the-unit-the-scaling-policy-and-the-certificate-on-the-balancer">Lesson 40: Closing the Unit — the Scaling Policy and the Certificate on the Balancer</a></li>
+<li><a href="#lesson-41-metrics-log-events-the-agent-reading-the-system-from-outside-the-machine">Lesson 41: Metrics, Log Events &amp; the Agent — Reading the System From Outside the Machine</a></li>
+<li><a href="#lesson-42-the-dashboard-the-alarm-your-inbox-reading-the-system-from-the-human-side">Lesson 42: The Dashboard, the Alarm &amp; Your Inbox — Reading the System From the Human Side</a></li>
   </ul>
 </nav>
 <main>
@@ -7472,6 +7475,501 @@ resource "aws_autoscaling_group" "app" {
 <li><strong>Terminate one machine and watch it come back</strong> — the group builds a replacement to hold its desired count. Check the target group while it happens: the new machine reads <strong>initial</strong> first, and only takes requests once it has passed the check.</li>
 </ul>
 <p><strong>What you know now:</strong> the balancer fails open — when every target is unhealthy it still tries to send requests, producing a 502 or 504, and a real 503 means the target group has no registered targets at all, not unhealthy ones. <code>initial</code> is the check arriving before a freshly built machine is ready, not a failure, and it's told apart from a real problem by five settings split across two resources — <code>interval</code> and <code>unhealthy_threshold</code> on the target group, <code>health_check_grace_period</code> on the Auto Scaling group. A target that's unhealthy and a target that's healthy but returning an error page are different problems — one is the machine, the other is usually the database behind it. Statelessness means the next request doesn't care which machine answers it; sticky sessions patches around a machine that isn't stateless, at the cost of uneven load and a session that dies with its machine, where the real fix is a shared session store. An Auto Scaling group keeps a stated number of machines running, built from a <strong>launch template</strong> — a definition that costs nothing until something builds from it — with minimum, desired and maximum as three separate instructions rather than a range, <code>target_group_arns</code> as the line that puts every machine the group builds onto the balancer's list, and the <code>aws_instance</code> block coming out of your code entirely once the group is what's building machines.</p>
+<h1 id="lesson-40-closing-the-unit-the-scaling-policy-and-the-certificate-on-the-balancer">Lesson 40: Closing the Unit — the Scaling Policy and the Certificate on the Balancer</h1>
+<h2 id="where-we-left-off_5">Where We Left Off</h2>
+<p>Last session built the Auto Scaling group: a stated count of machines held automatically, with the <code>aws_instance</code> block gone from the code for good. Two things it left sitting were named but not built — a policy that moves the desired count on its own instead of you typing a number, and a certificate that makes your own name answer over HTTPS instead of plain HTTP. Tonight builds both, and the unit is finished.</p>
+<h2 id="the-ec2-status-check-and-health-check-type-elb-answer-different-questions">The EC2 Status Check and Health Check Type ELB Answer Different Questions</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>What it checks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>EC2 status check</strong></td>
+<td>Is the instance alive? The group always uses this. A dead application passes it <strong>forever</strong>.</td>
+</tr>
+<tr>
+<td><strong>health check type ELB</strong></td>
+<td>Adds the target group's answer <strong>on top of</strong> the status check. It is not a choice between the two.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>saturation</strong> — all of the CPU, or all of the RAM, fully used. The process is alive and stops answering anyway.</p>
+<p>A machine can saturate while its application is still running, so the EC2 status check keeps passing it. Setting the Auto Scaling group's health check type to ELB gives it the target group's answer as well: that machine goes unhealthy, the group terminates it, and a replacement takes its place — the same replace-on-fail behavior from last session, now driven by whether the application answers instead of just whether the instance is alive.</p>
+<h2 id="a-target-tracking-policy-holds-one-number-and-moves-the-count-both-ways">A Target Tracking Policy Holds One Number and Moves the Count Both Ways</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ASGAverageCPUUtilization</code></td>
+<td>The predefined metric. Average CPU across the machines in the group.</td>
+</tr>
+<tr>
+<td>Target value</td>
+<td>The number the group holds the metric at. Higher works the machines harder and leaves less spare for a sudden increase.</td>
+</tr>
+<tr>
+<td>Instance warmup</td>
+<td>Seconds before a new machine is counted in that average, so a machine still booting doesn't drag it.</td>
+</tr>
+<tr>
+<td>The other three</td>
+<td>Step, simple and predictive. Scheduled scaling changes the count by clock time and is a scheduled action, not a policy.</td>
+</tr>
+</tbody>
+</table>
+<p>AWS creates and manages the CloudWatch alarms behind the policy. You do not write them, and you do not edit them.</p>
+<p>One policy scales both ways: out above the target, in below it. Minimum and maximum still hold — a policy cannot take the group past either.</p>
+<h2 id="the-certificate-goes-on-the-balancer-and-port-80-redirects-to-it">The Certificate Goes on the Balancer, and Port 80 Redirects to It</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ACM — AWS Certificate Manager</strong></td>
+<td>The certificate is free. It lives in one region and has to be in the <strong>balancer's</strong> region. You validate it once with a DNS record, and it renews itself as long as that record stays.</td>
+</tr>
+<tr>
+<td><strong>The redirect, and where HTTPS stops</strong></td>
+<td>A <strong>redirect action</strong> on the port-80 listener sends a request without the <code>s</code> back as HTTPS. The balancer decrypts there and forwards to your machines over plain HTTP — <strong>TLS termination</strong>.</td>
+</tr>
+</tbody>
+</table>
+<p>The certificate never reaches your app servers. It sits on the balancer, and the balancer is where the encrypted connection ends.</p>
+<h2 id="what-you-can-do-now">What You Can Do Now</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tell running from answering</td>
+<td>And know which of the two a load balancer can act on.</td>
+</tr>
+<tr>
+<td>Read a health check</td>
+<td>Its settings, and why a new machine is unhealthy at first.</td>
+</tr>
+<tr>
+<td>Name the parts of an ALB</td>
+<td>Listener, rule, target group.</td>
+</tr>
+<tr>
+<td>Read a failed health check</td>
+<td>Five causes, and the one check that tells you which one it is.</td>
+</tr>
+<tr>
+<td>Say why a machine holds no state</td>
+<td>Sticky sessions has a cost; a shared store is the real fix.</td>
+</tr>
+<tr>
+<td>Keep a number of machines running</td>
+<td>A launch template describes a machine; the group holds the count and replaces what stops answering.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="before-the-next-class">Before the Next Class</h2>
+<ul>
+<li><strong>Pull main, then put your own domain in</strong> — the certificate and the HTTPS listener were built in the console in class and written to Terraform afterwards. <code>dns.tf</code> and <code>alb.tf</code> name the instructor's domain. Replace it with yours in the certificate, the validation record and the alias record before you apply, and put your own bucket back in the backend block.</li>
+<li><strong>Open your own site over http, not https</strong> — type your name with <code>http://</code> in front of it. The browser should come back showing <code>https://</code> instead. If it stays on port 80 and reads not secure, the redirect action on the port-80 listener is missing. If nothing answers on 443 at all, the balancer's security group is the first thing to check, not the machines.</li>
+<li><strong>The scaling policy is not in the code</strong> — it was created in the console in class and no <code>aws_autoscaling_policy</code> was pushed. Applying from main gives you the ELB health check and the certificate, and the count still only changes when you change <code>desired</code> yourself.</li>
+</ul>
+<p>Getting stuck is normal. Do not wait for anyone. Read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> the group's health check can add the target group's answer on top of the EC2 status check, so a saturated machine that's still technically running gets replaced instead of left serving nothing. A target tracking policy holds one metric — usually average CPU — at one target value, moving the desired count both up and down on its own, inside the minimum and maximum you already set; step, simple, predictive and scheduled scaling are named but not built. A certificate from ACM lives on the balancer, not on any app server — it has to sit in the balancer's region, it renews itself off the DNS record that validated it, and a redirect action on the port-80 listener is what sends a plain HTTP request back as HTTPS, with TLS termination happening at the balancer and plain HTTP continuing on to the machines behind it.</p>
+
+<h1 id="lesson-41-metrics-log-events-the-agent-reading-the-system-from-outside-the-machine">Lesson 41: Metrics, Log Events &amp; the Agent — Reading the System From Outside the Machine</h1>
+<h2 id="where-we-left-off_6">Where We Left Off</h2>
+<p>Last session closed out scaling: a policy that moves the machine count on its own, and a certificate that puts the site behind HTTPS. Both sessions leaned on the group replacing a machine that stops answering — but replacing a machine has a cost nobody named yet. Tonight names it: the disk goes with the machine, and CloudWatch is where what matters survives that.</p>
+<h2 id="the-group-deletes-a-machines-disk-when-it-replaces-the-machine">The Group Deletes a Machine's Disk When It Replaces the Machine</h2>
+<p><strong>root volume</strong> — the disk a machine boots from and writes to. AWS deletes it when the instance is terminated, unless you ask for something else.</p>
+<p>A machine the group replaces for saturation or a failed health check takes its root volume with it — and any log file the application wrote is gone at exactly the moment you most want to read it, because the machine was replaced for a reason. That is the problem the rest of tonight answers.</p>
+<h2 id="a-metric-is-a-number-over-time-a-log-event-is-one-line-from-one-moment">A Metric Is a Number Over Time. A Log Event Is One Line From One Moment.</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>metric</strong></td>
+<td>A name, and a series of numbers published against it over time. Each number carries a timestamp. You ask for a stretch of time and CloudWatch groups the numbers inside it.</td>
+</tr>
+<tr>
+<td><strong>log event</strong></td>
+<td>One record the application wrote when one thing happened. Usually a single line, carrying a time and a message.</td>
+</tr>
+</tbody>
+</table>
+<p>You have already read log events — every time you looked at an application's output after something went wrong, that's what you were reading.</p>
+<h2 id="metrics-add-up-cheaply-log-events-keep-the-detail">Metrics Add Up Cheaply. Log Events Keep the Detail.</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>A metric answers</th>
+<th>A log event answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Question</strong></td>
+<td>How many answers were errors, and when.</td>
+<td>Which request failed, and what the application said about it.</td>
+</tr>
+<tr>
+<td><strong>Cost</strong></td>
+<td>Cheap to total, cheap to alarm on.</td>
+<td>Keeps the detail, costs more to store and search.</td>
+</tr>
+</tbody>
+</table>
+<p>One failure, two records. Neither one answers the other's question, so you need both.</p>
+<h2 id="four-tools-do-this-job-and-ours-is-already-in-the-account">Four Tools Do This Job, and Ours Is Already in the Account</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Datadog</strong></td>
+<td>A paid service you send metrics and logs to. Wide, polished, priced per host and per gigabyte.</td>
+</tr>
+<tr>
+<td><strong>Grafana with Prometheus</strong></td>
+<td>Prometheus collects and stores the numbers; Grafana draws them. Open source, and you run both yourself.</td>
+</tr>
+<tr>
+<td><strong>The ELK stack</strong></td>
+<td>Elasticsearch, Logstash and Kibana — built for searching large volumes of log events. You run it yourself.</td>
+</tr>
+<tr>
+<td><strong>CloudWatch</strong></td>
+<td>AWS's own. Holds both metrics and log events for the account.</td>
+</tr>
+</tbody>
+</table>
+<p>Ours is <strong>CloudWatch</strong>, for one reason worth saying plainly: it's already in the account and needs no server of its own. Every other option on this list is something else to run, pay for, and keep alive.</p>
+<h2 id="seven-metrics-already-exist-with-nothing-installed">Seven Metrics Already Exist, With Nothing Installed</h2>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>What it counts</th>
+<th>Published by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RequestCount</code></td>
+<td>Requests the balancer handed to a target.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>TargetResponseTime</code></td>
+<td>Seconds from the request leaving the balancer to the target starting to answer.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>HTTPCode_Target_5XX_Count</code></td>
+<td>Server-error codes <strong>your application</strong> returned.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>HTTPCode_ELB_5XX_Count</code></td>
+<td>Server-error codes <strong>the balancer itself</strong> produced.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>HealthyHostCount</code></td>
+<td>Targets currently considered healthy.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>UnHealthyHostCount</code></td>
+<td>Targets currently considered unhealthy.</td>
+<td>The balancer</td>
+</tr>
+<tr>
+<td><code>CPUUtilization</code></td>
+<td>Percentage of the machine's CPU in use.</td>
+<td>The instance</td>
+</tr>
+</tbody>
+</table>
+<p>The two 5xx names are different questions. Your application answered with an error, or the balancer couldn't get an answer to hand back. The fix is different in each case, so the metric is separate.</p>
+<h2 id="a-metric-is-identified-by-three-things-ask-for-the-wrong-one-and-get-nothing-back">A Metric Is Identified by Three Things. Ask for the Wrong One and Get Nothing Back.</h2>
+<ul>
+<li><strong>namespace</strong> — which service published it. The balancer's numbers live in <code>AWS/ApplicationELB</code>; the instance's live in <code>AWS/EC2</code>.</li>
+<li><strong>dimensions</strong> — which particular thing the number is about, such as which balancer or which target group. A name/value pair, and part of the metric's identity.</li>
+</ul>
+<p>Ask for a combination that was never published and CloudWatch returns an <strong>empty result, not an error</strong>. An empty graph usually means the dimensions are wrong, not that nothing happened. Dimensions are per metric, too — <code>HTTPCode_ELB_5XX_Count</code> is published against the load balancer only, never a target group, because no target was involved in producing those codes.</p>
+<h2 id="ram-disk-space-and-your-own-log-file-are-invisible-from-outside-the-machine">RAM, Disk Space and Your Own Log File Are Invisible From Outside the Machine</h2>
+<p>AWS counts requests and CPU from <strong>outside</strong> the operating system, which is why they arrive with nothing installed. RAM used, disk space used, and whatever the application wrote to a file are known only <strong>inside</strong> the operating system — nothing outside can see them. The rule follows: anything measured inside the machine needs a program running inside the machine.</p>
+<p><strong>CloudWatch agent</strong> — a program that runs on the machine. It reads files you name and numbers measured inside the operating system, and sends both to CloudWatch. It does two jobs, not one — the room usually assumes it's a log tool, but it collects <strong>files</strong> and it collects <strong>numbers</strong>.</p>
+<h2 id="a-log-group-holds-the-settings-a-log-stream-is-one-machines-sequence">A Log Group Holds the Settings; a Log Stream Is One Machine's Sequence</h2>
+<ul>
+<li><strong>log group</strong> — a named container for one application's log events. How long events are kept, and who may read them, are set on the group, not on individual events.</li>
+<li><strong>log stream</strong> — one sequence of log events from one source. Each machine writes its own stream, and all of those streams live inside one log group.</li>
+</ul>
+<p>What CloudWatch holds is a <strong>copy</strong>. The file is still on the machine, and the copy is still in CloudWatch after the instance is terminated — the answer to the problem this session opened with.</p>
+<h2 id="create-the-log-group-in-terraform-first-with-its-retention-setting">Create the Log Group in Terraform First, With Its Retention Setting</h2>
+<pre><code class="language-hcl"># cloudwatch.tf
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "investment-app"
+  retention_in_days = 14
+}
+</code></pre>
+<p>Order matters here. If a machine starts sending before the group exists, <strong>the agent creates the group itself</strong> — and a later <code>apply</code> that declares the same name fails, because the group is already there and Terraform didn't make it. The group has to exist before anything writes to it.</p>
+<h2 id="log-storage-is-billed-on-what-you-send-and-how-long-you-keep-it">Log Storage Is Billed on What You Send and How Long You Keep It</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sent in</strong></td>
+<td>Charged per gigabyte the moment it arrives — every line every machine writes.</td>
+</tr>
+<tr>
+<td><strong>Kept</strong></td>
+<td>Charged per gigabyte per month for as long as retention says to keep it.</td>
+</tr>
+<tr>
+<td><strong>Default</strong></td>
+<td>Keep forever. Leaving retention unset is a decision, not a neutral choice.</td>
+</tr>
+</tbody>
+</table>
+<p>This is the first bill in this course driven by <strong>volume rather than resources</strong>. Several machines writing many lines costs more every day without anyone launching anything. Set retention when you create the group.</p>
+<h2 id="the-agent-cant-send-anything-until-the-machines-role-allows-it">The Agent Can't Send Anything Until the Machine's Role Allows It</h2>
+<pre><code class="language-hcl"># iam.tf — added to the role you already wrote
+resource "aws_iam_role_policy_attachment" "cw_agent" {
+  role       = aws_iam_role.app.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+</code></pre>
+<p>Without it, here's exactly what you see: the agent installs, starts, and <strong>reports itself healthy</strong> — and sends nothing. No error in the console, no data in CloudWatch. The only complaint is written into the agent's own log file on the machine, which is the one file you can't fetch yet, because sending is what's broken.</p>
+<h2 id="the-agents-configuration-names-which-files-which-numbers-and-which-log-group">The Agent's Configuration Names Which Files, Which Numbers, and Which Log Group</h2>
+<pre><code class="language-json">{
+  "logs": { "logs_collected": { "files": { "collect_list": [
+      { "file_path": "/var/log/investment-app-install.log",
+        "log_group_name": "investment-app",
+        "log_stream_name": "{instance_id}" } ] } } },
+  "metrics": { "metrics_collected": {
+      "mem":  { "measurement": ["mem_used_percent"] },
+      "disk": { "measurement": ["used_percent"] } } }
+}
+</code></pre>
+<p>The application writes no log file of its own, so the file sent is the install log — adding an application log to <code>collect_list</code> so a buy or a sell shows up in CloudWatch is the practice task. <code>mem</code> is the agent's key for <strong>RAM</strong>. A JSON mistake here is a second way to get healthy machines and no data: the agent fails to start, and the only error is <code>cannot translate json</code> in the agent's own log on the machine.</p>
+<h2 id="install-it-point-it-at-the-configuration-start-it">Install It, Point It at the Configuration, Start It</h2>
+<pre><code class="language-bash"># install
+sudo dnf install -y amazon-cloudwatch-agent
+
+# point it at the configuration and start it
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
+</code></pre>
+<p>Then the same two lines go into the <strong>boot script in the launch template</strong> and get merged to main, so every machine the group launches arrives with the agent already running. Nobody installs this by hand on a machine they intend to keep. A different distribution installs and starts services differently — find the two commands for yours: the package manager's install, and the agent control script. The paths above are Amazon Linux's.</p>
+<h2 id="finding-one-machines-log-events-in-three-steps">Finding One Machine's Log Events, in Three Steps</h2>
+<ol>
+<li>Open the <strong>log group</strong> for the application.</li>
+<li>Pick the <strong>stream</strong> whose name is the instance id you care about.</li>
+<li>Move to the <strong>time</strong> the problem happened, and read forward.</li>
+</ol>
+<p>You don't log into anything to do this, and it still works after the machine that wrote those lines has been terminated and replaced.</p>
+<h2 id="after-class_20">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Pull main, then point the backend at your own bucket</strong> — <code>cloudwatch.tf</code> and the IAM attachment were pushed during class, naming the instructor's log group and bucket. Put your own in before you apply.</li>
+<li><strong>Add your application's own log to <code>collect_list</code></strong> — right now the agent only ships the install log. Point a second entry at whatever file your buy/sell code writes to, and confirm a new log stream appears with the events in it.</li>
+<li><strong>Terminate a machine and read its stream anyway</strong> — pick a running instance, terminate it, and open CloudWatch afterward. The stream from that instance id is still there, holding everything it wrote before it died.</li>
+</ul>
+<p><strong>What you know now:</strong> replacing a machine deletes its <strong>root volume</strong>, so a log file written there goes with it — the reason CloudWatch exists is to hold a copy somewhere the group can't delete it. A <strong>metric</strong> is a named series of numbers over time, cheap to total and cheap to alarm on but blind to which request failed; a <strong>log event</strong> is one line from one moment, keeping the detail a metric throws away. Seven metrics — request count, response time, both flavors of 5xx, healthy and unhealthy host counts, and CPU — already exist with nothing installed, because the balancer and the instance publish them from outside the operating system; RAM, disk and your own log file are invisible from outside and need the <strong>CloudWatch agent</strong> running inside to collect and send them. A <strong>log group</strong> holds the retention and access settings for one application, and a <strong>log stream</strong> is one machine's own sequence inside it. The group has to exist in Terraform before anything writes to it, or the agent creates it first and a later <code>apply</code> fails; the agent's IAM policy and its JSON configuration are two separate ways to end up with a healthy machine sending nothing, and in both cases the only evidence is in the agent's own log on the machine that's failing to send logs anywhere else.</p>
+<h1 id="lesson-42-the-dashboard-the-alarm-your-inbox-reading-the-system-from-the-human-side">Lesson 42: The Dashboard, the Alarm &amp; Your Inbox — Reading the System From the Human Side</h1>
+<h2 id="where-we-left-off_7">Where We Left Off</h2>
+<p>Last session got metrics and log events off a machine and into CloudWatch, surviving the machine itself being replaced. But nothing yet stood between those numbers and a person — the seven metrics and everything the agent shipped just sat there, unwatched. Tonight closes that gap: a dashboard is one page of saved graphs, an alarm watches one metric against a threshold, and an SNS topic is how a firing alarm reaches an email address.</p>
+<h2 id="a-dashboard-is-one-page-of-saved-graphs">A Dashboard Is One Page of Saved Graphs</h2>
+<p><strong>dashboard</strong> — a saved page of graphs you chose. In practice: the page one person opens when a customer says the site is slow.</p>
+<table>
+<thead>
+<tr>
+<th>Graph</th>
+<th>Statistic</th>
+<th>Why that one</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Request count</strong></td>
+<td><code>Sum</code></td>
+<td>You want the total for the period, not an average of it.</td>
+</tr>
+<tr>
+<td><strong>Target response time</strong></td>
+<td><code>p95</code></td>
+<td>The number 95 out of every 100 requests came in under. An average hides the slow ones.</td>
+</tr>
+<tr>
+<td><strong>5xx count</strong></td>
+<td><code>Sum</code></td>
+<td>How many errors, totalled.</td>
+</tr>
+<tr>
+<td><strong>Healthy host count</strong></td>
+<td><code>Minimum</code></td>
+<td>The worst view any balancer node had, which is what catches a machine going bad.</td>
+</tr>
+<tr>
+<td><strong>CPU</strong></td>
+<td><code>Average</code></td>
+<td>Across the machines, to see whether you are running enough of them.</td>
+</tr>
+</tbody>
+</table>
+<p>Each row picks its statistic on purpose. An average request count would hide a spike; a minimum on CPU would hide the machine that's struggling.</p>
+<h2 id="the-dashboard-is-a-terraform-resource-and-its-body-is-json">The Dashboard Is a Terraform Resource, and Its Body Is JSON</h2>
+<pre><code class="language-hcl"># dashboard.tf
+resource "aws_cloudwatch_dashboard" "app" {
+  dashboard_name = "investment-app"
+  dashboard_body = jsonencode({
+    widgets = [{
+      type = "metric"
+      properties = {
+        metrics = [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.app.arn_suffix]]
+        stat   = "Sum"
+        region = var.region
+      }
+    }]
+  })
+}
+</code></pre>
+<p>Its body is a document, not arguments — <code>jsonencode</code> lets Terraform check the shape. <code>region</code> is required inside the widget; leave it out and the apply fails with <code>should have required property region</code>.</p>
+<h2 id="an-alarm-watches-one-metric-against-a-threshold">An Alarm Watches One Metric Against a Threshold</h2>
+<p><strong>alarm</strong> — a rule attached to one metric. It compares the numbers to a threshold you set, and when the comparison holds for long enough, it acts.</p>
+<h2 id="four-settings-decide-whether-your-alarm-ever-fires">Four Settings Decide Whether Your Alarm Ever Fires</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it decides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>period</code></td>
+<td>How long each single number covers. 60 means one number per minute.</td>
+</tr>
+<tr>
+<td><code>evaluation_periods</code></td>
+<td>How many of those numbers the alarm looks at.</td>
+</tr>
+<tr>
+<td><code>datapoints_to_alarm</code></td>
+<td>How many of the ones it looked at must be past the threshold.</td>
+</tr>
+<tr>
+<td><code>treat_missing_data</code></td>
+<td>What to do when a number does not exist at all.</td>
+</tr>
+</tbody>
+</table>
+<p>The last one is the trap. <strong>The 5xx counts are published only when they are not zero</strong>, so on a quiet stack there are no numbers — not zeroes. An alarm left on the default sits in <code>INSUFFICIENT_DATA</code> and never fires. Set <code>treat_missing_data = "notBreaching"</code> for a count. Healthy host count is different: it is published whenever targets are registered, so it always has numbers.</p>
+<h2 id="alarm-a-person-on-what-a-person-using-the-site-would-notice">Alarm a Person on What a Person Using the Site Would Notice</h2>
+<table>
+<thead>
+<tr>
+<th>Worth waking someone</th>
+<th>Not worth waking someone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Response time is up</strong> — the site feels slow to a real person.</td>
+<td><strong>CPU is at 90%</strong> — nobody using the site can feel this. It might be fine. It might even be what you wanted, if you are paying for those machines.</td>
+</tr>
+<tr>
+<td><strong>Errors are up</strong> — requests are failing.</td>
+<td><strong>But it is a good input for a scaling policy</strong> — you have already seen one: a rule watching average CPU, adding and removing machines, with no person involved at any point.</td>
+</tr>
+<tr>
+<td><strong>Healthy host count is down</strong> — fewer machines are answering than you asked for.</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Deciding <strong>how many machines to run</strong> and deciding <strong>when to wake a person</strong> are two different decisions. The same number can be right for one and wrong for the other.</p>
+<h2 id="being-on-call-means-you-are-the-person-the-alarm-reaches">Being On Call Means You Are the Person the Alarm Reaches</h2>
+<p><strong>on call</strong> — the named person who answers when an alarm fires, including at night and on weekends. The team shares the duty in a rotation — one week each on a team of four is one common arrangement, not a rule.</p>
+<p><strong>escalation policy</strong> — what happens when nobody answers. A paging tool — a program that rings a phone until someone acknowledges the alarm — calls the person on call, waits, calls again, and after that calls their manager.</p>
+<p>You are <strong>not on your own</strong>. An outage big enough to wake someone usually reaches other teams too, and the developers who own the application are involved as well. This unit sends the alarm to an email address. Companies usually send it on to a paging tool instead — PagerDuty and Opsgenie are two.</p>
+<h2 id="an-sns-topic-is-a-named-list-that-a-message-is-sent-to">An SNS Topic Is a Named List That a Message Is Sent To</h2>
+<p><strong>SNS topic</strong> (Simple Notification Service) — a named list. Something sends one message to the list, and everyone on the list receives it. The alarm does not know who is on it.</p>
+<h2 id="a-subscription-is-one-address-on-that-list-and-it-has-to-confirm-first">A Subscription Is One Address on That List, and It Has to Confirm First</h2>
+<p><strong>subscription</strong> — one destination on a topic — here, one email address. AWS creates it in a pending state and sends that address a confirmation link.</p>
+<p>Until a person clicks that link, <strong>no alarm mail is delivered</strong>. A clean <code>apply</code> and a silent inbox is the expected result, not a bug. Check your mail before you debug anything, and check the spam folder — that is where the confirmation arrived in class.</p>
+<h2 id="the-sns-topic-and-subscription-in-terraform">The SNS Topic and Subscription, in Terraform</h2>
+<pre><code class="language-hcl"># alarms.tf
+resource "aws_sns_topic" "alerts" {
+  name = "app-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email_alerts" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = "you@example.com"
+}
+</code></pre>
+<p>The attribute is called <code>endpoint</code>. Here it means <strong>the email address</strong> — not a URL path, and not a hostname. Same word, third meaning.</p>
+<h2 id="the-alarm-in-terraform-pointed-at-that-topic">The Alarm, in Terraform, Pointed at That Topic</h2>
+<pre><code class="language-hcl"># alarms.tf
+resource "aws_cloudwatch_metric_alarm" "errors" {
+  alarm_name          = "app-5xx"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  dimensions          = { LoadBalancer = aws_lb.app.arn_suffix }
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 2
+  threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+</code></pre>
+<p>Beside every alarm, write <strong>the action a person takes when it fires</strong>. <code>ok_actions</code> sends the second mail saying it recovered.</p>
+<h2 id="after-class_21">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Pull main, then confirm your own subscription</strong> — <code>dashboard.tf</code> and <code>alarms.tf</code> were pushed during class naming the instructor's own email address and dashboard name. Put your own email in the subscription before you apply, and check your inbox — and your spam folder — for the confirmation link. No mail arrives until you click it.</li>
+<li><strong>Add a second alarm to the same topic</strong> — pick <code>TargetResponseTime</code> or <code>HealthyHostCount</code> and point it at <code>aws_sns_topic.alerts.arn</code> alongside the 5xx alarm. Confirm <code>ok_actions</code> sends you the recovery mail too, not just the failure one.</li>
+<li><strong>Set <code>treat_missing_data</code> correctly for a count-based alarm</strong> — leaving it on the default lets a quiet stack sit in <code>INSUFFICIENT_DATA</code> forever, never firing and never telling you why. Set it to <code>notBreaching</code> and check the alarm's history to see the difference.</li>
+</ul>
+<p><strong>What you know now:</strong> a <strong>dashboard</strong> is one saved page of graphs, built as a Terraform resource whose body is a JSON document checked by <code>jsonencode</code>, with each graph's statistic chosen on purpose — sums for counts, <code>p95</code> for response time, minimum for healthy host count, average for CPU. An <strong>alarm</strong> watches one metric against a threshold, and whether it ever fires comes down to four settings — <code>period</code>, <code>evaluation_periods</code>, <code>datapoints_to_alarm</code>, and <code>treat_missing_data</code>, the last of which hides a trap: a count metric published only on nonzero values sits in <code>INSUFFICIENT_DATA</code> on a quiet stack unless you set it to <code>notBreaching</code>. Alarming a person is a separate decision from scaling a group — response time, errors and healthy host count are worth waking someone for; CPU alone usually isn't, even though it's the right input for a scaling policy. Being <strong>on call</strong> means you're the one an <strong>escalation policy</strong> reaches first, with a manager as the fallback when nobody answers. An <strong>SNS topic</strong> is a named list a message goes to, and a <strong>subscription</strong> is one address on that list that has to confirm before any mail arrives — a clean apply and a silent inbox is the expected result until someone clicks that link. In Terraform, the topic, the subscription and the alarm are three separate resources, joined by <code>alarm_actions</code> and <code>ok_actions</code> pointing at the same topic ARN.</p>
 
 </main>
 </body>
