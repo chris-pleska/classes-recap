@@ -1651,3 +1651,79 @@ resource "aws_cloudwatch_metric_alarm" "errors" {
 }
 ```
 Beside every alarm, write the action a person takes when it fires.
+
+---
+
+## Lesson 42: Testing the Alarm, Working an Outage & Rolling Out a New Version
+
+`Target_5XX` counts a 5xx your application returned; `ELB_5XX` counts the 502 the balancer returns when it can't reach a target at all — two different questions, not two names for the same failure.
+
+**Prove the mail arrives without waiting for a real failure:**
+```bash
+aws cloudwatch set-alarm-state \
+  --alarm-name app-5xx \
+  --state-value ALARM \
+  --state-reason "testing the path"
+```
+This proves the state change runs the alarm's actions — SNS publishes, mail reaches every confirmed subscription. It does **not** prove the metric, the threshold, or the missing-data setting are right; an alarm watching the wrong metric still sends this mail. All three flags are required, the forced state lasts only until the next real evaluation (usually seconds), and the change shows in the alarm's **History** tab, not on its graph — the metric itself never breached.
+
+**When the site is down, check the path in one fixed order — each check rules a layer out:**
+```
+Does the name resolve?          host <your domain>
+Does the listener answer?       nc -vz <balancer dns name> 80
+Does the target group hold      target group's Targets tab
+  a healthy target?
+Does the health check path      curl -i <machine ip>/health
+  answer?
+Then: read that machine's log events in CloudWatch.
+```
+Skipping the order means guessing twice about the same layer.
+
+**A healthy target proves one endpoint replied, not that the application works.** The health check path defaults to `/`; this repo points it at `/health`, checked every 30 seconds, answered by the app's own process (`{"status": "ok"}`) — it never queries the database or exercises any other route. Two failures in a row mark a target unhealthy; five successes in a row mark it healthy again. A health check that also asks the database catches more, but takes every target down whenever the database is down — which is usually the tradeoff people don't expect.
+
+**A deployment strategy is how a new version replaces a running one:**
+
+| Strategy | How | Cost / tradeoff |
+|---|---|---|
+| Rolling replacement (**ours**) | Replace a few machines at a time until all run the new version | No extra capacity beyond the few being replaced — the group already replaces machines, so this is the mechanism you have |
+| Blue/green | Run two complete sets, old and new, move all traffic at once | Instant rollback, but double the machines while both exist |
+| Canary | Send a small share of traffic to the new version first, watch it, then move the rest | Catches a bad version with few people affected |
+
+**Instance refresh** replaces a group's machines in batches from a new launch template version, keeping enough healthy while it works. Two settings decide whether that replacement breaks anything: **deregistration delay** (target group, default 300s — a maximum, not a fixed wait, for requests already in flight before a draining target shuts down) and **`health_check_type = "ELB"`** (default is `EC2`, which only asks whether the instance is running, not whether the application answers — on the default, a refresh judges its replacements on the wrong question).
+
+**Wire the refresh onto the group:**
+```hcl
+resource "aws_autoscaling_group" "app" {
+  launch_template {
+    id      = aws_launch_template.app.id
+    version = aws_launch_template.app.latest_version
+  }
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup        = 120
+    }
+  }
+}
+```
+AWS doesn't watch the launch template — `terraform apply` starts the refresh, and only when that apply changes the group's `launch_template`, which is why `version` points at `latest_version` rather than a fixed number. Publishing a version in the console does nothing on its own.
+
+**Four ways this quietly does nothing, or less than you think:**
+
+| What you wrote / did | What happens |
+|---|---|
+| `version = "$Latest"` | Terraform sees no change — no refresh starts. Use `latest_version`. |
+| No `version` at all | Defaults to `$Default` — that group never refreshes either. |
+| `apply` returns | It *started* the refresh; it did not wait for it or check that it worked. |
+| A second `apply` | A group allows one refresh at a time — updating it again cancels the refresh in flight and starts another. |
+
+```bash
+aws autoscaling describe-instance-refreshes \
+  --auto-scaling-group-name app
+```
+Whatever the template launches also has to be **pinned** — a boot script that clones a branch hands a refresh new machines running whatever that branch holds at that moment, which is not a version and not something you can roll back to.
+
+**Cancel, roll back, and `auto_rollback` are three different things.** Cancel stops a refresh still running, but the machines it already replaced stay on the new version — cancel is not an undo. Roll back replaces those machines again from the version the group held before, and only works while the refresh is still running, with a numbered template version. `auto_rollback` does this automatically on failure; Terraform only names a rollback target when you set it, which is why the console's **Roll back** button is otherwise greyed out. The trap in interviews: rolling back the code often doesn't undo the deploy — if the bad version already changed the database, the old code now faces data it doesn't expect, and shipping a corrected version forward is frequently safer. Rollback is a decision, not a button.
+
+**Before next class:** ship your log off the machine (agent installed from the boot script, retention set on every log group you create), build the dashboard from this unit's metrics in Terraform, set up one alarm that actually reaches you (confirm the subscription, write the action beside it), and practice finding one moment twice — a spike on a graph, then the log events from that same minute in the stream for the machine that was serving.

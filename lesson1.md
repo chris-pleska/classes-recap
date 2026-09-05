@@ -6921,3 +6921,127 @@ Optional practice and Q&A held after the main lecture — less structured, stude
 - **Set `treat_missing_data` correctly for a count-based alarm** — leaving it on the default lets a quiet stack sit in `INSUFFICIENT_DATA` forever, never firing and never telling you why. Set it to `notBreaching` and check the alarm's history to see the difference.
 
 **What you know now:** a **dashboard** is one saved page of graphs, built as a Terraform resource whose body is a JSON document checked by `jsonencode`, with each graph's statistic chosen on purpose — sums for counts, `p95` for response time, minimum for healthy host count, average for CPU. An **alarm** watches one metric against a threshold, and whether it ever fires comes down to four settings — `period`, `evaluation_periods`, `datapoints_to_alarm`, and `treat_missing_data`, the last of which hides a trap: a count metric published only on nonzero values sits in `INSUFFICIENT_DATA` on a quiet stack unless you set it to `notBreaching`. Alarming a person is a separate decision from scaling a group — response time, errors and healthy host count are worth waking someone for; CPU alone usually isn't, even though it's the right input for a scaling policy. Being **on call** means you're the one an **escalation policy** reaches first, with a manager as the fallback when nobody answers. An **SNS topic** is a named list a message goes to, and a **subscription** is one address on that list that has to confirm before any mail arrives — a clean apply and a silent inbox is the expected result until someone clicks that link. In Terraform, the topic, the subscription and the alarm are three separate resources, joined by `alarm_actions` and `ok_actions` pointing at the same topic ARN.
+
+---
+
+# Lesson 43: Testing the Alarm, Working an Outage & Getting a New Version Out
+
+## Where We Left Off
+
+Last session wired an alarm to an SNS topic so a threshold breach reaches an inbox. Tonight is that alarm proving itself, a fixed order for finding out why the site is down, and the mechanism that gets a new version onto every machine the group is already replacing for you — without anyone logging in.
+
+## Prove the Alarm's Mail Arrives Without Waiting for a Real Failure
+
+```bash
+aws cloudwatch set-alarm-state \
+  --alarm-name app-5xx \
+  --state-value ALARM \
+  --state-reason "testing the path"
+```
+
+| | |
+|---|---|
+| **What this proves** | The state changed, so the alarm ran its actions — SNS published, and mail reached every confirmed subscription. |
+| **What it does not prove** | The metric, the threshold, or the missing-data setting. An alarm watching the wrong metric still sends this mail. |
+
+All three flags are required. The forced state lasts only until the next real evaluation — usually seconds — and then the alarm returns to its real state, which sends the `ok_actions` mail too. Because the metric itself never breached, the change shows in the alarm's **History** tab, not on its graph.
+
+`HTTPCode_Target_5XX_Count` counts a 5xx your application returned; `HTTPCode_ELB_5XX_Count` counts the 502 the balancer returns when it can't reach a target at all. Two different questions, not two names for the same failure.
+
+## When the Site Is Down, Check the Path in One Fixed Order
+
+Each check rules a layer out — that is the whole value of doing them in order, so you never guess twice about the same layer.
+
+1. **Does the name resolve?** `host <your domain>`. If not, nothing after this matters.
+2. **Does the listener answer?** `nc -vz <balancer dns name> 80` — the balancer is reachable and something is listening on the port.
+3. **Does the target group hold a healthy target?** The target group's **Targets** tab. If it holds none, the balancer has nowhere to send.
+4. **Does the health check path answer?** `curl -i <machine ip>/health` from somewhere that can reach it. Read what comes back.
+5. **Read that machine's log events.** Now you know which machine, and CloudWatch has its stream.
+
+## A Healthy Target Means One Endpoint Replied, Not That the Application Works
+
+The health check path defaults to `/`. This repo sets `/health` and asks for it every 30 seconds, and the application answers it from its own process: `{"status": "ok"}`. That endpoint does not query the database and does not exercise any other route. Two failures in a row mark a target unhealthy; five successes in a row mark it healthy again.
+
+| | |
+|---|---|
+| **Proven by a 200 on `/health`** | The process is up, the port is open, and it can answer one request. |
+| **Not proven** | That the database is reachable. That a login works. That any other route returns anything at all. |
+
+So a target reading **healthy** is a claim about one endpoint, not about your application. When the site misbehaves and every target is healthy, this is usually why. A health check that also asks the database catches more, and takes every target down whenever the database is down.
+
+## A Deployment Strategy Is How a New Version Replaces a Running One
+
+| Strategy | How | Cost / tradeoff |
+|---|---|---|
+| **Rolling replacement (ours)** | Replace a few machines at a time until all of them run the new version. | Needs no extra capacity beyond the few being replaced — the group already replaces machines, so this is the mechanism you have. |
+| **Blue/green** | Run two complete sets, old and new, and move all traffic across at once. | Going back is instant. You pay for double the machines while both exist. |
+| **Canary** | Send a small share of traffic to the new version first, watch it, then move the rest. | Catches a bad version with few people affected. |
+
+Two things a screen will ask you: *how do you deploy without downtime*, and *how do you roll back*. These three answer the first. Rolling back is a separate question, answered below.
+
+## Instance Refresh Replaces the Running Machines From a New Template Version
+
+**instance refresh** — you tell the group its machines are out of date. It replaces them in batches, keeping enough healthy ones answering while it works.
+
+Two settings decide whether that replacement breaks anything:
+
+- **deregistration delay** (also called **draining**) — before a machine is shut down, the balancer stops sending it new requests and waits for the ones already sent, up to this many seconds. Default 300, and a maximum rather than a fixed wait — a target with no requests still open finishes at once. It belongs to the **target group**, not the Auto Scaling group: `deregistration_delay` on `aws_lb_target_group`, or **Attributes** in the console.
+- **`health_check_type = "ELB"`** — the default is `EC2`, which asks only whether the instance is running, not whether your application answers. On the default, a refresh judges its replacements on the wrong question.
+
+## Wire the Refresh onto the Group
+
+```hcl
+# asg.tf
+resource "aws_autoscaling_group" "app" {
+  launch_template {
+    id      = aws_launch_template.app.id
+    version = aws_launch_template.app.latest_version
+  }
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup        = 120
+    }
+  }
+}
+```
+
+AWS does not watch the launch template. `terraform apply` starts the refresh, and only when that apply changes the group's `launch_template` — which is why `version` points at `latest_version`. Publish a version in the console and nothing happens.
+
+## Two Ways This Quietly Does Nothing, and Why a Successful Apply Is Not a Finished Deploy
+
+| What you wrote | What happens |
+|---|---|
+| `version = "$Latest"` | Terraform sees no change. **No refresh starts.** Point at `latest_version` instead. |
+| No `version` at all | Defaults to `$Default`. That group never refreshes either. |
+| `apply` returns | It **started** the refresh. It did not wait for it, and it did not check it worked. |
+| A second `apply` | A group allows one refresh at a time, so updating it again **cancels the refresh in flight** and starts another. |
+
+```bash
+aws autoscaling describe-instance-refreshes \
+  --auto-scaling-group-name app
+```
+
+And what the template launches has to be **pinned**. If your boot script clones a branch, the refresh hands you new machines running whatever that branch holds at that moment — which is not a version, and not something you can roll back to.
+
+## Stopping a Refresh, and Rolling Back to the Previous Version
+
+| Option | What it does |
+|---|---|
+| **Cancel** | Stops a refresh that is still running. The machines it already replaced stay on the new version — cancel is not an undo. |
+| **Roll back** | Replaces those machines again, from the version the group held before. Only while the refresh is still running, and only with a numbered template version. |
+| **`auto_rollback`** | Does it for you when the refresh fails. Terraform names a rollback target only when you set this, which is why the console's **Roll back** is greyed out otherwise. |
+
+And the part people get wrong in interviews: **rolling back the code often does not undo the deploy**. If the bad version changed the database, that change is already applied, and putting the old code back leaves it facing data it does not expect. Shipping a corrected version forward is frequently the safer move. Rollback is a decision, not a button.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Force your own alarm into `ALARM` state** — use `set-alarm-state` against your own alarm name, confirm the mail arrives, and check that it shows in the alarm's **History** tab rather than on its graph, since the metric itself never breached.
+- **Work the outage ladder against your own stack, in order** — resolve the name, check the listener, check the target group's targets, curl `/health` directly, then find that machine's log events. Don't skip a step even when you're sure you know the answer.
+- **Wire `instance_refresh` onto your own Auto Scaling group** — point `version` at `latest_version`, not `$Latest` or nothing, push a change through `terraform apply`, and watch `describe-instance-refreshes` until it reports finished rather than assuming the `apply` returning means the deploy is done.
+- **Set `auto_rollback` and try rolling back mid-refresh** — start a refresh, cancel it partway through, and check which machines actually went back to the old version versus which stayed on the new one.
+
+**What you know now:** forcing an alarm's state with `set-alarm-state` proves the SNS publish and the subscription path work, but proves nothing about the metric, threshold, or `treat_missing_data` setting — and `HTTPCode_Target_5XX_Count` and `HTTPCode_ELB_5XX_Count` are different questions, not two names for the same failure. When the site is down, checking name resolution, the listener, the target group, the health check path, then log events, in that fixed order, rules a layer out at each step instead of guessing twice about the same one. A **healthy target** is a claim about one endpoint answering, not about the application working — the health check path defaults to `/` but this repo points it at `/health`, which never touches the database. A **deployment strategy** is how a new version replaces a running one — rolling replacement is ours, needing no extra capacity, while blue/green and canary trade capacity or exposure for a faster or safer rollback. **Instance refresh** replaces a group's machines in batches from a new launch template version, gated by **deregistration delay** (draining, a maximum wait on the target group) and `health_check_type = "ELB"` (so a refresh judges replacements on whether the application answers, not just whether the instance is running). Terraform only starts a refresh when an `apply` changes the group's `launch_template`, which is why `version` has to point at `latest_version`; a successful `apply` only starts the refresh; and **cancel**, **roll back**, and `auto_rollback` are three different things — with rolling back the code often not undoing a deploy that already changed the database.
