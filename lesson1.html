@@ -80,6 +80,8 @@
 <li><a href="#lesson-41-metrics-log-events-the-agent-reading-the-system-from-outside-the-machine">Lesson 41: Metrics, Log Events &amp; the Agent — Reading the System From Outside the Machine</a></li>
 <li><a href="#lesson-42-the-dashboard-the-alarm-your-inbox-reading-the-system-from-the-human-side">Lesson 42: The Dashboard, the Alarm &amp; Your Inbox — Reading the System From the Human Side</a></li>
 <li><a href="#lesson-43-testing-the-alarm-working-an-outage-getting-a-new-version-out">Lesson 43: Testing the Alarm, Working an Outage &amp; Getting a New Version Out</a></li>
+<li><a href="#lesson-44-environments-one-system-three-roles-what-a-second-one-costs">Lesson 44: Environments — One System, Three Roles &amp; What a Second One Costs</a></li>
+<li><a href="#lesson-45-modules-one-description-of-the-infrastructure-applied-twice">Lesson 45: Modules — One Description of the Infrastructure, Applied Twice</a></li>
   </ul>
 </nav>
 <main>
@@ -8146,6 +8148,371 @@ resource "aws_autoscaling_group" "app" {
 <li><strong>Set <code>auto_rollback</code> and try rolling back mid-refresh</strong> — start a refresh, cancel it partway through, and check which machines actually went back to the old version versus which stayed on the new one.</li>
 </ul>
 <p><strong>What you know now:</strong> forcing an alarm's state with <code>set-alarm-state</code> proves the SNS publish and the subscription path work, but proves nothing about the metric, threshold, or <code>treat_missing_data</code> setting — and <code>HTTPCode_Target_5XX_Count</code> and <code>HTTPCode_ELB_5XX_Count</code> are different questions, not two names for the same failure. When the site is down, checking name resolution, the listener, the target group, the health check path, then log events, in that fixed order, rules a layer out at each step instead of guessing twice about the same one. A <strong>healthy target</strong> is a claim about one endpoint answering, not about the application working — the health check path defaults to <code>/</code> but this repo points it at <code>/health</code>, which never touches the database. A <strong>deployment strategy</strong> is how a new version replaces a running one — rolling replacement is ours, needing no extra capacity, while blue/green and canary trade capacity or exposure for a faster or safer rollback. <strong>Instance refresh</strong> replaces a group's machines in batches from a new launch template version, gated by <strong>deregistration delay</strong> (draining, a maximum wait on the target group) and <code>health_check_type = "ELB"</code> (so a refresh judges replacements on whether the application answers, not just whether the instance is running). Terraform only starts a refresh when an <code>apply</code> changes the group's <code>launch_template</code>, which is why <code>version</code> has to point at <code>latest_version</code>; a successful <code>apply</code> only starts the refresh; and <strong>cancel</strong>, <strong>roll back</strong>, and <code>auto_rollback</code> are three different things — with rolling back the code often not undoing a deploy that already changed the database.</p>
+<h1 id="lesson-44-environments-one-system-three-roles-what-a-second-one-costs">Lesson 44: Environments — One System, Three Roles &amp; What a Second One Costs</h1>
+<h2 id="where-we-left-off_9">Where We Left Off</h2>
+<p>Last session closed the deploy: instance refresh replacing machines from a new launch template version, and a clean line between canceling a refresh and actually rolling one back. Tonight steps back from any single deploy to ask what you've been deploying into all along — right now, one system — and opens the unit on running more than one.</p>
+<h2 id="everything-terraform-state-list-prints-is-one-system-and-its-the-only-one-you-have">Everything <code>terraform state list</code> Prints Is One System, and It's the Only One You Have</h2>
+<pre><code class="language-bash">terraform state list     # every resource this repository is managing, read from remote state
+</code></pre>
+<p>One network, one load balancer, one database, one group of servers. One system, and everyone who visits your address reaches it.</p>
+<h2 id="an-environment-is-one-complete-running-copy-of-the-system">An Environment Is One Complete Running Copy of the System</h2>
+<p><strong>environment</strong> — network, servers, load balancer, database. All of it, running at the same time.</p>
+<p>Not a folder. Not a branch. Not an environment variable, and not the environment file your app reads. A whole system that is running.</p>
+<h2 id="production-dev-staging-are-roles-given-to-an-environment-not-three-kinds-of-thing">Production, Dev &amp; Staging Are Roles Given to an Environment, Not Three Kinds of Thing</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>production</strong></td>
+<td>The copy real users reach. Its data is real data, belonging to real people.</td>
+</tr>
+<tr>
+<td><strong>dev</strong></td>
+<td>A copy engineers change freely. Its data is invented — nothing in it belongs to a real person, so a mistake here reaches nobody outside the team.</td>
+</tr>
+<tr>
+<td><strong>staging</strong></td>
+<td>A copy made to resemble production closely enough to be the last check before it. It usually still holds invented data, which is why it can't catch every failure.</td>
+</tr>
+</tbody>
+</table>
+<p>Close to production is not production. The data is usually where the difference is.</p>
+<h2 id="the-same-resources-fewer-of-them">The Same Resources, Fewer of Them</h2>
+<p>Copies hold the same resources. What differs is how many there are, how big each one is, and the data they hold. A lower environment costs less — fewer and smaller machines — but not nothing: a load balancer is charged for <strong>each hour it's running</strong>, used or not.</p>
+<h2 id="with-one-environment-every-change-is-tried-on-the-system-answering-real-traffic">With One Environment, Every Change Is Tried on the System Answering Real Traffic</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>What you have</strong></td>
+<td>One environment. Every change you apply reaches the running system that answers your address.</td>
+</tr>
+<tr>
+<td><strong>What you don't have</strong></td>
+<td>Anywhere to put that same change and read the result before it's live.</td>
+</tr>
+</tbody>
+</table>
+<p>That's the problem. Companies run more than one environment because of it.</p>
+<h2 id="the-rest-of-this-unit-in-five-parts">The Rest of This Unit, in Five Parts</h2>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 · What an environment is</strong></td>
+<td>What counts as one, and the three names given to them: production, dev, staging.</td>
+</tr>
+<tr>
+<td><strong>2 · Why a second environment exists</strong></td>
+<td>The reasons, taken from companies rather than from your own account.</td>
+</tr>
+<tr>
+<td><strong>3 · What separates two environments</strong></td>
+<td>The AWS account, and what a boundary refuses that a name cannot.</td>
+</tr>
+<tr>
+<td><strong>4 · Reaching a second account</strong></td>
+<td>How a person gets into one, and how Terraform does.</td>
+</tr>
+<tr>
+<td><strong>5 · The same code, two environments</strong></td>
+<td>Modules, one directory per environment, and both of them applied.</td>
+</tr>
+</tbody>
+</table>
+<p>Tonight was part 1. The rest of the unit is still ahead.</p>
+<h2 id="after-class_23">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Run <code>terraform state list</code> against your own repository</strong> — read down the list and name, out loud, what would break if each entry disappeared. That list is your one environment, in full.</li>
+<li><strong>Sort your own app's data into real and invented</strong> — for everything your database holds, decide which rows belong to a real person and which don't. That split is what will decide whether a copy of your system is allowed to be <code>dev</code> or has to stay <code>production</code>.</li>
+<li><strong>Price your own load balancer as a second environment</strong> — it's charged by the hour whether it's used or not, so a second copy of it is never free, even at the smallest scale. Work out roughly what a second, minimal copy of your stack would add to the bill.</li>
+</ul>
+<p><strong>What you know now:</strong> an <strong>environment</strong> is one complete running copy of the system — network, servers, load balancer, database, all running at once — and it is not a folder, a branch, an environment variable, or the environment file your app reads. <strong>Production</strong>, <strong>dev</strong>, and <strong>staging</strong> are roles given to an environment, not three different kinds of thing: production is the copy real users reach with real data, dev is the copy engineers change freely with invented data, and staging resembles production closely enough to be the last check before it but usually still holds invented data, which is why it can't catch every failure. A lower environment costs less because it holds fewer and smaller copies of the same resources, but not nothing — a load balancer bills by the hour whether it's used or not. And with only one environment, there's nowhere to put a change and read the result before it reaches the system answering real traffic — which is the problem the rest of this unit, reaching a second AWS account and running the same code in both, is there to solve.</p>
+<h1 id="lesson-45-modules-one-description-of-the-infrastructure-applied-twice">Lesson 45: Modules — One Description of the Infrastructure, Applied Twice</h1>
+<h2 id="where-we-left-off_10">Where We Left Off</h2>
+<p>Last session named the problem: with one environment, every change lands on the system answering real traffic, and there's nowhere to try it first. Tonight is part 5 of the unit — the same code, two environments — and it ends with a second environment actually applied, from your own repository.</p>
+<h2 id="a-module-is-a-directory-of-terraform-with-declared-inputs-and-declared-outputs">A Module Is a Directory of Terraform With Declared Inputs and Declared Outputs</h2>
+<p><strong>module</strong> — a directory of Terraform with declared inputs and declared outputs, called from somewhere else by a relative path.</p>
+<p>You already write one level of this:</p>
+<pre><code class="language-hcl">variable "instance_type" {
+  type    = string
+  default = "t3.micro"
+}
+</code></pre>
+<p>A module is the same idea, one level of size up:</p>
+<pre><code class="language-hcl">module "network" {
+  source = "../../network"
+  cidr   = "10.0.0.0/16"
+}
+</code></pre>
+<p>A <code>variable</code> is one description of <strong>a value</strong>. A <code>module</code> is one description of <strong>a set of resources</strong>. Both take their values from outside. The only new thing is <code>source</code> — a relative path to the directory being called.</p>
+<h2 id="one-module-called-twice-with-different-values">One Module, Called Twice With Different Values</h2>
+<p>A small module, three files:</p>
+<pre><code class="language-hcl"># variables.tf
+variable "label" { type = string }
+
+# main.tf — one resource, and it is free
+
+# outputs.tf
+output "id" { value = ... }
+</code></pre>
+<p>Called from two environment directories, with different values:</p>
+<pre><code class="language-hcl">module "first" {
+  source = "../../first"
+  label  = "production"
+}
+
+module "first" {
+  source = "../../first"
+  label  = "dev"
+}
+</code></pre>
+<p>Nothing inside the module names either caller. That is what lets two different places call the same directory.</p>
+<h2 id="two-modules-because-an-output-needs-somewhere-to-go">Two Modules, Because an Output Needs Somewhere to Go</h2>
+<pre><code class="language-hcl"># network/outputs.tf — a value going OUT
+output "vpc_id" {
+  value = aws_vpc.this.id
+}
+</code></pre>
+<pre><code class="language-hcl"># app/variables.tf — a value coming IN
+variable "vpc_id" {
+  type = string
+}
+</code></pre>
+<p>The network module declares the VPC id as an output. The app module can't be built without it as an input. One module holding both would leave the output with nothing on the other side to hand the value to — so a VPC and the app that depends on it live in separate modules.</p>
+<h2 id="the-environment-root-reads-one-output-and-passes-it-into-the-other-and-root-means-three-different-things">The Environment Root Reads One Output and Passes It Into the Other — and "Root" Means Three Different Things</h2>
+<p>The network module declares the VPC id as an output. The <strong>environment root</strong> — the directory holding the provider block, the backend, and the calls to both modules — reads it by that name and passes it into the app module as an input. The value is recorded in that environment's state.</p>
+<p>Three unrelated things get called root, and none of them is ever said bare:</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>environment root</strong></td>
+<td>The Terraform directory that calls the modules — <code>production/</code>, <code>dev/</code>, and so on.</td>
+</tr>
+<tr>
+<td><strong>management account</strong></td>
+<td>The AWS account at the top of an organization.</td>
+</tr>
+<tr>
+<td><strong>root user</strong></td>
+<td>The one login every AWS account starts with.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reading-inside-a-module-only-through-what-it-declares">Reading Inside a Module Only Through What It Declares</h2>
+<pre><code class="language-hcl"># modules/full-env/outputs.tf
+output "db_endpoint" {
+  value = aws_db_instance.main.address
+}
+
+# production/main.tf — reads the name the module declared
+output "db_endpoint" {
+  value = module.prod.db_endpoint   # plans and applies
+}
+</code></pre>
+<pre><code class="language-hcl"># production/main.tf — names a resource inside the module instead
+output "db_endpoint" {
+  value = module.prod.aws_db_instance.main.address   # Unsupported attribute
+}
+</code></pre>
+<p><code>module.prod</code> holds the names in that module's <code>outputs.tf</code> and nothing else. Moving a resource into a module puts it out of reach from outside, so every output that named it directly has to be rewritten to read the module's output instead.</p>
+<h2 id="a-module-can-come-from-a-registry-instead-of-your-own-repository">A Module Can Come From a Registry Instead of Your Own Repository</h2>
+<pre><code class="language-hcl"># yours, by relative path
+module "network" {
+  source = "../modules/network"
+  cidr   = "10.6.0.0/16"
+}
+</code></pre>
+<pre><code class="language-hcl"># somebody else's, by registry address
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~&gt; 6.0"
+  cidr    = "10.6.0.0/16"
+}
+</code></pre>
+<p><code>terraform init</code> downloads a registry module; <code>version</code> decides which release you get. The published ones are single pieces of infrastructure — a VPC, a load balancer, an S3 bucket — at <code>registry.terraform.io</code>, with AWS's own set published as the <code>terraform-aws-modules</code> GitHub organization. Your full-environment module stays yours, because the set of resources in it is yours.</p>
+<h2 id="four-ways-to-run-more-than-one-environment-and-why-plain-directories-win">Four Ways to Run More Than One Environment, and Why Plain Directories Win</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>The tradeoff</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The directory duplicated per environment</strong></td>
+<td>Every change has to be made twice. The day one copy is missed, the two environments stop matching.</td>
+</tr>
+<tr>
+<td><strong>Terraform workspaces</strong></td>
+<td>One configuration, several states. Named here, and not used.</td>
+</tr>
+<tr>
+<td><strong>Terragrunt</strong></td>
+<td>A separate tool that generates the repetition for you. Named here, and not used.</td>
+</tr>
+<tr>
+<td><strong>A directory per environment, each its own Terraform root (ours)</strong></td>
+<td>The repetition stays in the files, where you can read it.</td>
+</tr>
+</tbody>
+</table>
+<p>Each option differs on one axis — this isn't a ranking. The cost of the last one is real: a change to shared structure has to be made in each environment root. What keeps that small is the modules — the repetition that's left is a values file and a set of credentials, not the resources themselves.</p>
+<h2 id="the-shape-modules-at-the-top-one-directory-per-environment-beside-them">The Shape: Modules at the Top, One Directory Per Environment Beside Them</h2>
+<p>Module directories sit at the top level, named for what they build — <code>network</code>, <code>app</code>. Beside them, an <code>environments</code> directory holds one directory per environment — <code>production</code>, <code>dev</code> — each its own place Terraform is run, each with <strong>one state per environment</strong>.</p>
+<h2 id="a-module-holds-no-provider-block-and-no-backend">A Module Holds No Provider Block and No Backend</h2>
+<p>It inherits both from whichever environment root calls it. That's also why <code>terraform init</code> inside a module directory fails: a module has no backend, so there's nothing there for <code>init</code> to initialize. Terraform runs in the environment directory, never in a module directory.</p>
+<h2 id="one-values-file-inside-each-environment-root">One Values File Inside Each Environment Root</h2>
+<table>
+<thead>
+<tr>
+<th>What it sets</th>
+<th>production</th>
+<th>dev</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>app servers</td>
+<td>3</td>
+<td>1</td>
+</tr>
+<tr>
+<td>instance size</td>
+<td><code>t3.small</code></td>
+<td><code>t3.micro</code></td>
+</tr>
+<tr>
+<td>database</td>
+<td>across two zones</td>
+<td>one zone</td>
+</tr>
+</tbody>
+</table>
+<p>(Sample sizes — the real numbers are yours to choose per environment.) The values file is not shared between environments, and it's not passed on the command line — it lives inside each environment root. <code>*.tfvars</code> is in the repository's <code>.gitignore</code> today; that line has to change, or the file stays on one machine.</p>
+<h2 id="building-one-name-per-environment-out-of-a-shared-value">Building One Name Per Environment Out of a Shared Value</h2>
+<pre><code class="language-hcl"># staging/variables.tf — the same in every root
+variable "domain_name" {
+  type    = string
+  default = "inv-app.exchangeweb.net"
+}
+</code></pre>
+<pre><code class="language-hcl"># staging/main.tf — the one part that differs
+module "staging" {
+  source      = "../modules/full-env"
+  domain_name = "staging.${var.domain_name}"
+}
+</code></pre>
+<p><code>var.domain_name</code> is that value, used where a value stands on its own. <code>${...}</code> puts it inside a string — the module receives <code>staging.inv-app.exchangeweb.net</code>. The variable needs its <code>default</code> for this to work: with no default and nothing passed in, there's no value to read, and the plan stops.</p>
+<h2 id="one-state-key-per-environment-root">One State Key Per Environment Root</h2>
+<p>One bucket per account, created by hand in that account, outside the configuration. In a single account, that's one bucket with a key for each environment root. An action in one account can't reach the other account's state. Copy every file from one environment root to build a second but leave the key alone, and <code>plan</code> reports <strong>no changes</strong> — both roots would be reading the one state, and everything in it already exists.</p>
+<h2 id="moving-into-modules-destroys-and-recreates-here-thats-acceptable">Moving Into Modules Destroys and Recreates — Here, That's Acceptable</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Moves into a module</strong></td>
+<td>The network. The servers and the load balancer.</td>
+</tr>
+<tr>
+<td><strong>Does not move</strong></td>
+<td>The database. Its data is the whole reason, and it stays in the environment root.</td>
+</tr>
+</tbody>
+</table>
+<p>Your repository is one flat folder today; it moves into the two modules above. Terraform destroys and recreates everything that moves. Two reasons that's accepted here and wouldn't be at a company: the resources that move hold no data, and nobody is using your system yet.</p>
+<h2 id="what-the-plan-prints-and-the-one-line-that-must-not-be-in-it">What the Plan Prints, and the One Line That Must Not Be In It</h2>
+<pre><code class="language-diff">- aws_vpc.main                     # destroyed — its address changed
++ module.network.aws_vpc.this      # created at the new address
+
+  aws_db_instance.main             # absent from the plan entirely
+</code></pre>
+<p>Say out loud what the plan will print before a file moves, then read the destroy count and confirm the database is not in it. <code>terraform init</code> inside a module directory still fails here for the same reason as before — a module has no backend, so there's nothing for it to initialize.</p>
+<h2 id="the-second-environment-applied">The Second Environment, Applied</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The same in both</strong></td>
+<td>The two modules. The environment root that calls them. Every resource they create.</td>
+</tr>
+<tr>
+<td><strong>Different in each</strong></td>
+<td>The values file inside the environment root, and the credentials the apply runs as. Nothing else.</td>
+</tr>
+</tbody>
+</table>
+<p>An empty plan on a second, freshly-copied environment root is correct, not a broken module — it means the module produced exactly what already exists.</p>
+<h2 id="in-one-account-the-copy-fails-on-every-name-aws-owns">In One Account, the Copy Fails on Every Name AWS Owns</h2>
+<table>
+<thead>
+<tr>
+<th>Refuses to create a second one</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Load balancer, target group</td>
+<td>The name must be unique per region per account, and the balancer's address is built from it: <code>name-id.elb.region.amazonaws.com</code>.</td>
+</tr>
+<tr>
+<td>IAM role, instance profile</td>
+<td>IAM names are account-wide. There's no region to keep two of them apart.</td>
+</tr>
+<tr>
+<td>Log group, DB subnet group, DB instance, DNS record</td>
+<td>AWS finds each of these by the name you gave it.</td>
+</tr>
+<tr>
+<td>Auto Scaling group</td>
+<td>Unique per region per account, same rule as the load balancer. The instances it launches carry only a tag, which is why this one is easy to get wrong.</td>
+</tr>
+</tbody>
+</table>
+<p>The VPC, subnets, security groups, and route tables all create twice without complaint — their <code>Name</code> is a tag, and AWS never reads it. Two environments in two separate accounts hit none of this.</p>
+<h2 id="after-class_24">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Split your own repository into modules</strong> — pull the network and the app/servers/load balancer into their own directories with declared inputs and outputs, and leave the database resource where it is. Read the plan before you apply it, and confirm the destroy count is what you expect and the database isn't in it.</li>
+<li><strong>Call the same module twice</strong> — build a second environment directory from the first, change nothing but its values file and its state key, and get an empty plan on a re-apply of the original before you count it as working.</li>
+<li><strong>Break the read-through-outputs rule on purpose</strong> — try <code>module.&lt;name&gt;.&lt;some_resource&gt;.&lt;attr&gt;</code> against a resource that only exists inside a module, read the exact error Terraform gives you, then fix it by adding the output and reading <code>module.&lt;name&gt;.&lt;output&gt;</code> instead.</li>
+<li><strong>Find your own account's naming collisions</strong> — list the resources your repository creates and sort them into "named by you, found by AWS" versus "tagged only" — that split predicts exactly which ones would fail if applied twice in one account.</li>
+</ul>
+<p><strong>What you know now:</strong> a <strong>module</strong> is a directory of Terraform with declared inputs and declared outputs, called from somewhere else by a relative path — the same idea as a <code>variable</code>, one level of size up. An <strong>environment root</strong> is the directory that holds the provider block, the backend, and the calls to the modules; it is not the AWS <strong>management account</strong> and not an account's <strong>root user</strong>, three unrelated things that all get called root. A module holds no provider block and no backend, so it inherits both from whichever root calls it, and <code>terraform init</code> inside a module directory fails because there's nothing there to initialize. Everything read from a module has to come through a name it declared in its own <code>outputs.tf</code> — reaching in to name a resource directly fails with <code>Unsupported attribute</code>. Of the four ways to run more than one environment — a duplicated directory, Terraform workspaces, Terragrunt, or a directory per environment — plain directories keep the repetition visible and install nothing new, at the real cost of changing shared structure in more than one place, which the modules keep small. One state key lives per environment root, one bucket per account; moving resources into modules destroys and recreates them, accepted here because they hold no data and nobody is using the system yet — and once applied, two environments differ only in their values file and the credentials the apply runs as. In a single AWS account, that copy still fails on every resource AWS finds by a name it owns — a load balancer, an IAM role, a log group, an Auto Scaling group — while everything whose <code>Name</code> is only a tag creates twice without complaint.</p>
 
 </main>
 </body>

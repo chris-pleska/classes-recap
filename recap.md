@@ -1727,3 +1727,103 @@ Whatever the template launches also has to be **pinned** — a boot script that 
 **Cancel, roll back, and `auto_rollback` are three different things.** Cancel stops a refresh still running, but the machines it already replaced stay on the new version — cancel is not an undo. Roll back replaces those machines again from the version the group held before, and only works while the refresh is still running, with a numbered template version. `auto_rollback` does this automatically on failure; Terraform only names a rollback target when you set it, which is why the console's **Roll back** button is otherwise greyed out. The trap in interviews: rolling back the code often doesn't undo the deploy — if the bad version already changed the database, the old code now faces data it doesn't expect, and shipping a corrected version forward is frequently safer. Rollback is a decision, not a button.
 
 **Before next class:** ship your log off the machine (agent installed from the boot script, retention set on every log group you create), build the dashboard from this unit's metrics in Terraform, set up one alarm that actually reaches you (confirm the subscription, write the action beside it), and practice finding one moment twice — a spike on a graph, then the log events from that same minute in the stream for the machine that was serving.
+
+---
+
+## Lesson 43: What an Environment Is
+
+An environment is one complete running copy of the system — network, load balancer, servers, database, all of it running at the same time. It is not a folder, not a branch, and not an environment variable or the env file your app reads.
+
+```bash
+terraform state list   # every resource this repo manages, read from remote state — one system, and it's the only one you have
+```
+
+**Three roles given to environments** — not three different kinds of thing:
+
+| Role | What it is |
+|---|---|
+| production | The copy real users reach. Its data is real data, belonging to real people. |
+| dev | A copy engineers change freely. Its data is invented — a mistake here reaches nobody outside the team. |
+| staging | The last check before production — made to resemble it closely. Usually still holds invented data, which is why it can't catch every failure. |
+
+Copies hold the same resources; what differs is how many there are, how big each one is, and the data they hold. A lower environment costs less — fewer and smaller machines — but not nothing: a load balancer is charged for every hour it runs, used or not.
+
+**The problem this solves:** with one environment, every change is tried directly on the system that answers your address — there's nowhere to put a change and look at it first. That's why companies run more than one environment.
+
+---
+
+## Lesson 44: Modules & a Second Environment
+
+A **module** is a directory of Terraform with declared inputs and outputs, called from elsewhere by a relative path — the same idea as a variable, one level of size up. Nothing inside a module names its caller, which is what lets two environments call the same directory.
+
+```hcl
+module "network" {
+  source = "../../network"
+  cidr   = "10.0.0.0/16"
+}
+```
+
+**Wiring one module's output into another's input** — the environment root reads a value one module declared as output and passes it into another as an input; the value is recorded in that environment's state:
+```hcl
+# network/outputs.tf — a value going OUT
+output "vpc_id" {
+  value = aws_vpc.this.id
+}
+
+# app/variables.tf — a value coming IN
+variable "vpc_id" {
+  type = string
+}
+```
+
+Only an output a module declared is reachable from outside it — naming a resource directly fails:
+```hcl
+# production/main.tf
+output "db_endpoint" {
+  value = module.prod.db_endpoint                       # works
+  # value = module.prod.aws_db_instance.main.address     # Unsupported attribute
+}
+```
+
+Three unrelated things get called **root** in this material: the Terraform **environment root**, AWS's **management account**, and an account's **root user**.
+
+**Modules can come from a public registry**, not just your own repo:
+```hcl
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 6.0"
+  cidr    = "10.6.0.0/16"
+}
+```
+
+**Four ways to run more than one environment** — a field, not a ranking: the directory duplicated per environment (drifts the day one copy is missed), Terraform workspaces (one config, several states), Terragrunt (a separate tool that generates the repetition), or **a plain directory per environment, each its own Terraform root** — the pick, because the repetition stays visible in files you can read and nothing new has to be installed.
+
+```
+network/             # modules at top level, named for what they build
+app/
+environments/
+  production/         # each its own Terraform root — one state per environment
+  dev/
+```
+
+A module holds no provider block and no backend — it inherits both from whichever environment root calls it, so `terraform init` inside a module directory fails (nothing to initialize).
+
+**One values file per environment root** — not shared between environments, not passed on the command line. `*.tfvars` has to come out of `.gitignore` or the file never leaves one machine.
+
+**One state key per environment root, inside one bucket per account:**
+```
+s3://tfstate-bucket/production/terraform.tfstate
+s3://tfstate-bucket/dev/terraform.tfstate
+```
+Copy every file into a new environment but leave the key alone, and `plan` reports no changes — both roots are reading the same state.
+
+**Moving existing resources into modules destroys and recreates them** (their address changed) — accepted only because nothing holds data yet and nobody's using the system:
+```
+- aws_vpc.main                     # destroyed — its address changed
++ module.network.aws_vpc.this      # created at the new address
+
+  aws_db_instance.main             # absent from the plan entirely
+```
+The database stays out of the module, in the environment root — its data is the whole reason it can't move.
+
+**Two environments in one account collide on every name AWS itself owns:** load balancer/target group names, IAM role names, log groups, DB subnet groups, DB instances, DNS records, Auto Scaling group names. Resources whose `Name` is only a tag — VPC, subnets, security groups, route tables — create twice without complaint. Two environments in two accounts hit none of this.
