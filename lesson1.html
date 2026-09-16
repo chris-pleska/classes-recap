@@ -82,6 +82,7 @@
 <li><a href="#lesson-43-testing-the-alarm-working-an-outage-getting-a-new-version-out">Lesson 43: Testing the Alarm, Working an Outage &amp; Getting a New Version Out</a></li>
 <li><a href="#lesson-44-environments-one-system-three-roles-what-a-second-one-costs">Lesson 44: Environments — One System, Three Roles &amp; What a Second One Costs</a></li>
 <li><a href="#lesson-45-modules-one-description-of-the-infrastructure-applied-twice">Lesson 45: Modules — One Description of the Infrastructure, Applied Twice</a></li>
+<li><a href="#lesson-46-caching-and-the-copy-nearest-the-user">Lesson 46 — Caching, and the Copy Nearest the User</a></li>
   </ul>
 </nav>
 <main>
@@ -8513,6 +8514,253 @@ module "staging" {
 <li><strong>Find your own account's naming collisions</strong> — list the resources your repository creates and sort them into "named by you, found by AWS" versus "tagged only" — that split predicts exactly which ones would fail if applied twice in one account.</li>
 </ul>
 <p><strong>What you know now:</strong> a <strong>module</strong> is a directory of Terraform with declared inputs and declared outputs, called from somewhere else by a relative path — the same idea as a <code>variable</code>, one level of size up. An <strong>environment root</strong> is the directory that holds the provider block, the backend, and the calls to the modules; it is not the AWS <strong>management account</strong> and not an account's <strong>root user</strong>, three unrelated things that all get called root. A module holds no provider block and no backend, so it inherits both from whichever root calls it, and <code>terraform init</code> inside a module directory fails because there's nothing there to initialize. Everything read from a module has to come through a name it declared in its own <code>outputs.tf</code> — reaching in to name a resource directly fails with <code>Unsupported attribute</code>. Of the four ways to run more than one environment — a duplicated directory, Terraform workspaces, Terragrunt, or a directory per environment — plain directories keep the repetition visible and install nothing new, at the real cost of changing shared structure in more than one place, which the modules keep small. One state key lives per environment root, one bucket per account; moving resources into modules destroys and recreates them, accepted here because they hold no data and nobody is using the system yet — and once applied, two environments differ only in their values file and the credentials the apply runs as. In a single AWS account, that copy still fails on every resource AWS finds by a name it owns — a load balancer, an IAM role, a log group, an Auto Scaling group — while everything whose <code>Name</code> is only a tag creates twice without complaint.</p>
+
+<h1 id="lesson-46-caching-and-the-copy-nearest-the-user">Lesson 46 — Caching, and the Copy Nearest the User</h1>
+<h2 id="where-we-left-off_11">Where We Left Off</h2>
+<p>The last few sessions closed out the infrastructure-as-code arc: modules, environments, the same code applied twice. Tonight opens a new topic inside the Scale unit, and it starts from a plain fact about your own page: it does the whole job on every single request. The balancer routes it, Flask handles it, a call goes out to Finnhub for the quote, a query goes to Postgres, the page renders — and none of that work is kept from one request to the next. Tonight names the place a repeated answer can be kept instead. There turn out to be three such places, and by the end you can say which one holds any given answer on your own system.</p>
+<h2 id="a-cache-is-a-stored-copy-of-an-answer">A Cache Is a Stored Copy of an Answer</h2>
+<p><strong>cache</strong> — a stored copy of an answer. Instead of computing the answer again, the copy is handed back.</p>
+<p>Your page asks Finnhub for the quote on every request. A cache would hand back the quote it fetched ten seconds ago instead of asking again. Most applications keep a copy of something. Yours, right now, keeps none.</p>
+<h2 id="the-first-place-a-copy-can-live-inside-the-application">The First Place a Copy Can Live: Inside the Application</h2>
+<p><strong>local cache</strong> — a copy inside the application process, kept on the machine it runs on. Each of your two Flask servers could keep the last Finnhub quote for a few seconds instead of asking Finnhub on every request.</p>
+<p>That's the term. What it is not called: "the application's memory" — that phrase is reserved for a database's own memory, and a room full of people reaches for RAM the moment they hear it. The real term is local cache, and it names a copy inside the process, nothing more.</p>
+<h2 id="the-origin-computes-the-real-answer-a-hit-or-a-miss-says-whether-it-was-asked">The Origin Computes the Real Answer; a Hit or a Miss Says Whether It Was Asked</h2>
+<p><strong>origin</strong> — the system that computes the real answer. For the quote on your page, the origin is Finnhub. For the whole page, the origin is your own servers. The origin does the work; a copy only repeats it.</p>
+<p>(Not related to git's <code>origin</code>, which is a remote repository — same word, unrelated thing.)</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>hit</strong></td>
+<td>The quote is already in the Flask process. It's returned, and Finnhub is never called.</td>
+</tr>
+<tr>
+<td><strong>miss</strong></td>
+<td>No copy exists, or it has expired. Flask calls Finnhub, and the answer is stored on the way back.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-key-is-the-part-of-the-request-that-selects-the-copy">The Key Is the Part of the Request That Selects the Copy</h2>
+<p><strong>key</strong> — what the cache looks at to decide which copy you get. Same key, same copy.</p>
+<ul>
+<li>The quote's key is the ticker symbol: <code>AAPL</code> and <code>TSLA</code> are two keys, two copies, and everyone asking for <code>AAPL</code> gets the same one.</li>
+<li>A poster's key is the file's address: everyone asking for the same address gets the same copy.</li>
+</ul>
+<p>A personal page has to carry the person in its key. Leave the account out of the key and everyone gets the same copy — one person sees another person's page.</p>
+<h2 id="time-to-live-how-long-a-copy-is-kept-before-the-origin-is-asked-again">Time to Live: How Long a Copy Is Kept Before the Origin Is Asked Again</h2>
+<p><strong>time to live</strong> (<strong>TTL</strong>) — how long a copy is kept before the origin is asked for a fresh answer.</p>
+<p>You've already met this idea: your DNS record's TTL is 300 seconds, and a resolver keeps that answer for 300 seconds before asking Route 53 again. The same idea shows up on a web answer as one header line, set by the origin:</p>
+<pre><code>Cache-Control: max-age=300     # keep this copy for 300 seconds
+</code></pre>
+<h2 id="stale-the-copy-still-holds-the-old-answer">Stale: the Copy Still Holds the Old Answer</h2>
+<p><strong>stale</strong> — the origin has a new answer, but the copy still holds the old one, and serves it until its time to live ends.</p>
+<p>Finnhub has a new price; your Flask process still holds the old one for a few seconds. Nothing is broken — the copy is stale, and it stops being stale the moment its TTL runs out and the next request goes to the origin.</p>
+<h2 id="the-limit-of-the-first-place-n-machines-hold-n-copies">The Limit of the First Place: N Machines Hold N Copies</h2>
+<p>Machine A stored a post's like count at 10:00:00 and shows 1,204. Machine B stored it at 10:00:40 and shows 1,219. Fine for likes — nobody is harmed and nobody notices two numbers for a minute. Not fine for a cart — a cart that differs between the two machines is a cart that loses items the moment the load balancer switches you to the other one.</p>
+<p>Your two Flask processes could each keep the last Finnhub quote instead of asking every time, and for those seconds the two quotes would differ. That's the limit of the first place: <strong>N machines hold N copies.</strong></p>
+<h2 id="what-a-local-cache-gives-a-company">What a Local Cache Gives a Company</h2>
+<table>
+<thead>
+<tr>
+<th>What it gives</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fewer calls to the origin</strong></td>
+<td>One Finnhub call serves every request for the next few seconds, instead of one call per request.</td>
+</tr>
+<tr>
+<td><strong>A smaller bill</strong></td>
+<td>External APIs bill per call and cap calls per minute. A copy keeps you under both.</td>
+</tr>
+<tr>
+<td><strong>A faster answer</strong></td>
+<td>A copy in the process answers in microseconds; a call across the internet takes tens of milliseconds.</td>
+</tr>
+</tbody>
+</table>
+<p>The limit stays: every machine keeps its own copy, so the copies can differ. Nothing to build here, and nothing to pay for — the process already had the memory.</p>
+<h2 id="the-second-place-one-shared-store-every-server-reads">The Second Place: One Shared Store Every Server Reads</h2>
+<p><strong>shared store</strong> (a <strong>cache tier</strong>) — a separate server whose only job is to hold copies. Every application server reads and writes the same one, so there is one copy, not N.</p>
+<p>Your Amazon cart follows you from your phone to your laptop. It isn't kept on the machine that answered you — it's kept in a store every machine can reach.</p>
+<h2 id="elasticache-is-aws-running-a-cache-tier-for-you">ElastiCache Is AWS Running a Cache Tier for You</h2>
+<p><strong>Amazon ElastiCache</strong> — a cache server AWS runs for you inside your VPC, the same way RDS runs your database. Never public. Bills by the hour from creation. You're paying for RAM, and a gigabyte of RAM costs far more than a gigabyte of disk — which is why a cache holds what's asked for often, not everything the database holds.</p>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Redis OSS</strong></td>
+<td>The most widely used engine. Keys and values, held in RAM.</td>
+</tr>
+<tr>
+<td><strong>Memcached</strong></td>
+<td>The older, simpler engine. Keys and values only.</td>
+</tr>
+<tr>
+<td><strong>Valkey</strong></td>
+<td>A fork of Redis, kept open source. AWS's recommended engine for a new cache.</td>
+</tr>
+</tbody>
+</table>
+<p>ElastiCache runs any of the three. Named here; nobody creates one tonight.</p>
+<h2 id="the-session-store-is-not-a-cookie-and-not-a-cache">The Session Store Is Not a Cookie, and Not a Cache</h2>
+<p>In the load balancer topic, <strong>sticky sessions</strong> kept a user on one machine — a setting on the load balancer that sends you back to the same server every time, and it has to be configured on both the balancer and the application. The real fix moves who-is-logged-in off the machines entirely, into the shared store, so any machine can answer:</p>
+<p><strong>session store</strong> — the shared store holding who is logged in.</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>sticky session</strong></td>
+<td>A load-balancer setting solving the same problem a session store solves, at the cost of configuring both the balancer and the app.</td>
+</tr>
+<tr>
+<td><strong>cookie</strong></td>
+<td>Data the browser sends back with each request. A cookie can identify you with no login at all — the site stores an identifier in your browser and the browser sends it back on every visit.</td>
+</tr>
+<tr>
+<td><strong>cache</strong></td>
+<td>A stored answer, kept by a server or an app. Different word, different thing.</td>
+</tr>
+</tbody>
+</table>
+<p>Your application has no login, so it has nothing to put in a session store — explained here, not built.</p>
+<h2 id="some-answers-are-never-a-copy">Some Answers Are Never a Copy</h2>
+<ul>
+<li><strong>Your bank balance.</strong> Your phone and the cash machine must show the same number, right now. A copy from a minute ago is a wrong balance.</li>
+<li><strong>The last seat on a flight.</strong> Two people must not both buy it. The answer has to come from the one place that knows.</li>
+<li><strong>The cash figure on your page after a stock buy.</strong> Computed on every request, from Postgres. Never stored anywhere else.</li>
+</ul>
+<p><strong>The test:</strong> if two screens may show different values for a minute, the answer <em>can</em> be a copy. If they may not, it <em>cannot</em>.</p>
+<h2 id="steam-25-december-2015-the-key-left-out-the-person">Steam, 25 December 2015: the Key Left Out the Person</h2>
+<p>The Steam store was under a flood of requests. A caching change was deployed to cope with it, and it cached each store page <strong>without the account in the key</strong>. What people saw: other people's account pages — billing and email address, purchase history, the last two digits of a card. By Valve's own count, about 34,000 accounts were affected.</p>
+<p>A personal page has the person in its key, or it is never a copy.</p>
+<h2 id="what-a-shared-store-gives-a-company">What a Shared Store Gives a Company</h2>
+<table>
+<thead>
+<tr>
+<th>What it gives</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>One answer for every server</strong></td>
+<td>The cart, the login, the count are the same whichever machine answers — the limit of the first place is gone.</td>
+</tr>
+<tr>
+<td><strong>A database that does less</strong></td>
+<td>Reads answered from the store never reach Postgres, so the same database serves many more users. Writes still go straight to Postgres; the application code decides which is which.</td>
+</tr>
+<tr>
+<td><strong>Machines you can replace</strong></td>
+<td>Nothing a user needs lives on the machine itself. A server can be replaced at any moment, which is exactly what the scaling group assumes.</td>
+</tr>
+</tbody>
+</table>
+<p>The cost: a server that bills by the hour from creation, inside the VPC, like RDS.</p>
+<h2 id="distance-costs-time">Distance Costs Time</h2>
+<p>Light in fibre travels about 200 km per millisecond. Singapore to Virginia and back is at least 150 ms — before any server does a single thing. A page over HTTPS needs several such round trips before the first byte arrives. A video call across an ocean has a delay you can hear; the same delay is paid on every round trip a page makes.</p>
+<h2 id="the-edge-location-a-city-near-the-user">The Edge Location: a City Near the User</h2>
+<p><strong>edge location</strong> — a small AWS data centre in a city, outside any region, that holds copies and answers requests from nearby users. There are hundreds of them, worldwide.</p>
+<p>Netflix starts playing a film just as quickly in Chicago as in Warsaw, because a copy of the film sits in both cities. The edge is not the border of your network — it's a set of small data centres in cities, and it's the third place a copy can live.</p>
+<h2 id="cloudfront-is-awss-content-delivery-network">CloudFront Is AWS's Content Delivery Network</h2>
+<p><strong>Amazon CloudFront</strong> (a <strong>content delivery network</strong>, <strong>CDN</strong>) — a set of edge locations that hold copies of your answers and serve them from the city nearest the user. It reads from a bucket, a load balancer, or any origin.</p>
+<table>
+<thead>
+<tr>
+<th>CDN</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cloudflare</strong></td>
+<td>Its own edge network in front of any origin. Also sells the firewall and attack protection.</td>
+</tr>
+<tr>
+<td><strong>Fastly</strong></td>
+<td>Its own edge network. Used by large news and e-commerce sites.</td>
+</tr>
+<tr>
+<td><strong>Akamai</strong></td>
+<td>The oldest and largest. Runs inside internet providers.</td>
+</tr>
+<tr>
+<td><strong>CloudFront</strong></td>
+<td>AWS's. What this unit builds.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="a-request-answered-at-the-edge-never-reaches-the-region">A Request Answered at the Edge Never Reaches the Region</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 · First request from a city</strong></td>
+<td>Miss. The edge location asks the origin, and stores the answer.</td>
+</tr>
+<tr>
+<td><strong>2 · Every later request from that city</strong></td>
+<td>Hit. Answered at the edge location, for everyone it serves.</td>
+</tr>
+<tr>
+<td><strong>3 · Your servers</strong></td>
+<td>Never see those requests at all.</td>
+</tr>
+</tbody>
+</table>
+<p>Faster, because the answer comes from nearby. Protected, because those requests never reach your servers. The copy is selected by the key, not by who asked — speed and protection are the same fact, seen from two sides.</p>
+<h2 id="all-three-places-one-table">All Three Places, One Table</h2>
+<p>Real systems use all three places, for different answers:</p>
+<table>
+<thead>
+<tr>
+<th>The answer</th>
+<th>Where its copy lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Likes</strong></td>
+<td>Inside the application. Two machines, two copies, and that's fine.</td>
+</tr>
+<tr>
+<td><strong>The cart</strong></td>
+<td>The shared store. One copy every server reads.</td>
+</tr>
+<tr>
+<td><strong>A poster, a film</strong></td>
+<td>The edge. A copy in every city that asked.</td>
+</tr>
+<tr>
+<td><strong>The cash figure after a stock buy</strong></td>
+<td>Nowhere. Read from Postgres on every request, never copied.</td>
+</tr>
+</tbody>
+</table>
+<p>Three places to keep a copy, and one answer that is never copied at all — the same test decides every row of this table: can two screens differ for a minute, or must they never?</p>
 
 </main>
 </body>

@@ -1827,3 +1827,38 @@ Copy every file into a new environment but leave the key alone, and `plan` repor
 The database stays out of the module, in the environment root — its data is the whole reason it can't move.
 
 **Two environments in one account collide on every name AWS itself owns:** load balancer/target group names, IAM role names, log groups, DB subnet groups, DB instances, DNS records, Auto Scaling group names. Resources whose `Name` is only a tag — VPC, subnets, security groups, route tables — create twice without complaint. Two environments in two accounts hit none of this.
+
+---
+
+## Lesson 45: Caching — Local Cache, Shared Store & the Edge
+
+A **cache** is a stored copy of an answer, handed back instead of computed again. There are three places a copy can live, and real systems use all three at once, for different answers.
+
+**Inside the application (local cache)** — a copy kept in the app's own process, only on that machine:
+```
+origin   # the system that computes the real answer (e.g. Finnhub for a quote)
+hit      # the copy is returned, origin not called
+miss     # no copy (or expired) — origin called, answer stored on the way back
+key      # the part of the request that selects the copy — same key, same copy
+TTL      # how long a copy is kept before origin is asked again
+stale    # origin has a new answer; the copy still holds the old one until TTL ends
+```
+
+```
+Cache-Control: max-age=300     # origin sets how long a copy may be kept, in seconds
+```
+
+**The limit:** N machines behind a load balancer keep N copies, and they can disagree — fine for a like count, not fine for a cart that loses items when the balancer switches you to another machine.
+
+**One shared store (a cache tier)** — a separate server every app server reads and writes, so there's one copy instead of N. AWS runs this as **ElastiCache** (Redis OSS, Memcached, or Valkey) — billed by the hour from creation, always private inside the VPC, like RDS. A **session store** moves "who's logged in" off individual machines into the shared store so any machine can answer — the real fix that sticky sessions only patch around.
+
+**Some answers are never a copy** — a bank balance, the last seat on a flight, cash after a stock buy: computed fresh every time from the source of truth. **The test:** if two screens may show different values for a minute, the answer can be a copy; if not, it can't. Steam's Dec 2015 breach was a key built without the account in it — cached store pages served one user's billing/purchase history to roughly 34,000 other accounts.
+
+**The edge (a city near the user)** — distance costs real time: light in fibre moves ~200 km/ms, so Singapore↔Virginia is 150ms+ before any server even starts working, and one page needs several such round trips. An **edge location** is a small AWS data center in a city, outside any region, holding copies and answering nearby users directly. **CloudFront** is AWS's CDN (field: Cloudflare, Fastly, Akamai) — the first request from a city misses and pulls from the origin; every later request from that city hits at the edge and never reaches your servers at all — faster and protected, for the same reason.
+
+| Answer | Where its copy lives |
+|---|---|
+| Likes | Inside the application — differs per machine, and that's fine |
+| Cart | Shared store — one copy every server reads |
+| Poster, film | The edge — a copy in every city that asked |
+| Cash after a trade | Nowhere — read from the database on every request |
