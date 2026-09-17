@@ -1862,3 +1862,63 @@ Cache-Control: max-age=300     # origin sets how long a copy may be kept, in sec
 | Cart | Shared store — one copy every server reads |
 | Poster, film | The edge — a copy in every city that asked |
 | Cash after a trade | Nowhere — read from the database on every request |
+
+---
+
+## Lesson 46: The Edge, Defended — CloudFront, DDoS & WAF
+
+**Slow is a failure, and it is not down.** Health checks pass and the 5XX alarm doesn't fire while users wait — response time is usually the one thing nobody graphs. A **distribution** is one CloudFront configuration: which origin it reads, which name and certificate it answers on, how long copies live. What it buys a company: requests that never reach the region, the same speed in every city, and a launch-day peak absorbed before it hits your servers.
+
+**CloudFront is not a load balancer.** The balancer picks a machine, in your region, from the healthy ones in the Auto Scaling group. CloudFront picks a city — it answers from the edge location nearest the user and only reads the origin (which can itself be the load balancer) on a miss. A distribution sits in front; it doesn't replace the balancer, and doesn't earn its place on an app with no distant users and no repeated answers.
+
+**Origin access control** locks the bucket behind the distribution — a permission naming the distribution as the bucket's *only* reader, the opposite of the public bucket from Foundations. The distribution's certificate has to live in `us-east-1` regardless of your app's region, so one apply touches two regions via a second, aliased provider block:
+```hcl
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+resource "aws_acm_certificate" "movies" {
+  provider = aws.us_east_1
+  # ...
+}
+```
+
+**A denial-of-service (DDoS) attack** floods a site with requests to exhaust it, so real users can't get through — Ticketmaster's Nov 2022 Taylor Swift presale drew 3.5 billion requests, four times its previous peak, and the public sale was cancelled. **Shield Standard** absorbs network floods at the edge, is on for every distribution and load balancer, and costs nothing; **Shield Advanced** ($3,000/mo per org, one-year commitment) adds a response team and cost protection but isn't built in this unit.
+
+**WAF** is a list of rules attached to a distribution or balancer; every request is checked against them before it goes on:
+
+| Rule | Checks | Stops |
+|---|---|---|
+| Rate-based | >2,000 requests/address in 5 min | Password guessing, scraping, one machine flooding |
+| SQL injection match | `' OR 1=1` in query/form | Requests trying to alter a DB query |
+| XSS match | `<script>` in a form field | Scripts planted for other users |
+| Known bad inputs | Published-exploit strings (e.g. Log4j `jndi:`) | Scans for a known hole |
+| IP reputation | Addresses seen in botnets | Traffic from known-hostile machines |
+| Geo match | Request's country | Traffic from countries you don't serve |
+| Bot control | Script pretending to be a browser | The bots in a presale |
+| Allow-list on `/admin` | Is the address in the office range? | Everyone else |
+
+The rate-based rule and the allow-list are the two a team writes itself; the rest are AWS/vendor lists you attach. **A WAF rule is still code** — Cloudflare, 2 July 2019: one new firewall rule held a regex that pushed CPU to 100% on every edge server, taking sites down worldwide for 27 minutes (traffic dropped 82% at the worst point), deployed in one step with no staged rollout.
+
+Reading what got built, live:
+```
+dig movies.<your domain>     # answer section: CloudFront addresses
+dig www.<your domain>        # still the load balancer's addresses
+
+curl -I https://movies.<your domain>/posters/<file>
+# x-cache: Miss from cloudfront   ← first time from this edge location
+curl -I https://movies.<your domain>/posters/<file>
+# x-cache: Hit from cloudfront
+# age: 12                        ← seconds since the copy was stored
+```
+A different edge location can miss again — normal, since a point of presence holds several cache servers, each with its own copy. `age` counts up to the policy's default TTL (86400s); a `Cache-Control` header from the origin overrides it.
+
+Replace the file in the bucket and the edge still serves the old picture — `x-cache: Hit`, `age` climbing — until its TTL ends. **Invalidation** drops the copy before then, on demand:
+```
+aws cloudfront create-invalidation --distribution-id <id> --paths "/posters/<file>"
+curl -I https://movies.<your domain>/posters/<file>
+# x-cache: Miss from cloudfront   ← fetched from the bucket again
+```
+
+CloudFront is free up to 1 TB out and 10M requests/month, so it costs nothing at this size — but `terraform destroy` takes longer than usual, disabling the distribution everywhere before it can delete it. Three places to name, never "the cache" alone: inside the application, the shared store, the edge.

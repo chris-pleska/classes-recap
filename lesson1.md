@@ -7524,3 +7524,212 @@ Optional practice and Q&A held after the main lecture — less structured, stude
 - **Find your own account's naming collisions** — list the resources your repository creates and sort them into "named by you, found by AWS" versus "tagged only" — that split predicts exactly which ones would fail if applied twice in one account.
 
 **What you know now:** a **module** is a directory of Terraform with declared inputs and declared outputs, called from somewhere else by a relative path — the same idea as a `variable`, one level of size up. An **environment root** is the directory that holds the provider block, the backend, and the calls to the modules; it is not the AWS **management account** and not an account's **root user**, three unrelated things that all get called root. A module holds no provider block and no backend, so it inherits both from whichever root calls it, and `terraform init` inside a module directory fails because there's nothing there to initialize. Everything read from a module has to come through a name it declared in its own `outputs.tf` — reaching in to name a resource directly fails with `Unsupported attribute`. Of the four ways to run more than one environment — a duplicated directory, Terraform workspaces, Terragrunt, or a directory per environment — plain directories keep the repetition visible and install nothing new, at the real cost of changing shared structure in more than one place, which the modules keep small. One state key lives per environment root, one bucket per account; moving resources into modules destroys and recreates them, accepted here because they hold no data and nobody is using the system yet — and once applied, two environments differ only in their values file and the credentials the apply runs as. In a single AWS account, that copy still fails on every resource AWS finds by a name it owns — a load balancer, an IAM role, a log group, an Auto Scaling group — while everything whose `Name` is only a tag creates twice without complaint.
+
+---
+
+# Lesson 47 — Building the Edge: the Distribution, Denial of Service & Reading What Shipped
+
+## Where We Left Off
+
+Last session named the three places a copy can live — inside the application, the shared store, the edge — and closed on the test that decides whether an answer can be a copy at all. Tonight starts from a failure your monitoring cannot see, builds the third place for real — a distribution in front of a private bucket — and then defends it: what a flood of requests looks like, and the two things that stop it before it reaches your servers.
+
+## Slow Is a Failure, and It Is Not Down
+
+**latency** — the time an answer takes to arrive. A game with 400 ms of lag is unplayable while its server is up and every health check passes. In trading, the same delay costs money.
+
+| What your monitoring sees | During a slow hour |
+|---|---|
+| **Health checks** | Pass. The server answers. |
+| **The 5XX alarm** | Does not fire. Nothing returned an error. |
+| **Response time** | Never graphed. Your dashboard has request count. |
+
+Your users are waiting, and nothing you built shows it.
+
+## What the Edge Gives a Company
+
+| What it gives | Why |
+|---|---|
+| **Requests that never reach the region** | A poster served from the edge costs no server, no database and no Finnhub call. The region only sees what the edge cannot answer. |
+| **The same speed in every city** | The answer comes from the user's city, not from across an ocean. A film starts as fast in Warsaw as in Chicago. |
+| **The peak absorbed** | A launch, a sale, a flood of requests: the edge answers most of it, and the region sees the rest. |
+
+The same fact that makes it fast is what protects it: a flood stops at the edge.
+
+## A Distribution Is One CloudFront Configuration
+
+**distribution** — which origin it reads, which name and certificate it answers on, how long copies live.
+
+Before, `www.` reached the load balancer. After, `movies.` reaches the edge, which reads the bucket.
+
+## CloudFront Is Not a Load Balancer
+
+| | |
+|---|---|
+| **The load balancer chooses a machine** | It sits in your region in front of the Auto Scaling group and spreads requests across the machines that are healthy. |
+| **CloudFront chooses a city** | It answers from the edge location nearest the user, and reads the origin only when that location has no copy. |
+
+- **The balancer keeps balancing** — CloudFront never picks a machine. Every request the edge cannot answer still reaches the balancer, which still spreads it.
+- **The name and the certificate move** — the balancer answered on your name and carried the certificate. With a distribution in front, the distribution does, and the balancer keeps its own name behind it.
+- **You do not always want one** — a distribution earns its place when users are far away, or when the same answer is asked for many times. An investment application needs neither.
+
+A load balancer named as the origin is still a load balancer. CloudFront sits in front of it. It does not replace it.
+
+## Only the Distribution May Read the Bucket
+
+**origin access control** — a permission on the private bucket, naming the distribution as its only reader.
+
+In Foundations you made a bucket public. Here nobody reaches the bucket directly, not even you. Every request goes through the edge.
+
+## The Distribution's Certificate Must Live in us-east-1
+
+Whatever region you chose, CloudFront reads its certificates from that one region. So one apply has to touch two regions, and a second `provider` block is what says so:
+
+```hcl
+# The second provider block carries a name — an alias — and the certificate points at it
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+resource "aws_acm_certificate" "movies" {
+  provider = aws.us_east_1
+  # ...
+}
+```
+
+Every file in the room has this block, including the ones whose region is already `us-east-1`.
+
+## The Build: a Private Bucket, a Distribution, a Certificate
+
+Three resources, one Terraform root of its own, separate from the application's:
+
+- **A private bucket** — holds the movie site: a poster grid, a page per film, two or three trailers. Only the distribution may read it.
+- **A distribution** — reads the bucket, answers on `movies.` under your domain, and keeps a copy at every edge location that asks.
+- **A certificate in us-east-1** — with its DNS validation record, and an alias record pointing `movies.` at the distribution.
+
+```bash
+terraform apply     # several minutes: the certificate first, then the distribution reaching every edge location
+```
+
+Every resource in the plan is one of the three above.
+
+## An Attack Sends More Requests Than a Site Can Answer
+
+**denial-of-service attack** (**DDoS** — distributed, from many machines at once) — a flood of requests sent to exhaust a site, so that real users cannot get through.
+
+**Ticketmaster, 15 November 2022.** The Taylor Swift presale drew 3.5 billion requests, four times its previous peak. Ticketmaster attributed it to bot attacks and to fans who had no invite code. The public sale was cancelled.
+
+A flood arrives first at whatever faces the internet. Today that is your load balancer. Put the edge in front of it, and the flood arrives at the edge.
+
+## Shield Standard Absorbs the Flood at the Edge, and It Is Already On
+
+| | |
+|---|---|
+| **Shield Standard** | On for every CloudFront distribution and every load balancer. Costs nothing. Absorbs floods of network traffic before they reach you. |
+| **Shield Advanced** | $3,000 a month per organization, on a one-year commitment: a response team and cost protection. Named here; nobody creates it. |
+
+## WAF Checks Each Request Against Rules
+
+**AWS WAF** (**web application firewall**) — a list of rules attached to a distribution or a load balancer. Each request is checked against them before it goes on.
+
+- **A rate-based rule** — too many requests from one address in five minutes, the default window, and that address is blocked. This is rate limiting.
+- **A managed rule set** — rules AWS or a vendor writes for known attack patterns. You attach the list; you do not write it.
+- **What it costs** — bills from creation, per rule set and per request checked. Not built in this unit.
+
+## What WAF Rules Look Like in Practice
+
+| Rule | What it checks | What it stops |
+|---|---|---|
+| **Rate-based** | More than 2,000 requests from one address in five minutes | Password guessing, scraping, one machine flooding the site |
+| **SQL injection match** | `' OR 1=1` and similar in a query string or form field | Requests trying to change a database query |
+| **Cross-site scripting match** | `<script>` in a form field | Requests trying to plant a script in a page other users see |
+| **Known bad inputs** | Strings from published exploits, such as the Log4j `jndi:` pattern of 2021 | Automated scans for a known hole |
+| **IP reputation list** | Addresses AWS has seen in botnets and anonymisers | Traffic from machines already known to be hostile |
+| **Geographic match** | The country the request comes from | Traffic from countries where the company does no business |
+| **Bot control** | Signs of a script pretending to be a browser | The bots in the presale, challenged instead of served |
+| **Allow-list on `/admin`** | Is the address in the office range? | Everyone else reaching the admin pages |
+
+The injection, scripting, bad-input and reputation rules are lists AWS writes; you attach them. The rate-based rule and the allow-list are the two a team writes itself.
+
+## Cloudflare, 2 July 2019: One Rule Broke the Network for 27 Minutes
+
+A new firewall rule held a regular expression that pushed CPU to 100% on every edge server it reached. Sites behind Cloudflare returned errors, worldwide.
+
+| | |
+|---|---|
+| **What users saw** | 502 errors for 27 minutes. Traffic across Cloudflare's network dropped 82% at the worst point. |
+| **What caused it** | One line in one rule, deployed to the whole network in one step, with no staged rollout. |
+
+A rule meant to protect a site is code. It is deployed like code, and it fails like code.
+
+## Reading What Was Built: dig on the New Name
+
+```bash
+dig movies.<your domain>     # the answer section: CloudFront addresses
+dig www.<your domain>        # still the load balancer's addresses
+```
+
+`host` printed the same kind of answer in the DNS topic. `dig` prints it with more detail — the record type, the time to live, and the server that answered.
+
+## The First Request Is a Miss. The Second Is a Hit.
+
+```bash
+# The same poster, twice — -I asks for the headers only
+curl -I https://movies.<your domain>/posters/<one file>
+x-cache: Miss from cloudfront                          # first time from this edge location
+
+curl -I https://movies.<your domain>/posters/<one file>
+x-cache: Hit from cloudfront
+age: 12                                                 # seconds since the copy was stored
+```
+
+A request may land on a different edge location and miss again. That is correct, and so is a second miss at the same one: `x-amz-cf-pop` names a point of presence, not one machine, and each cache server inside it holds its own copy. `RefreshHit` means the copy was checked against the bucket and kept. `age` counts up to the cache policy's default time to live, **86400 seconds**, and then the next request goes to the origin. A `Cache-Control` header from the origin overrides it.
+
+A trailer is tens of megabytes. Its second play is where the edge shows.
+
+## A Replaced Poster Still Shows the Old Picture
+
+```bash
+# Change the origin, then ask the edge again
+aws s3 cp new-poster.jpg s3://<bucket>/posters/<one file>     # the bucket now holds a different picture
+
+curl -I https://movies.<your domain>/posters/<one file>
+x-cache: Hit from cloudfront                                   # still the old copy
+age: 340
+```
+
+The copy at the edge is stale. It serves until its time to live ends — and the browser shows the old poster.
+
+## Removing a Copy Before Its Time to Live Ends Is Invalidation
+
+**invalidation** — you tell the edge location to drop its copy now, instead of waiting for its time to live.
+
+The next request for that key is a miss. It goes to the bucket, and a fresh copy is stored at the edge.
+
+```bash
+# Drop the copy now, instead of waiting for its time to live
+aws cloudfront create-invalidation --distribution-id <id> --paths "/posters/<one file>"
+                                                          # the id is a Terraform output
+curl -I https://movies.<your domain>/posters/<one file>
+x-cache: Miss from cloudfront                            # fetched from the bucket again
+```
+
+The next request is a miss. The edge reads the bucket, stores the new copy, and the browser shows the new poster.
+
+## Cost: Free at This Size, and a Slower Destroy
+
+| | |
+|---|---|
+| **CloudFront, always free up to** | 1 TB out and 10 million requests a month. The bucket holds a few files. |
+| **`terraform destroy`** | Disables the distribution, waits for that to reach every edge location, then deletes it. Longer than usual. It completes. |
+| **Bills from creation** | ElastiCache and WAF. Neither is built in this unit. Shield Advanced: $3,000 a month. |
+
+The distribution costs nothing at this size. Destroy it anyway, like everything else built in this course.
+
+## The Assignment Is the Hands-On, on Your Own Application
+
+- **Assignment 07, already in your repository** — a distribution in front of your own balancer. The trade button, the cash figure and the redirect each break in a different way: predict, read the header, fix it in the file it belongs in. Then one invalidation, and a timed `terraform destroy`.
+- **What it does not build** — the copy inside the application, and the shared store. Assignment 07 builds the third place only. ElastiCache is the ungraded bonus at the end of its README.
+- **Three places to name** — inside the application, the shared store, the edge. Never "the cache" alone.
+
+Some answers are never a copy: if two screens may show different values for a minute, it can be a copy; if they may not, it cannot. A request answered at the edge never reaches your servers — that is why the edge is both the speed and the protection.

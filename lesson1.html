@@ -83,6 +83,7 @@
 <li><a href="#lesson-44-environments-one-system-three-roles-what-a-second-one-costs">Lesson 44: Environments — One System, Three Roles &amp; What a Second One Costs</a></li>
 <li><a href="#lesson-45-modules-one-description-of-the-infrastructure-applied-twice">Lesson 45: Modules — One Description of the Infrastructure, Applied Twice</a></li>
 <li><a href="#lesson-46-caching-and-the-copy-nearest-the-user">Lesson 46 — Caching, and the Copy Nearest the User</a></li>
+<li><a href="#lesson-47-building-the-edge-the-distribution-denial-of-service-reading-what-shipped">Lesson 47 — Building the Edge: the Distribution, Denial of Service &amp; Reading What Shipped</a></li>
   </ul>
 </nav>
 <main>
@@ -8761,6 +8762,283 @@ module "staging" {
 </tbody>
 </table>
 <p>Three places to keep a copy, and one answer that is never copied at all — the same test decides every row of this table: can two screens differ for a minute, or must they never?</p>
+<h1 id="lesson-47-building-the-edge-the-distribution-denial-of-service-reading-what-shipped">Lesson 47 — Building the Edge: the Distribution, Denial of Service &amp; Reading What Shipped</h1>
+<h2 id="where-we-left-off_12">Where We Left Off</h2>
+<p>Last session named the three places a copy can live — inside the application, the shared store, the edge — and closed on the test that decides whether an answer can be a copy at all. Tonight starts from a failure your monitoring cannot see, builds the third place for real — a distribution in front of a private bucket — and then defends it: what a flood of requests looks like, and the two things that stop it before it reaches your servers.</p>
+<h2 id="slow-is-a-failure-and-it-is-not-down">Slow Is a Failure, and It Is Not Down</h2>
+<p><strong>latency</strong> — the time an answer takes to arrive. A game with 400 ms of lag is unplayable while its server is up and every health check passes. In trading, the same delay costs money.</p>
+<table>
+<thead>
+<tr>
+<th>What your monitoring sees</th>
+<th>During a slow hour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Health checks</strong></td>
+<td>Pass. The server answers.</td>
+</tr>
+<tr>
+<td><strong>The 5XX alarm</strong></td>
+<td>Does not fire. Nothing returned an error.</td>
+</tr>
+<tr>
+<td><strong>Response time</strong></td>
+<td>Never graphed. Your dashboard has request count.</td>
+</tr>
+</tbody>
+</table>
+<p>Your users are waiting, and nothing you built shows it.</p>
+<h2 id="what-the-edge-gives-a-company">What the Edge Gives a Company</h2>
+<table>
+<thead>
+<tr>
+<th>What it gives</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Requests that never reach the region</strong></td>
+<td>A poster served from the edge costs no server, no database and no Finnhub call. The region only sees what the edge cannot answer.</td>
+</tr>
+<tr>
+<td><strong>The same speed in every city</strong></td>
+<td>The answer comes from the user's city, not from across an ocean. A film starts as fast in Warsaw as in Chicago.</td>
+</tr>
+<tr>
+<td><strong>The peak absorbed</strong></td>
+<td>A launch, a sale, a flood of requests: the edge answers most of it, and the region sees the rest.</td>
+</tr>
+</tbody>
+</table>
+<p>The same fact that makes it fast is what protects it: a flood stops at the edge.</p>
+<h2 id="a-distribution-is-one-cloudfront-configuration">A Distribution Is One CloudFront Configuration</h2>
+<p><strong>distribution</strong> — which origin it reads, which name and certificate it answers on, how long copies live.</p>
+<p>Before, <code>www.</code> reached the load balancer. After, <code>movies.</code> reaches the edge, which reads the bucket.</p>
+<h2 id="cloudfront-is-not-a-load-balancer">CloudFront Is Not a Load Balancer</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>The load balancer chooses a machine</strong></td>
+<td>It sits in your region in front of the Auto Scaling group and spreads requests across the machines that are healthy.</td>
+</tr>
+<tr>
+<td><strong>CloudFront chooses a city</strong></td>
+<td>It answers from the edge location nearest the user, and reads the origin only when that location has no copy.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>The balancer keeps balancing</strong> — CloudFront never picks a machine. Every request the edge cannot answer still reaches the balancer, which still spreads it.</li>
+<li><strong>The name and the certificate move</strong> — the balancer answered on your name and carried the certificate. With a distribution in front, the distribution does, and the balancer keeps its own name behind it.</li>
+<li><strong>You do not always want one</strong> — a distribution earns its place when users are far away, or when the same answer is asked for many times. An investment application needs neither.</li>
+</ul>
+<p>A load balancer named as the origin is still a load balancer. CloudFront sits in front of it. It does not replace it.</p>
+<h2 id="only-the-distribution-may-read-the-bucket">Only the Distribution May Read the Bucket</h2>
+<p><strong>origin access control</strong> — a permission on the private bucket, naming the distribution as its only reader.</p>
+<p>In Foundations you made a bucket public. Here nobody reaches the bucket directly, not even you. Every request goes through the edge.</p>
+<h2 id="the-distributions-certificate-must-live-in-us-east-1">The Distribution's Certificate Must Live in us-east-1</h2>
+<p>Whatever region you chose, CloudFront reads its certificates from that one region. So one apply has to touch two regions, and a second <code>provider</code> block is what says so:</p>
+<pre><code># The second provider block carries a name — an alias — and the certificate points at it
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+resource "aws_acm_certificate" "movies" {
+  provider = aws.us_east_1
+  # ...
+}
+</code></pre>
+<p>Every file in the room has this block, including the ones whose region is already <code>us-east-1</code>.</p>
+<h2 id="the-build-a-private-bucket-a-distribution-a-certificate">The Build: a Private Bucket, a Distribution, a Certificate</h2>
+<p>Three resources, one Terraform root of its own, separate from the application's:</p>
+<ul>
+<li><strong>A private bucket</strong> — holds the movie site: a poster grid, a page per film, two or three trailers. Only the distribution may read it.</li>
+<li><strong>A distribution</strong> — reads the bucket, answers on <code>movies.</code> under your domain, and keeps a copy at every edge location that asks.</li>
+<li><strong>A certificate in us-east-1</strong> — with its DNS validation record, and an alias record pointing <code>movies.</code> at the distribution.</li>
+</ul>
+<pre><code>terraform apply     # several minutes: the certificate first, then the distribution reaching every edge location
+</code></pre>
+<p>Every resource in the plan is one of the three above.</p>
+<h2 id="an-attack-sends-more-requests-than-a-site-can-answer">An Attack Sends More Requests Than a Site Can Answer</h2>
+<p><strong>denial-of-service attack</strong> (<strong>DDoS</strong> — distributed, from many machines at once) — a flood of requests sent to exhaust a site, so that real users cannot get through.</p>
+<p><strong>Ticketmaster, 15 November 2022.</strong> The Taylor Swift presale drew 3.5 billion requests, four times its previous peak. Ticketmaster attributed it to bot attacks and to fans who had no invite code. The public sale was cancelled.</p>
+<p>A flood arrives first at whatever faces the internet. Today that is your load balancer. Put the edge in front of it, and the flood arrives at the edge.</p>
+<h2 id="shield-standard-absorbs-the-flood-at-the-edge-and-it-is-already-on">Shield Standard Absorbs the Flood at the Edge, and It Is Already On</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Shield Standard</strong></td>
+<td>On for every CloudFront distribution and every load balancer. Costs nothing. Absorbs floods of network traffic before they reach you.</td>
+</tr>
+<tr>
+<td><strong>Shield Advanced</strong></td>
+<td>$3,000 a month per organization, on a one-year commitment: a response team and cost protection. Named here; nobody creates it.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="waf-checks-each-request-against-rules">WAF Checks Each Request Against Rules</h2>
+<p><strong>AWS WAF</strong> (<strong>web application firewall</strong>) — a list of rules attached to a distribution or a load balancer. Each request is checked against them before it goes on.</p>
+<ul>
+<li><strong>A rate-based rule</strong> — too many requests from one address in five minutes, the default window, and that address is blocked. This is rate limiting.</li>
+<li><strong>A managed rule set</strong> — rules AWS or a vendor writes for known attack patterns. You attach the list; you do not write it.</li>
+<li><strong>What it costs</strong> — bills from creation, per rule set and per request checked. Not built in this unit.</li>
+</ul>
+<h2 id="what-waf-rules-look-like-in-practice">What WAF Rules Look Like in Practice</h2>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>What it checks</th>
+<th>What it stops</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Rate-based</strong></td>
+<td>More than 2,000 requests from one address in five minutes</td>
+<td>Password guessing, scraping, one machine flooding the site</td>
+</tr>
+<tr>
+<td><strong>SQL injection match</strong></td>
+<td><code>' OR 1=1</code> and similar in a query string or form field</td>
+<td>Requests trying to change a database query</td>
+</tr>
+<tr>
+<td><strong>Cross-site scripting match</strong></td>
+<td><code>&lt;script&gt;</code> in a form field</td>
+<td>Requests trying to plant a script in a page other users see</td>
+</tr>
+<tr>
+<td><strong>Known bad inputs</strong></td>
+<td>Strings from published exploits, such as the Log4j <code>jndi:</code> pattern of 2021</td>
+<td>Automated scans for a known hole</td>
+</tr>
+<tr>
+<td><strong>IP reputation list</strong></td>
+<td>Addresses AWS has seen in botnets and anonymisers</td>
+<td>Traffic from machines already known to be hostile</td>
+</tr>
+<tr>
+<td><strong>Geographic match</strong></td>
+<td>The country the request comes from</td>
+<td>Traffic from countries where the company does no business</td>
+</tr>
+<tr>
+<td><strong>Bot control</strong></td>
+<td>Signs of a script pretending to be a browser</td>
+<td>The bots in the presale, challenged instead of served</td>
+</tr>
+<tr>
+<td><strong>Allow-list on <code>/admin</code></strong></td>
+<td>Is the address in the office range?</td>
+<td>Everyone else reaching the admin pages</td>
+</tr>
+</tbody>
+</table>
+<p>The injection, scripting, bad-input and reputation rules are lists AWS writes; you attach them. The rate-based rule and the allow-list are the two a team writes itself.</p>
+<h2 id="cloudflare-2-july-2019-one-rule-broke-the-network-for-27-minutes">Cloudflare, 2 July 2019: One Rule Broke the Network for 27 Minutes</h2>
+<p>A new firewall rule held a regular expression that pushed CPU to 100% on every edge server it reached. Sites behind Cloudflare returned errors, worldwide.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>What users saw</strong></td>
+<td>502 errors for 27 minutes. Traffic across Cloudflare's network dropped 82% at the worst point.</td>
+</tr>
+<tr>
+<td><strong>What caused it</strong></td>
+<td>One line in one rule, deployed to the whole network in one step, with no staged rollout.</td>
+</tr>
+</tbody>
+</table>
+<p>A rule meant to protect a site is code. It is deployed like code, and it fails like code.</p>
+<h2 id="reading-what-was-built-dig-on-the-new-name">Reading What Was Built: dig on the New Name</h2>
+<pre><code>dig movies.&lt;your domain&gt;     # the answer section: CloudFront addresses
+dig www.&lt;your domain&gt;        # still the load balancer's addresses
+</code></pre>
+<p><code>host</code> printed the same kind of answer in the DNS topic. <code>dig</code> prints it with more detail — the record type, the time to live, and the server that answered.</p>
+<h2 id="the-first-request-is-a-miss-the-second-is-a-hit">The First Request Is a Miss. The Second Is a Hit.</h2>
+<pre><code># The same poster, twice — -I asks for the headers only
+curl -I https://movies.&lt;your domain&gt;/posters/&lt;one file&gt;
+x-cache: Miss from cloudfront                          # first time from this edge location
+
+curl -I https://movies.&lt;your domain&gt;/posters/&lt;one file&gt;
+x-cache: Hit from cloudfront
+age: 12                                                 # seconds since the copy was stored
+</code></pre>
+<p>A request may land on a different edge location and miss again. That is correct, and so is a second miss at the same one: <code>x-amz-cf-pop</code> names a point of presence, not one machine, and each cache server inside it holds its own copy. <code>RefreshHit</code> means the copy was checked against the bucket and kept. <code>age</code> counts up to the cache policy's default time to live, <strong>86400 seconds</strong>, and then the next request goes to the origin. A <code>Cache-Control</code> header from the origin overrides it.</p>
+<p>A trailer is tens of megabytes. Its second play is where the edge shows.</p>
+<h2 id="a-replaced-poster-still-shows-the-old-picture">A Replaced Poster Still Shows the Old Picture</h2>
+<pre><code># Change the origin, then ask the edge again
+aws s3 cp new-poster.jpg s3://&lt;bucket&gt;/posters/&lt;one file&gt;     # the bucket now holds a different picture
+
+curl -I https://movies.&lt;your domain&gt;/posters/&lt;one file&gt;
+x-cache: Hit from cloudfront                                   # still the old copy
+age: 340
+</code></pre>
+<p>The copy at the edge is stale. It serves until its time to live ends — and the browser shows the old poster.</p>
+<h2 id="removing-a-copy-before-its-time-to-live-ends-is-invalidation">Removing a Copy Before Its Time to Live Ends Is Invalidation</h2>
+<p><strong>invalidation</strong> — you tell the edge location to drop its copy now, instead of waiting for its time to live.</p>
+<p>The next request for that key is a miss. It goes to the bucket, and a fresh copy is stored at the edge.</p>
+<pre><code># Drop the copy now, instead of waiting for its time to live
+aws cloudfront create-invalidation --distribution-id &lt;id&gt; --paths "/posters/&lt;one file&gt;"
+                                                          # the id is a Terraform output
+curl -I https://movies.&lt;your domain&gt;/posters/&lt;one file&gt;
+x-cache: Miss from cloudfront                            # fetched from the bucket again
+</code></pre>
+<p>The next request is a miss. The edge reads the bucket, stores the new copy, and the browser shows the new poster.</p>
+<h2 id="cost-free-at-this-size-and-a-slower-destroy">Cost: Free at This Size, and a Slower Destroy</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CloudFront, always free up to</strong></td>
+<td>1 TB out and 10 million requests a month. The bucket holds a few files.</td>
+</tr>
+<tr>
+<td><strong><code>terraform destroy</code></strong></td>
+<td>Disables the distribution, waits for that to reach every edge location, then deletes it. Longer than usual. It completes.</td>
+</tr>
+<tr>
+<td><strong>Bills from creation</strong></td>
+<td>ElastiCache and WAF. Neither is built in this unit. Shield Advanced: $3,000 a month.</td>
+</tr>
+</tbody>
+</table>
+<p>The distribution costs nothing at this size. Destroy it anyway, like everything else built in this course.</p>
+<h2 id="the-assignment-is-the-hands-on-on-your-own-application">The Assignment Is the Hands-On, on Your Own Application</h2>
+<ul>
+<li><strong>Assignment 07, already in your repository</strong> — a distribution in front of your own balancer. The trade button, the cash figure and the redirect each break in a different way: predict, read the header, fix it in the file it belongs in. Then one invalidation, and a timed <code>terraform destroy</code>.</li>
+<li><strong>What it does not build</strong> — the copy inside the application, and the shared store. Assignment 07 builds the third place only. ElastiCache is the ungraded bonus at the end of its README.</li>
+<li><strong>Three places to name</strong> — inside the application, the shared store, the edge. Never "the cache" alone.</li>
+</ul>
+<p>Some answers are never a copy: if two screens may show different values for a minute, it can be a copy; if they may not, it cannot. A request answered at the edge never reaches your servers — that is why the edge is both the speed and the protection.</p>
 
 </main>
 </body>
