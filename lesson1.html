@@ -84,6 +84,7 @@
 <li><a href="#lesson-45-modules-one-description-of-the-infrastructure-applied-twice">Lesson 45: Modules — One Description of the Infrastructure, Applied Twice</a></li>
 <li><a href="#lesson-46-caching-and-the-copy-nearest-the-user">Lesson 46 — Caching, and the Copy Nearest the User</a></li>
 <li><a href="#lesson-47-building-the-edge-the-distribution-denial-of-service-reading-what-shipped">Lesson 47 — Building the Edge: the Distribution, Denial of Service &amp; Reading What Shipped</a></li>
+<li><a href="#lesson-48-serverless-code-that-runs-only-when-something-happens">Lesson 48 — Serverless: Code That Runs Only When Something Happens</a></li>
   </ul>
 </nav>
 <main>
@@ -9039,6 +9040,291 @@ x-cache: Miss from cloudfront                            # fetched from the buck
 <li><strong>Three places to name</strong> — inside the application, the shared store, the edge. Never "the cache" alone.</li>
 </ul>
 <p>Some answers are never a copy: if two screens may show different values for a minute, it can be a copy; if they may not, it cannot. A request answered at the edge never reaches your servers — that is why the edge is both the speed and the protection.</p>
+<h1 id="lesson-48-serverless-code-that-runs-only-when-something-happens">Lesson 48 — Serverless: Code That Runs Only When Something Happens</h1>
+<h2 id="where-we-left-off_13">Where We Left Off</h2>
+<p>Last session finished the edge unit: a distribution in front of a private bucket, and Shield and WAF absorbing a flood before it reaches your servers. Tonight opens a new unit inside Scale, and it starts from a fact about everything built so far: your instance, your Flask app under systemd, nginx, Postgres, cron — every one of them is a program that starts, waits, and is billed for every hour it waits, whether or not anyone asks anything of it. Your news bot runs for under a minute once a day. The <code>t3.micro</code> under it is billed for the other twenty-three hours anyway. Tonight names the other shape a running program can take, and builds one for real.</p>
+<h2 id="a-daemon-waits-for-work-billed-for-every-hour-it-waits">A Daemon Waits for Work, Billed for Every Hour It Waits</h2>
+<p><strong>daemon</strong> — a program that waits for work. It starts when the machine boots and runs until it is stopped, waiting the whole time. It is billed for every hour it waits, whether or not any work arrives.</p>
+<p>The logging topic called this the background process. You already run several: the Flask app under systemd, nginx, Postgres, and cron itself — the daemon that starts your news bot's script at 09:00 and then goes back to waiting.</p>
+<h2 id="an-event-is-one-thing-that-happened-written-down-as-data">An Event Is One Thing That Happened, Written Down as Data</h2>
+<p><strong>event</strong> — one thing that happened, written down as data a program can read. A request arrived, a file landed in S3, the clock reached 09:00, a message was sent to a bot — each one is an event.</p>
+<p>The logging topic defined a <strong>log event</strong> as what the application wrote when something happened. Same word, same sense.</p>
+<h2 id="event-driven-code-runs-on-an-event-handles-it-and-stops">Event-Driven Code Runs on an Event, Handles It, and Stops</h2>
+<p><strong>event-driven</strong> — code that runs on an event. It starts when the event arrives, handles that one event, and stops. Your news bot's script at 09:00. A Telegram bot answering a message. A push notification when a card is charged.</p>
+<p>One order placed in a phone app fans out into three separate runs: charge the card, print the kitchen ticket, send the confirmation. Three events from one order, not one program handling all three.</p>
+<h2 id="the-same-day-run-both-ways">The Same Day, Run Both Ways</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Billed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A daemon</strong></td>
+<td>Running from midnight to midnight. Billed for every hour, however many requests arrive.</td>
+</tr>
+<tr>
+<td><strong>Event-driven code</strong></td>
+<td>Running only where a mark is. Billed for each run, and for nothing in between.</td>
+</tr>
+</tbody>
+</table>
+<p>Your news bot's script is event-driven. The daemon is the machine under it, and cron on it, waiting all day so the script can start on time.</p>
+<h2 id="a-function-is-a-named-block-of-code-the-first-def-in-the-course">A Function Is a Named Block of Code — the First <code>def</code> in the Course</h2>
+<p><strong>function</strong> — a named block of code. It is called by its name with an input, and it gives an output back.</p>
+<p>Foundations taught variables, lists, loops and conditions. It never taught how to define one. This is the first <code>def</code> in the course:</p>
+<pre><code>def quote(symbol):
+    price = fetch_price(symbol)
+    return f"{symbol}: {price}"
+
+quote("AAPL")
+quote("MSFT")
+</code></pre>
+<p><code>def</code> names it. The name is <code>quote</code>. <code>symbol</code> is the input. <code>return</code> gives the output back. Called twice here, with a different input each time. <code>fetch_price</code> is another function, written somewhere else.</p>
+<h2 id="serverless-you-upload-the-code-and-aws-runs-it-on-its-own-machines">Serverless: You Upload the Code, and AWS Runs It on Its Own Machines</h2>
+<p><strong>serverless</strong> — you upload the code; AWS runs it on its own machines. When an event arrives, AWS runs your code on a machine it chose and bills you for the milliseconds it ran. When nothing arrives, nothing runs and nothing is billed.</p>
+<p><strong>Lambda</strong> — AWS's service for this. You give it the code and the events that trigger it.</p>
+<p><strong>handler</strong> — the named function Lambda calls, with the event as its input. You say which one it is.</p>
+<h2 id="there-is-a-server-you-just-never-choose-it-patch-it-or-pay-for-it-waiting">There Is a Server. You Just Never Choose It, Patch It, or Pay for It Waiting.</h2>
+<ul>
+<li><strong>You never choose it</strong> — no instance type, no image, no boot script. AWS picks the machine for each run.</li>
+<li><strong>You never patch it</strong> — the operating system and the Python runtime are AWS's to update.</li>
+<li><strong>You never pay for it waiting</strong> — billing starts when your code starts running and stops when it returns.</li>
+</ul>
+<p>What your code prints goes to CloudWatch Logs, into a log group — the same kind of log group the logging topic taught. Nothing is installed on anything to make that happen.</p>
+<h2 id="what-the-same-stack-costs-at-zero-traffic">What the Same Stack Costs at Zero Traffic</h2>
+<table>
+<thead>
+<tr>
+<th>What is running</th>
+<th>Rate</th>
+<th>A month</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The instance, one <code>t3.micro</code></td>
+<td>$0.0104 an hour</td>
+<td>about $7.50</td>
+</tr>
+<tr>
+<td>The load balancer</td>
+<td>$0.0225 an hour before any traffic</td>
+<td>about $16</td>
+</tr>
+<tr>
+<td>The database, one <code>db.t3.micro</code> Postgres in one zone</td>
+<td>$0.017 an hour before storage</td>
+<td>about $12</td>
+</tr>
+<tr>
+<td>The same page on Lambda, at your traffic</td>
+<td>inside the free allowance of 1 million requests and 400,000 GB-seconds a month</td>
+<td>$0</td>
+</tr>
+</tbody>
+</table>
+<p><em>List prices, not a bill — us-east-1, on-demand, per month, at zero traffic.</em></p>
+<p>This is not an argument for cheapness. Instances behind a balancer are the correct design for a page that must answer immediately and hold a database connection. The question the rest of tonight answers is which jobs fit a function.</p>
+<h2 id="one-function-run-twice-from-the-console">One Function, Run Twice From the Console</h2>
+<pre><code>REPORT Duration: 412.35 ms  Billed Duration: 413 ms        ← first run
+       Memory Size: 128 MB  Max Memory Used: 41 MB  Init Duration: 187.22 ms
+
+REPORT Duration: 2.11 ms  Billed Duration: 3 ms            ← second run
+       Memory Size: 128 MB  Max Memory Used: 41 MB
+</code></pre>
+<p><strong>Duration / Billed Duration</strong> — how long your code ran, and what is charged, rounded up to the millisecond. <strong>Memory Size / Max Memory Used</strong> — the RAM you gave the function, and the RAM it actually used; those are the console's own words for it. <strong>Init Duration</strong> appears on the first line only. The second run has no such field.</p>
+<h2 id="the-sentence-between-events-nothing-of-yours-is-running">The Sentence: Between Events, Nothing of Yours Is Running</h2>
+<blockquote>
+<p>Between events, nothing of yours is running, and the environment the last run used is gone.</p>
+</blockquote>
+<p><strong>environment</strong> — the place one run happens: your uploaded code with the Python runtime started under it, on a machine AWS chose.</p>
+<p>The package you uploaded stays uploaded. The environment that ran it does not. That difference is why the first <code>REPORT</code> line above carries an <code>Init Duration</code> and the second one doesn't — the first had to build a fresh environment before it could run at all.</p>
+<h2 id="five-questions-answered-from-what-was-already-on-the-screen">Five Questions, Answered From What Was Already on the Screen</h2>
+<h3 id="where-is-a-copy-your-code-kept-when-the-next-request-arrives">Where is a copy your code kept, when the next request arrives?</h3>
+<p>If your function kept a copy inside itself the way the caching topic taught — to hand back on the next request instead of asking Finnhub again — that copy is gone the moment the environment is. Anything held in a variable, and anything written to the function's own disk (<strong>ephemeral storage</strong>, 512 MB by default and up to 10 GB), goes with it. Only something written outside the function — S3, your RDS database, another store — survives to the next run.</p>
+<p>The local cache from the caching topic cannot exist here. Statelessness was a discipline in the autoscaling topic; here it is enforced.</p>
+<h3 id="why-was-the-first-run-slower-than-the-second">Why was the first run slower than the second?</h3>
+<p><strong>cold start</strong> — starting a fresh environment before the code runs: download the package, start the Python runtime, then call the handler. A few hundred milliseconds. <code>Init Duration</code> on the first <code>REPORT</code> line above is that number. Booting a replacement instance from user data in the autoscaling topic took minutes; a cold start starts a process, not a machine. AWS does not publish how long an environment stays warm — the next day's call is cold again.</p>
+<h3 id="what-happens-when-two-requests-arrive-at-the-same-moment">What happens when two requests arrive at the same moment?</h3>
+<p>They run the function twice, in two environments. No queue behind one process, no scaling policy, no minimum, no desired capacity. A thousand orders at lunch are a thousand events or more, each in its own environment. A thousand runs at 200 milliseconds each is 200 seconds of billed time, so the bill is not the risk. The limit is 1,000 running at once per region by default, and AWS will raise it on request.</p>
+<h3 id="what-do-a-thousand-of-them-at-once-do-to-one-postgres">What do a thousand of them at once do to one Postgres?</h3>
+<p>Each environment opens its own connection. None of them shares a running process, so none of them shares a set of open connections — one Postgres instance is asked for a thousand connections at the same moment. That's the risk, and it's why the database that belongs beside a function is one reached over HTTPS, with no connection to hold.</p>
+<p><strong>DynamoDB</strong> — AWS's managed key-value database. Nothing to run, billed per request, reached over HTTPS. A thousand functions calling it do not hold a thousand connections open. <strong>Key-value</strong> means you store a value under a key and read it back by that key — there's no query across the whole table the way there is in Postgres. It's the database most often paired with Lambda, for exactly this reason.</p>
+<h3 id="a-failed-event-is-retried-what-does-that-mean-for-your-code">A failed event is retried. What does that mean for your code?</h3>
+<p><strong>idempotent</strong> — doing the same work twice does no damage; running it once and running it twice leave the same result.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Writing a row with the same key twice</strong></td>
+<td>Fine. The second write replaces the first with the same value.</td>
+</tr>
+<tr>
+<td><strong>Charging a card twice</strong></td>
+<td>Not fine. The customer paid twice, and nothing about the second charge looks wrong.</td>
+</tr>
+</tbody>
+</table>
+<p>A retried event runs the same work again, and the run that failed left nothing behind to tell the second attempt that. So the code has to be idempotent.</p>
+<h2 id="the-execution-role-the-function-runs-as-a-role-and-nothing-else">The Execution Role: the Function Runs as a Role, and Nothing Else</h2>
+<p><strong>execution role</strong> — the IAM role the function runs as. What the function may touch, it touches through this role, and nothing else. It's the same kind of role as the instance role from Foundations — its trust policy names Lambda as the trusted entity, Foundations' phrase for who may use this role.</p>
+<h2 id="two-settings-are-the-whole-sizing-model">Two Settings Are the Whole Sizing Model</h2>
+<ul>
+<li><strong>RAM</strong> — from 128 MB to 10,240 MB. The console labels this field <code>Memory</code>. CPU is given in proportion to it, and is not a separate setting.</li>
+<li><strong>timeout</strong> — from 1 second to 900 seconds. 900 seconds is fifteen minutes, and it is the maximum there is.</li>
+</ul>
+<p>The runtime — Python, Node.js, Java, Go, C# or Ruby — is a separate choice, made from a list, and it isn't part of the sizing. Foundations chose an instance family and a size from a table of them. Here there are two numbers, and no table.</p>
+<h2 id="api-gateway-turns-an-http-request-into-an-event">API Gateway Turns an HTTP Request Into an Event</h2>
+<p><strong>API Gateway</strong> — it turns an HTTP request into an event. It receives the request, picks the function by path and method, calls it with the request written as the event, and returns the answer. A browser does not call a function directly.</p>
+<p>Your load balancer forwards to machines already running. API Gateway calls code that is not running until the request arrives.</p>
+<h2 id="other-ways-to-start-a-function">Other Ways to Start a Function</h2>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A function URL</strong></td>
+<td>One address that goes straight to one function. No routes, no paths, nothing to configure between them.</td>
+</tr>
+<tr>
+<td><strong>Your own load balancer</strong></td>
+<td>It can send a path to a function as a target, the same way it sends a path to an instance.</td>
+</tr>
+<tr>
+<td><strong>An EventBridge rule</strong></td>
+<td>A schedule, not a request — every day at 09:00, Monday to Friday, run this function. That is your news bot, with no machine under it.</td>
+</tr>
+</tbody>
+</table>
+<p>API Gateway is the one used tonight.</p>
+<h2 id="inside-the-vpc-or-outside-it-lambdas-networking-is-a-choice-you-make">Inside the VPC or Outside It — Lambda's Networking Is a Choice You Make</h2>
+<ul>
+<li><strong>Outside the VPC</strong> (the default, nothing to configure) — the function reaches the public internet. It cannot reach a database in a private subnet.</li>
+<li><strong>Inside the VPC</strong> (you give it subnets and a security group) — it reaches your private database, and reaches nothing public unless that subnet has a NAT gateway.</li>
+</ul>
+<p>A function in a private subnet with no NAT gateway can read your RDS instance and cannot call Finnhub. Tonight's function needs both, so it runs in a subnet that has a NAT gateway.</p>
+<h2 id="the-invoke-permission-who-may-call-the-function-not-what-it-may-touch">The Invoke Permission: Who May Call the Function, Not What It May Touch</h2>
+<p><strong>the invoke permission</strong> — attached to the function, naming who may call it. API Gateway may not call your function unless a permission on the function says it may. In Terraform this is <code>aws_lambda_permission</code>, naming <code>apigateway.amazonaws.com</code> as who may call.</p>
+<p>You've seen this shape before: the trusted entity on a role, and the policy Foundations wrote on the public S3 bucket. The role says what the function may touch; this says who may call the function — two different questions, two different attachments.</p>
+<h2 id="without-the-permission-every-request-is-a-500">Without the Permission, Every Request Is a 500</h2>
+<pre><code>{"message":"Internal Server Error"}
+</code></pre>
+<p>The function's log group shows no invocation at all. A 500 with an empty log group is the diagnosis: the function was never called. Lambda answers API Gateway with a 403; API Gateway can't complete the request, so the browser is handed a 500. This is the most common cause of a 500 when a function sits behind API Gateway — verified live in the cohort's own account, where adding the missing <code>aws_lambda_permission</code> turned the same route from a 500 into a 200 with nothing else changed.</p>
+<h2 id="four-resources-and-a-url-that-returns-a-stock-quote">Four Resources, and a URL That Returns a Stock Quote</h2>
+<ul>
+<li>The execution role</li>
+<li>The function, fetching the Finnhub quote</li>
+<li>The API Gateway route</li>
+<li>The invoke permission</li>
+</ul>
+<p>Its own Terraform root, with its own state key, separate from the three environment roots:</p>
+<pre><code>resource "aws_iam_role" "lambda_exec" {
+  name               = "quote-function-exec"
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json   # trusts lambda.amazonaws.com
+}
+
+resource "aws_lambda_function" "quote" {
+  function_name = "quote"
+  role          = aws_iam_role.lambda_exec.arn
+  handler       = "app.handler"
+  runtime       = "python3.13"
+  memory_size   = 128
+  timeout       = 10
+}
+
+resource "aws_apigatewayv2_api" "quote" {
+  name          = "quote-api"
+  protocol_type = "HTTP"
+}
+# one route, integrated to aws_lambda_function.quote
+
+resource "aws_lambda_permission" "apigw" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.quote.function_name
+  principal     = "apigateway.amazonaws.com"
+}
+</code></pre>
+<h2 id="claude-code-writes-it-applies-it-calls-the-url-destroys-it">Claude Code Writes It, Applies It, Calls the URL, Destroys It</h2>
+<p>Claude Code wrote the Terraform live: the IAM role trusting <code>lambda.amazonaws.com</code>, the function naming its handler, runtime, RAM and timeout, the HTTP API and its one route integrated to the function, and the permission naming <code>apigateway.amazonaws.com</code> as who may call it. The URL, called once after a cold start and once straight after, produced the same two <code>REPORT</code> lines as the console demo — one with an <code>Init Duration</code>, one without. Then <code>terraform destroy</code>.</p>
+<h2 id="code-written-for-a-server-doesnt-move-to-lambda-in-its-current-shape">Code Written for a Server Doesn't Move to Lambda in Its Current Shape</h2>
+<p>Moving to Lambda means the code has to change shape first:</p>
+<ul>
+<li><strong>Shaped as a handler</strong> — one named function, called with the event as its input.</li>
+<li><strong>No state in the process</strong> — nothing held from one request to the next, because the environment doesn't survive.</li>
+<li><strong>Finished inside the timeout</strong> — fifteen minutes at most, and usually far less.</li>
+</ul>
+<p>Those changes are the developers' work. The platform engineer has to know they exist, and has to say so before a migration is planned around them. Your news bot can't move as it is either — the Claude command-line tool doesn't run inside Lambda. A function version would have to call the APIs directly from Python.</p>
+<h2 id="two-questions-decide-whether-a-job-fits-how-often-and-how-long">Two Questions Decide Whether a Job Fits: How Often, and How Long</h2>
+<ul>
+<li><strong>How often it runs</strong> — once a day, once an hour, every second.</li>
+<li><strong>How long one run takes</strong> — under a second, a few minutes, over fifteen.</li>
+</ul>
+<p>A run longer than fifteen minutes cannot run on Lambda at all. A job that's busy all the time costs more than the instance it would replace. What's left — a job that runs rarely and finishes quickly — fits a function.</p>
+<h2 id="six-jobs-placed-on-the-two-axes">Six Jobs, Placed on the Two Axes</h2>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>How often</th>
+<th>How long</th>
+<th>Fits?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Your news bot</td>
+<td>Once a day</td>
+<td>Seconds to minutes</td>
+<td>Fits</td>
+</tr>
+<tr>
+<td>A report at midnight</td>
+<td>Once a day</td>
+<td>Seconds to minutes</td>
+<td>Fits</td>
+</tr>
+<tr>
+<td>A thumbnail made when a photo is uploaded</td>
+<td>A few times an hour</td>
+<td>Under a second</td>
+<td>Fits</td>
+</tr>
+<tr>
+<td>A webhook from a payment provider</td>
+<td>A few times an hour</td>
+<td>Under a second</td>
+<td>Fits</td>
+</tr>
+<tr>
+<td>Your page at steady traffic</td>
+<td>Constant</td>
+<td>—</td>
+<td>Costs more than the instance</td>
+</tr>
+<tr>
+<td>Your trading path</td>
+<td>Constant</td>
+<td>—</td>
+<td>Costs more than the instance</td>
+</tr>
+</tbody>
+</table>
+<p>The two that don't fit aren't rare or slow — they're busy all the time, which is exactly the shape a daemon behind a balancer is built for, and exactly the shape a function is billed against.</p>
+<h2 id="the-question-to-answer-in-your-own-account">The Question to Answer in Your Own Account</h2>
+<p>Two sentences, a number in each: one job in your account that should become a function, and what it costs today running as a daemon; one that should stay on the instance, and why.</p>
+<p><strong>What you know now:</strong> a <strong>daemon</strong> waits for work and is billed for every hour it waits, whether work arrives or not — your Flask app, nginx, Postgres and cron are all daemons. <strong>Event-driven</strong> code runs only on an <strong>event</strong>, one thing that happened written as data, and a <strong>function</strong> is a named block of code called with an input and returning an output — the first <code>def</code> in this course. <strong>Serverless</strong> means you upload the code and AWS runs it on a machine it chooses, billed for the milliseconds it ran; there is a server, you simply never choose it, patch it, or pay for it waiting. The sentence to carry forward, always in full: between events, nothing of yours is running, and the environment the last run used is gone — the package you uploaded stays uploaded, the environment that ran it does not. That single fact answers all five questions: state has to live outside the function, since <strong>ephemeral storage</strong> and anything held in a variable don't survive between runs; the first call after downtime pays a <strong>cold start</strong> while a fresh environment is built; concurrent requests each get their own environment, with no queue and no scaling policy behind them; a thousand of them at once means a thousand database connections, which is why <strong>DynamoDB</strong> — billed per request, reached over HTTPS, no connection to hold — is the database usually paired with Lambda; and a retried event means the code has to be <strong>idempotent</strong>, since the failed run left nothing behind to say it already tried. Around the function itself: an <strong>execution role</strong> decides what it may touch, RAM and timeout are the whole sizing model, <strong>API Gateway</strong> turns an HTTP request into an event a function can receive, and <strong>the invoke permission</strong> decides who may call the function at all — leave it off and every request comes back a 500 with an empty log group, because Lambda answered API Gateway with a 403 and API Gateway couldn't complete the request. Whether a job belongs here comes down to two questions — how often it runs, and how long one run takes — with anything over fifteen minutes ruled out entirely and anything busy all the time costing more than the instance it would replace; a news bot and a midnight report fit, a steady-traffic page and a trading path don't.</p>
 
 </main>
 </body>

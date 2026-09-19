@@ -7733,3 +7733,262 @@ The distribution costs nothing at this size. Destroy it anyway, like everything 
 - **Three places to name** — inside the application, the shared store, the edge. Never "the cache" alone.
 
 Some answers are never a copy: if two screens may show different values for a minute, it can be a copy; if they may not, it cannot. A request answered at the edge never reaches your servers — that is why the edge is both the speed and the protection.
+
+---
+
+# Lesson 48 — Serverless: Code That Runs Only When Something Happens
+
+## Where We Left Off
+
+Last session finished the edge unit: a distribution in front of a private bucket, and Shield and WAF absorbing a flood before it reaches your servers. Tonight opens a new unit inside Scale, and it starts from a fact about everything built so far: your instance, your Flask app under systemd, nginx, Postgres, cron — every one of them is a program that starts, waits, and is billed for every hour it waits, whether or not anyone asks anything of it. Your news bot runs for under a minute once a day. The `t3.micro` under it is billed for the other twenty-three hours anyway. Tonight names the other shape a running program can take, and builds one for real.
+
+## A Daemon Waits for Work, Billed for Every Hour It Waits
+
+**daemon** — a program that waits for work. It starts when the machine boots and runs until it is stopped, waiting the whole time. It is billed for every hour it waits, whether or not any work arrives.
+
+The logging topic called this the background process. You already run several: the Flask app under systemd, nginx, Postgres, and cron itself — the daemon that starts your news bot's script at 09:00 and then goes back to waiting.
+
+## An Event Is One Thing That Happened, Written Down as Data
+
+**event** — one thing that happened, written down as data a program can read. A request arrived, a file landed in S3, the clock reached 09:00, a message was sent to a bot — each one is an event.
+
+The logging topic defined a **log event** as what the application wrote when something happened. Same word, same sense.
+
+## Event-Driven Code Runs on an Event, Handles It, and Stops
+
+**event-driven** — code that runs on an event. It starts when the event arrives, handles that one event, and stops. Your news bot's script at 09:00. A Telegram bot answering a message. A push notification when a card is charged.
+
+One order placed in a phone app fans out into three separate runs: charge the card, print the kitchen ticket, send the confirmation. Three events from one order, not one program handling all three.
+
+## The Same Day, Run Both Ways
+
+| | Billed |
+|---|---|
+| **A daemon** | Running from midnight to midnight. Billed for every hour, however many requests arrive. |
+| **Event-driven code** | Running only where a mark is. Billed for each run, and for nothing in between. |
+
+Your news bot's script is event-driven. The daemon is the machine under it, and cron on it, waiting all day so the script can start on time.
+
+## A Function Is a Named Block of Code — the First `def` in the Course
+
+**function** — a named block of code. It is called by its name with an input, and it gives an output back.
+
+Foundations taught variables, lists, loops and conditions. It never taught how to define one. This is the first `def` in the course:
+
+```python
+def quote(symbol):
+    price = fetch_price(symbol)
+    return f"{symbol}: {price}"
+
+quote("AAPL")
+quote("MSFT")
+```
+
+`def` names it. The name is `quote`. `symbol` is the input. `return` gives the output back. Called twice here, with a different input each time. `fetch_price` is another function, written somewhere else.
+
+## Serverless: You Upload the Code, and AWS Runs It on Its Own Machines
+
+**serverless** — you upload the code; AWS runs it on its own machines. When an event arrives, AWS runs your code on a machine it chose and bills you for the milliseconds it ran. When nothing arrives, nothing runs and nothing is billed.
+
+**Lambda** — AWS's service for this. You give it the code and the events that trigger it.
+
+**handler** — the named function Lambda calls, with the event as its input. You say which one it is.
+
+## There Is a Server. You Just Never Choose It, Patch It, or Pay for It Waiting.
+
+- **You never choose it** — no instance type, no image, no boot script. AWS picks the machine for each run.
+- **You never patch it** — the operating system and the Python runtime are AWS's to update.
+- **You never pay for it waiting** — billing starts when your code starts running and stops when it returns.
+
+What your code prints goes to CloudWatch Logs, into a log group — the same kind of log group the logging topic taught. Nothing is installed on anything to make that happen.
+
+## What the Same Stack Costs at Zero Traffic
+
+| What is running | Rate | A month |
+|---|---|---|
+| The instance, one `t3.micro` | $0.0104 an hour | about $7.50 |
+| The load balancer | $0.0225 an hour before any traffic | about $16 |
+| The database, one `db.t3.micro` Postgres in one zone | $0.017 an hour before storage | about $12 |
+| The same page on Lambda, at your traffic | inside the free allowance of 1 million requests and 400,000 GB-seconds a month | $0 |
+
+*List prices, not a bill — us-east-1, on-demand, per month, at zero traffic.*
+
+This is not an argument for cheapness. Instances behind a balancer are the correct design for a page that must answer immediately and hold a database connection. The question the rest of tonight answers is which jobs fit a function.
+
+## One Function, Run Twice From the Console
+
+```
+REPORT Duration: 412.35 ms  Billed Duration: 413 ms        ← first run
+       Memory Size: 128 MB  Max Memory Used: 41 MB  Init Duration: 187.22 ms
+
+REPORT Duration: 2.11 ms  Billed Duration: 3 ms            ← second run
+       Memory Size: 128 MB  Max Memory Used: 41 MB
+```
+
+**Duration / Billed Duration** — how long your code ran, and what is charged, rounded up to the millisecond. **Memory Size / Max Memory Used** — the RAM you gave the function, and the RAM it actually used; those are the console's own words for it. **Init Duration** appears on the first line only. The second run has no such field.
+
+## The Sentence: Between Events, Nothing of Yours Is Running
+
+> Between events, nothing of yours is running, and the environment the last run used is gone.
+
+**environment** — the place one run happens: your uploaded code with the Python runtime started under it, on a machine AWS chose.
+
+The package you uploaded stays uploaded. The environment that ran it does not. That difference is why the first `REPORT` line above carries an `Init Duration` and the second one doesn't — the first had to build a fresh environment before it could run at all.
+
+## Five Questions, Answered From What Was Already on the Screen
+
+### Where is a copy your code kept, when the next request arrives?
+
+If your function kept a copy inside itself the way the caching topic taught — to hand back on the next request instead of asking Finnhub again — that copy is gone the moment the environment is. Anything held in a variable, and anything written to the function's own disk (**ephemeral storage**, 512 MB by default and up to 10 GB), goes with it. Only something written outside the function — S3, your RDS database, another store — survives to the next run.
+
+The local cache from the caching topic cannot exist here. Statelessness was a discipline in the autoscaling topic; here it is enforced.
+
+### Why was the first run slower than the second?
+
+**cold start** — starting a fresh environment before the code runs: download the package, start the Python runtime, then call the handler. A few hundred milliseconds. `Init Duration` on the first `REPORT` line above is that number. Booting a replacement instance from user data in the autoscaling topic took minutes; a cold start starts a process, not a machine. AWS does not publish how long an environment stays warm — the next day's call is cold again.
+
+### What happens when two requests arrive at the same moment?
+
+They run the function twice, in two environments. No queue behind one process, no scaling policy, no minimum, no desired capacity. A thousand orders at lunch are a thousand events or more, each in its own environment. A thousand runs at 200 milliseconds each is 200 seconds of billed time, so the bill is not the risk. The limit is 1,000 running at once per region by default, and AWS will raise it on request.
+
+### What do a thousand of them at once do to one Postgres?
+
+Each environment opens its own connection. None of them shares a running process, so none of them shares a set of open connections — one Postgres instance is asked for a thousand connections at the same moment. That's the risk, and it's why the database that belongs beside a function is one reached over HTTPS, with no connection to hold.
+
+**DynamoDB** — AWS's managed key-value database. Nothing to run, billed per request, reached over HTTPS. A thousand functions calling it do not hold a thousand connections open. **Key-value** means you store a value under a key and read it back by that key — there's no query across the whole table the way there is in Postgres. It's the database most often paired with Lambda, for exactly this reason.
+
+### A failed event is retried. What does that mean for your code?
+
+**idempotent** — doing the same work twice does no damage; running it once and running it twice leave the same result.
+
+| | |
+|---|---|
+| **Writing a row with the same key twice** | Fine. The second write replaces the first with the same value. |
+| **Charging a card twice** | Not fine. The customer paid twice, and nothing about the second charge looks wrong. |
+
+A retried event runs the same work again, and the run that failed left nothing behind to tell the second attempt that. So the code has to be idempotent.
+
+## The Execution Role: the Function Runs as a Role, and Nothing Else
+
+**execution role** — the IAM role the function runs as. What the function may touch, it touches through this role, and nothing else. It's the same kind of role as the instance role from Foundations — its trust policy names Lambda as the trusted entity, Foundations' phrase for who may use this role.
+
+## Two Settings Are the Whole Sizing Model
+
+- **RAM** — from 128 MB to 10,240 MB. The console labels this field `Memory`. CPU is given in proportion to it, and is not a separate setting.
+- **timeout** — from 1 second to 900 seconds. 900 seconds is fifteen minutes, and it is the maximum there is.
+
+The runtime — Python, Node.js, Java, Go, C# or Ruby — is a separate choice, made from a list, and it isn't part of the sizing. Foundations chose an instance family and a size from a table of them. Here there are two numbers, and no table.
+
+## API Gateway Turns an HTTP Request Into an Event
+
+**API Gateway** — it turns an HTTP request into an event. It receives the request, picks the function by path and method, calls it with the request written as the event, and returns the answer. A browser does not call a function directly.
+
+Your load balancer forwards to machines already running. API Gateway calls code that is not running until the request arrives.
+
+## Other Ways to Start a Function
+
+| Trigger | What it is |
+|---|---|
+| **A function URL** | One address that goes straight to one function. No routes, no paths, nothing to configure between them. |
+| **Your own load balancer** | It can send a path to a function as a target, the same way it sends a path to an instance. |
+| **An EventBridge rule** | A schedule, not a request — every day at 09:00, Monday to Friday, run this function. That is your news bot, with no machine under it. |
+
+API Gateway is the one used tonight.
+
+## Inside the VPC or Outside It — Lambda's Networking Is a Choice You Make
+
+- **Outside the VPC** (the default, nothing to configure) — the function reaches the public internet. It cannot reach a database in a private subnet.
+- **Inside the VPC** (you give it subnets and a security group) — it reaches your private database, and reaches nothing public unless that subnet has a NAT gateway.
+
+A function in a private subnet with no NAT gateway can read your RDS instance and cannot call Finnhub. Tonight's function needs both, so it runs in a subnet that has a NAT gateway.
+
+## The Invoke Permission: Who May Call the Function, Not What It May Touch
+
+**the invoke permission** — attached to the function, naming who may call it. API Gateway may not call your function unless a permission on the function says it may. In Terraform this is `aws_lambda_permission`, naming `apigateway.amazonaws.com` as who may call.
+
+You've seen this shape before: the trusted entity on a role, and the policy Foundations wrote on the public S3 bucket. The role says what the function may touch; this says who may call the function — two different questions, two different attachments.
+
+## Without the Permission, Every Request Is a 500
+
+```
+{"message":"Internal Server Error"}
+```
+
+The function's log group shows no invocation at all. A 500 with an empty log group is the diagnosis: the function was never called. Lambda answers API Gateway with a 403; API Gateway can't complete the request, so the browser is handed a 500. This is the most common cause of a 500 when a function sits behind API Gateway — verified live in the cohort's own account, where adding the missing `aws_lambda_permission` turned the same route from a 500 into a 200 with nothing else changed.
+
+## Four Resources, and a URL That Returns a Stock Quote
+
+- The execution role
+- The function, fetching the Finnhub quote
+- The API Gateway route
+- The invoke permission
+
+Its own Terraform root, with its own state key, separate from the three environment roots:
+
+```hcl
+resource "aws_iam_role" "lambda_exec" {
+  name               = "quote-function-exec"
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json   # trusts lambda.amazonaws.com
+}
+
+resource "aws_lambda_function" "quote" {
+  function_name = "quote"
+  role          = aws_iam_role.lambda_exec.arn
+  handler       = "app.handler"
+  runtime       = "python3.13"
+  memory_size   = 128
+  timeout       = 10
+}
+
+resource "aws_apigatewayv2_api" "quote" {
+  name          = "quote-api"
+  protocol_type = "HTTP"
+}
+# one route, integrated to aws_lambda_function.quote
+
+resource "aws_lambda_permission" "apigw" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.quote.function_name
+  principal     = "apigateway.amazonaws.com"
+}
+```
+
+## Claude Code Writes It, Applies It, Calls the URL, Destroys It
+
+Claude Code wrote the Terraform live: the IAM role trusting `lambda.amazonaws.com`, the function naming its handler, runtime, RAM and timeout, the HTTP API and its one route integrated to the function, and the permission naming `apigateway.amazonaws.com` as who may call it. The URL, called once after a cold start and once straight after, produced the same two `REPORT` lines as the console demo — one with an `Init Duration`, one without. Then `terraform destroy`.
+
+## Code Written for a Server Doesn't Move to Lambda in Its Current Shape
+
+Moving to Lambda means the code has to change shape first:
+
+- **Shaped as a handler** — one named function, called with the event as its input.
+- **No state in the process** — nothing held from one request to the next, because the environment doesn't survive.
+- **Finished inside the timeout** — fifteen minutes at most, and usually far less.
+
+Those changes are the developers' work. The platform engineer has to know they exist, and has to say so before a migration is planned around them. Your news bot can't move as it is either — the Claude command-line tool doesn't run inside Lambda. A function version would have to call the APIs directly from Python.
+
+## Two Questions Decide Whether a Job Fits: How Often, and How Long
+
+- **How often it runs** — once a day, once an hour, every second.
+- **How long one run takes** — under a second, a few minutes, over fifteen.
+
+A run longer than fifteen minutes cannot run on Lambda at all. A job that's busy all the time costs more than the instance it would replace. What's left — a job that runs rarely and finishes quickly — fits a function.
+
+## Six Jobs, Placed on the Two Axes
+
+| Job | How often | How long | Fits? |
+|---|---|---|---|
+| Your news bot | Once a day | Seconds to minutes | Fits |
+| A report at midnight | Once a day | Seconds to minutes | Fits |
+| A thumbnail made when a photo is uploaded | A few times an hour | Under a second | Fits |
+| A webhook from a payment provider | A few times an hour | Under a second | Fits |
+| Your page at steady traffic | Constant | — | Costs more than the instance |
+| Your trading path | Constant | — | Costs more than the instance |
+
+The two that don't fit aren't rare or slow — they're busy all the time, which is exactly the shape a daemon behind a balancer is built for, and exactly the shape a function is billed against.
+
+## The Question to Answer in Your Own Account
+
+Two sentences, a number in each: one job in your account that should become a function, and what it costs today running as a daemon; one that should stay on the instance, and why.
+
+**What you know now:** a **daemon** waits for work and is billed for every hour it waits, whether work arrives or not — your Flask app, nginx, Postgres and cron are all daemons. **Event-driven** code runs only on an **event**, one thing that happened written as data, and a **function** is a named block of code called with an input and returning an output — the first `def` in this course. **Serverless** means you upload the code and AWS runs it on a machine it chooses, billed for the milliseconds it ran; there is a server, you simply never choose it, patch it, or pay for it waiting. The sentence to carry forward, always in full: between events, nothing of yours is running, and the environment the last run used is gone — the package you uploaded stays uploaded, the environment that ran it does not. That single fact answers all five questions: state has to live outside the function, since **ephemeral storage** and anything held in a variable don't survive between runs; the first call after downtime pays a **cold start** while a fresh environment is built; concurrent requests each get their own environment, with no queue and no scaling policy behind them; a thousand of them at once means a thousand database connections, which is why **DynamoDB** — billed per request, reached over HTTPS, no connection to hold — is the database usually paired with Lambda; and a retried event means the code has to be **idempotent**, since the failed run left nothing behind to say it already tried. Around the function itself: an **execution role** decides what it may touch, RAM and timeout are the whole sizing model, **API Gateway** turns an HTTP request into an event a function can receive, and **the invoke permission** decides who may call the function at all — leave it off and every request comes back a 500 with an empty log group, because Lambda answered API Gateway with a 403 and API Gateway couldn't complete the request. Whether a job belongs here comes down to two questions — how often it runs, and how long one run takes — with anything over fifteen minutes ruled out entirely and anything busy all the time costing more than the instance it would replace; a news bot and a midnight report fit, a steady-traffic page and a trading path don't.

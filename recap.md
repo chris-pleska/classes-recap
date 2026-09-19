@@ -1922,3 +1922,68 @@ curl -I https://movies.<your domain>/posters/<file>
 ```
 
 CloudFront is free up to 1 TB out and 10M requests/month, so it costs nothing at this size — but `terraform destroy` takes longer than usual, disabling the distribution everywhere before it can delete it. Three places to name, never "the cache" alone: inside the application, the shared store, the edge.
+
+---
+
+## Lesson 47: Serverless — Lambda, Events & Where It Fits
+
+A program is either a **daemon** — starts at boot, runs all day, billed for every hour whether or not work arrives (nginx, gunicorn, Postgres, cron itself) — or **event-driven** — starts when an **event** (one thing that happened, handed to a program as data) arrives, runs, and stops. A news bot's script is event-driven; the cron daemon under it still bills for the whole day it waited.
+
+**Function** = a named block of code, called by name with an input, gives an output back:
+```python
+def quote(symbol):
+    price = fetch_price(symbol)
+    return f"{symbol}: {price}"
+```
+
+**Serverless (AWS Lambda):** you upload a function and say which events trigger it; AWS runs it on a machine it chose and bills by the millisecond it ran — nothing running, nothing billed, between events. There *is* a server, AWS just owns and patches it. Logs land in CloudWatch automatically, same log groups as always; the named function Lambda calls is the **handler**.
+
+**List prices, zero traffic, us-east-1/month — not a bill, and not an argument for cheapness:**
+| Running | Cost |
+|---|---|
+| EC2 `t3.micro` | ~$7.50 |
+| Load balancer | ~$16 |
+| RDS `db.t3.micro` | ~$12 |
+| Same page on Lambda, in-allowance | $0 |
+Instances behind a balancer are still the right design for a page that must answer instantly and hold a database connection — the question is fit, not price.
+
+**Cold start** = starting a fresh environment (download the package, start the runtime, call the handler) before your code runs, a few hundred ms — seen only on the *first* `REPORT` line as `Init Duration`:
+```
+REPORT Duration: 412.35 ms  Billed Duration: 413 ms
+       Memory Size: 128 MB  Max Memory Used: 41 MB  Init Duration: 187.22 ms   # first run, cold
+REPORT Duration: 2.11 ms    Billed Duration: 3 ms                              # second run, warm
+```
+
+**Five facts that follow from "the environment is gone between events":**
+- Anything in a variable, or written to the function's own disk (**ephemeral storage**, 512 MB–10 GB), dies with it — state has to live outside the function (S3, RDS, DynamoDB).
+- Two requests at once run in two separate environments — no queue, no scaling policy, no minimum to set; concurrency just happens (up to 1,000 running at once per region by default).
+- A thousand concurrent environments means a thousand separate Postgres connections at once — the database that belongs with a function is reached over HTTPS with no connection to hold, which is why **DynamoDB** (AWS's key-value database, billed per request, no connections) is the one usually paired with Lambda.
+- A failed event gets **retried**, so the code has to be **idempotent** — running it twice must leave the same result. Writing a row under the same key twice is fine; charging a card twice is not.
+
+**The pieces around the function:**
+```hcl
+resource "aws_iam_role" "lambda" { ... }               # execution role — what the function may touch, and nothing else
+
+resource "aws_lambda_function" "quote" {
+  handler     = "app.handler"
+  runtime     = "python3.12"
+  memory_size = 128    # 128 MB – 10,240 MB — the whole sizing model; CPU scales with RAM, not set separately
+  timeout     = 900    # 1 – 900 seconds, 15 minutes is the ceiling
+}
+
+resource "aws_apigatewayv2_api" "http" { ... }          # turns an HTTP request into an event, picks the function by path + method
+
+resource "aws_lambda_permission" "apigw" {              # who may call the function
+  principal = "apigateway.amazonaws.com"
+}
+```
+**Missing that last permission is the most common cause of a 500 behind API Gateway:** Lambda answers a 403, API Gateway can't complete the request, the browser gets `{"message":"Internal Server Error"}` — diagnose it by the pairing of a 500 *and an empty log group* (the function was never invoked at all). A function runs **outside your VPC** by default — reaches the public internet, not a private database. Put it inside one and it reaches the database but reaches nothing public unless that subnet also has a NAT gateway.
+
+Four resources build one working endpoint (the role, the function, the API Gateway route, the invoke permission) — verified live by having Claude Code write the Terraform, apply it, and call the URL. Code written for a server needs three changes before it can move here: shaped as a handler, no state kept in the process, finished inside the timeout.
+
+**Where it fits — two axes, not one:**
+```
+how often it runs:      once a day  ─────────────  every second
+how long one run takes: under a second  ────────  over 15 minutes
+```
+A run over 15 minutes can't go on Lambda at all; a job that's busy constantly costs more there than an instance would. Infrequent + short (a news bot, a thumbnail on upload, a midnight report, a payment webhook) fits a function. Steady, constant traffic (your page, a trading path) stays on an instance.
