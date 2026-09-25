@@ -7992,3 +7992,89 @@ The two that don't fit aren't rare or slow — they're busy all the time, which 
 Two sentences, a number in each: one job in your account that should become a function, and what it costs today running as a daemon; one that should stay on the instance, and why.
 
 **What you know now:** a **daemon** waits for work and is billed for every hour it waits, whether work arrives or not — your Flask app, nginx, Postgres and cron are all daemons. **Event-driven** code runs only on an **event**, one thing that happened written as data, and a **function** is a named block of code called with an input and returning an output — the first `def` in this course. **Serverless** means you upload the code and AWS runs it on a machine it chooses, billed for the milliseconds it ran; there is a server, you simply never choose it, patch it, or pay for it waiting. The sentence to carry forward, always in full: between events, nothing of yours is running, and the environment the last run used is gone — the package you uploaded stays uploaded, the environment that ran it does not. That single fact answers all five questions: state has to live outside the function, since **ephemeral storage** and anything held in a variable don't survive between runs; the first call after downtime pays a **cold start** while a fresh environment is built; concurrent requests each get their own environment, with no queue and no scaling policy behind them; a thousand of them at once means a thousand database connections, which is why **DynamoDB** — billed per request, reached over HTTPS, no connection to hold — is the database usually paired with Lambda; and a retried event means the code has to be **idempotent**, since the failed run left nothing behind to say it already tried. Around the function itself: an **execution role** decides what it may touch, RAM and timeout are the whole sizing model, **API Gateway** turns an HTTP request into an event a function can receive, and **the invoke permission** decides who may call the function at all — leave it off and every request comes back a 500 with an empty log group, because Lambda answered API Gateway with a 403 and API Gateway couldn't complete the request. Whether a job belongs here comes down to two questions — how often it runs, and how long one run takes — with anything over fifteen minutes ruled out entirely and anything busy all the time costing more than the instance it would replace; a news bot and a midnight report fit, a steady-traffic page and a trading path don't.
+
+---
+
+# Lesson 49 — Where Serverless Doesn't Fit, and the Third Way to Run Code
+
+## Where We Left Off
+
+Last session ended on the decision framework: how often a job runs, and how long one run takes, six jobs placed on those two axes, and a question left for your own account — one job that should become a function, one that should stay on the instance. Tonight fills in the edges of that framework with the four concrete places a function is the wrong choice, four real companies who ran into exactly those edges, a wider view of what AWS itself calls serverless beyond Lambda alone, and the third way to run code that sits between an instance you own and a function AWS owns entirely: a container.
+
+## Four Places a Function Is the Wrong Choice
+
+| Reason | Why |
+|---|---|
+| **Work longer than fifteen minutes** | The timeout is the maximum there is. A job that takes an hour cannot run as a function. |
+| **Steady high traffic** | A function kept busy all month costs more than the instance that would have served the same requests. |
+| **A request that cannot wait for a cold start** | The stock buy on your own page: the price can move in the few hundred milliseconds the environment takes to start. |
+| **Moving to another cloud** | Your Python code moves. The triggers, the roles and the permissions are AWS's own, and have to be written again for the other cloud. |
+
+## Amazon Prime Video: The Case Against Steady High Volume
+
+March 2023. A tool inside Prime Video checks every stream for picture and sound defects — frozen frames, audio out of sync with the video. This is not monitoring in the sense the logging topic taught: it looks at the picture and the sound themselves.
+
+| | |
+|---|---|
+| **What it ran on** | Step Functions, AWS's service that runs steps in order, and Lambda, passing each video frame between steps through S3. At the volume of every stream, the bill was the state transitions and the S3 calls. |
+| **What they changed** | The team packed the steps into one process on ECS and EC2, and cut that tool's infrastructure cost by over 90 percent. |
+
+One internal tool, not Prime Video itself — the case for steady high volume being the wrong fit, published by an Amazon team.
+
+## The LEGO Group: Built for a Spike, Not a Steady Load
+
+| | |
+|---|---|
+| **2017** | Peak traffic overwhelmed the on-premises commerce back ends behind lego.com, and shoppers got 503 errors. A 503 is the server saying it cannot take the request right now — an overloaded back end returns one, and so does a load balancer with no healthy target. |
+| **The rebuild** | The shop was rebuilt on Lambda, API Gateway, DynamoDB, and three AWS services that pass work between functions: SQS (queues), SNS (notifications) and Step Functions (steps in order). shop.LEGO.com switched over on 10 July 2019. |
+| **The load** | Sales events drive transactions up to 200 times normal for a few hours. |
+
+The commerce back ends, not the whole company — the case for spikes: idle for most of the month, and very large for one afternoon.
+
+## Coca-Cola: Working Out the Break-Even
+
+The vending backend, 2016 — the service that handles a phone tap at a vending machine.
+
+| | A year |
+|---|---|
+| On six EC2 instances | about $12,900 |
+| On API Gateway and Lambda, at 30 million requests a month | about $4,500 |
+| The architect's break-even | about 80 million calls a month |
+
+One small service, not Coca-Cola's infrastructure. Above the break-even the instances cost less. The number is theirs. The lesson is that every job has a break-even, and it can be worked out before choosing.
+
+## iRobot: A Company's Main Product, Run by Fewer Than Ten People
+
+| | |
+|---|---|
+| **The connections** | AWS IoT Core takes the robots' connections. Lambda runs the code behind them, with DynamoDB for state. |
+| **What they run** | Over a hundred functions, and no EC2 instance they manage. |
+| **The size of it** | About two million connected robots by 2018, run by fewer than ten people. |
+
+The robot backend, not iRobot's whole business — the case for a company's main product running this way.
+
+## Serverless Is Wider Than Lambda
+
+AWS calls DynamoDB, Aurora Serverless, Fargate, S3 and SQS all serverless. They share three things: no instances to choose or count, billing by use, and scaling down to zero when nothing arrives.
+
+| Cloud | Their name for it |
+|---|---|
+| Microsoft Azure | Azure Functions. |
+| Google Cloud | Cloud Functions, and Cloud Run for a container. |
+| Cloudflare | Cloudflare Workers, which is a product name, running at the kind of edge locations the edge topic taught. |
+
+## Three Ways to Run Code
+
+- **Instances you own** — an image, an Auto Scaling group and a balancer in front of them. Everything built so far in Scale.
+- **A function AWS runs** — a package and an environment AWS starts for one event, and stops.
+- **A container** — a boxed package that runs unchanged in more than one place: a laptop, EC2, Fargate, or Kubernetes.
+
+Fargate sits on the line between the second and third of these: it runs a container on a machine AWS owns. The container is the next stage.
+
+## The Assignment, and the Sentence Carried Forward
+
+Nothing from this unit is running in your account, so there is nothing to destroy — the assignment is where you build one. Two sentences, a number in each: one job in your account that should become a function, and what it costs today; one that should stay on the instance, and why. The four real cases are posted with their scopes and their sources.
+
+Between events, nothing of yours is running, and the environment the last run used is gone. Everything else in this unit came from that.
+
+**What you know now:** four concrete places rule a function out — longer than fifteen minutes, steady high traffic, a request that can't wait for a **cold start**, or moving to another cloud whose triggers and roles aren't AWS's — and each is backed by a real company, not a hypothetical. **Amazon Prime Video** paid Step Functions' per-transition billing at the volume of every stream and cut one internal tool's cost by over 90 percent by packing the steps into one process on ECS and EC2 — the case against steady high volume. **The LEGO Group**'s on-premises commerce back ends returned 503s under 2017's peak traffic and were rebuilt on Lambda, API Gateway, DynamoDB, SQS, SNS and Step Functions to absorb sales spikes up to 200 times normal — the case for a load that is idle most of the month and very large for one afternoon. **Coca-Cola**'s vending backend had a real break-even, about 80 million calls a month, above which six EC2 instances cost less than API Gateway and Lambda — proof that every job's break-even can be worked out before choosing. And **iRobot** runs its entire connected-robot backend — AWS IoT Core, over a hundred Lambda functions, DynamoDB for state — for about two million robots with fewer than ten people, the case for a company's main product running this way. Serverless itself is wider than Lambda: DynamoDB, Aurora Serverless, Fargate, S3 and SQS all share three traits — no instances to choose or count, billing by use, and scaling to zero — and every other cloud has its own name for the same idea, Azure Functions, Google Cloud Functions and Cloud Run, Cloudflare Workers. Everything built in Scale up to tonight is the first of three ways to run code — instances you own, behind a balancer; a function AWS runs, started fresh for one event and gone; and a container, a boxed package that runs unchanged on a laptop, EC2, Fargate or Kubernetes. Fargate itself already runs a container on a machine AWS owns, and the container is the next stage.

@@ -1987,3 +1987,38 @@ how often it runs:      once a day  ─────────────  eve
 how long one run takes: under a second  ────────  over 15 minutes
 ```
 A run over 15 minutes can't go on Lambda at all; a job that's busy constantly costs more there than an instance would. Infrequent + short (a news bot, a thumbnail on upload, a midnight report, a payment webhook) fits a function. Steady, constant traffic (your page, a trading path) stays on an instance.
+
+---
+
+## Lesson 48: Serverless — Where It Doesn't Fit, and the Third Way
+
+**Four places a function is the wrong choice:**
+- Work longer than fifteen minutes — the timeout is the hard ceiling.
+- Steady high traffic — a function kept busy all month costs more than the instance serving the same requests would.
+- A request that can't wait for a cold start — a stock buy, where price moves in the few hundred ms the environment takes to start.
+- Moving to another cloud — the code moves, but the triggers, roles and permissions are AWS's own and get rewritten for the other cloud.
+
+**Four real cases, each scoped to one tool or service, not the whole company:**
+- **Amazon Prime Video** (Mar 2023) — a stream-defect checker ran Step Functions + Lambda, passing every video frame between steps through S3; at that volume the bill was the state transitions and S3 calls. Packing the steps into one process on ECS/EC2 cut that tool's infrastructure cost by over 90% — the case against steady high volume.
+- **The LEGO Group** — 2017 peak traffic overwhelmed the on-prem commerce back ends behind lego.com (503s). Rebuilt on Lambda, API Gateway, DynamoDB, SQS, SNS and Step Functions; shop.LEGO.com switched over 10 July 2019. Sales events now drive load up to 200x normal for a few hours — the case for spikes: idle most of the month, huge for an afternoon.
+- **Coca-Cola** (2016) — the vending-machine backend:
+
+  | Running | A year |
+  |---|---|
+  | On six EC2 instances | ~$12,900 |
+  | On API Gateway + Lambda, 30M req/month | ~$4,500 |
+  | Break-even | ~80M calls/month |
+
+  Above the break-even the instances cost less — every job has one, and it can be worked out before choosing.
+- **iRobot** — AWS IoT Core takes the robots' connections, Lambda runs the code behind them with DynamoDB for state: over a hundred functions, no EC2 to manage, ~2M connected robots by 2018, run by fewer than ten people — the case for a company's main product running this way.
+
+**Serverless is wider than Lambda** — AWS also calls DynamoDB, Aurora Serverless, Fargate, S3 and SQS serverless. They share three things: no instances to choose or count, billing by use, and scaling to zero when nothing arrives. Other clouds have their own: Azure Functions, Google Cloud Functions (and Cloud Run for a container), Cloudflare Workers (a product name, running at edge locations).
+
+**Three ways to run code:**
+```
+instances you own   →   a function AWS runs   →   a container
+(Auto Scaling group,        (Lambda,                (a packaged app, runs on
+ load balancer)              zero between events)     a laptop, EC2, Fargate,
+                                                        or Kubernetes)
+```
+Fargate sits on the line between the function and the container: it runs a container on a machine AWS owns. The container is the next stage.
