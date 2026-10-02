@@ -2022,3 +2022,129 @@ instances you own   →   a function AWS runs   →   a container
                                                         or Kubernetes)
 ```
 Fargate sits on the line between the function and the container: it runs a container on a machine AWS owns. The container is the next stage.
+
+---
+
+## Lesson 49: Containers — Why Containers, and the First Container
+
+**Three ways to build and run an app:** a **monolith** (one codebase, deployed together — simpler at first, harder to change as it grows), **microservices** (small services, each with its own repo, deploy and team, calling each other over the network), and **serverless** (you give AWS only the code; Lambda is this). Stash runs microservices (onboarding, bank services, money coach, transfers) on EKS, and still runs its original 2015 monolith on ECS — splitting it would cost more engineering time than it would return, so new features become new services and the monolith is left alone.
+
+**Microservices are almost always run as containers** — why this stage starts with the container.
+
+**Why an image helps:** before containers, each machine (laptop, test server, production) had its own versions of Python and its libraries, so code that ran on one machine could fail on the next — "it works on my machine." An **image** carries the app together with the Python and libraries it needs; any machine with Docker and a Linux kernel runs it with the same result.
+
+**The words, in order:** app code → **Docker** (the tool that builds images and runs containers; `docker` is the command, a background daemon does the work) → **Dockerfile** (text file of build instructions; `docker build` runs them once) → **image** (a packaged filesystem — code, dependencies, runtime, start command — nothing running in it) → **image repository** (Docker Hub is the public one, ECR is AWS's private one) → **container** (`docker run` starts one from an image: one process with its own view of filesystem/network/process list, on the kernel the machine already has).
+
+**An image is like an AMI, and it's smaller** — an AMI carries a whole OS with a kernel; an image carries no kernel. A container starts in about a second; an EC2 instance from an AMI takes minutes.
+
+**Process, kernel, PID 1:** a process is a running program; the kernel runs processes and controls their access to hardware. **PID 1** is the first process in a container — the container stops when PID 1 exits. On a Mac, PID 1 is `launchd`. Inside a slim Debian-based container (no systemd), PID 1 is whatever command the container was started with.
+
+**Docker Desktop has to be running** on a Mac, or every `docker` command answers "Cannot connect to the Docker daemon." `docker ps` answering, even with an empty list, means it's working.
+
+**The first container:**
+```bash
+docker run -it --rm python:3.12-slim bash
+cat /etc/os-release      # Debian
+uname -r                 # the kernel version
+exit
+```
+`-it` gives an interactive terminal inside the container. `--rm` deletes the container when `bash` exits.
+
+**From a second terminal, while it's running:**
+```bash
+docker ps                      # running containers: id, image, command, status, name
+docker top <container-id>      # the container's processes
+docker run --rm python:3.12-slim uname -r
+```
+
+**More commands:**
+```bash
+docker ps -a                                 # every container, stopped ones too
+docker images                                # images on this laptop, with size
+docker run -d python:3.12-slim sleep 300     # background; prints the container id
+docker exec -it <container-id> bash          # a shell inside a running container
+docker stop <container-id>                   # stop it
+docker rm <container-id>                     # delete it
+```
+`-d` = detached, container runs in the background, terminal stays free. `sleep 300` is PID 1, so that container stops itself after 300 seconds. Without `--rm`, a stopped container stays in `docker ps -a` until `docker rm` deletes it — which refuses a running container, so stop it first.
+
+**On a Mac, containers don't use the macOS kernel** — Docker Desktop runs one Linux VM, and every container uses that VM's kernel, which is why `uname -r` matches across two containers but differs from the Mac itself (Darwin). On a Linux laptop there's no VM: the container's kernel is the host's own kernel.
+
+**A container is not a small machine** — it boots nothing. It's one process, on the kernel the machine already had, with Debian's files around it — why it starts in about a second instead of the minutes an EC2 instance takes.
+
+---
+
+## Lesson 50: The Dockerfile, Layers & the Cache
+
+A Dockerfile is a text file read top to bottom; `docker build` runs its instructions one by one and the result is an image. Five instructions are in every Dockerfile, plus three more this unit uses:
+```
+FROM        names the base image — always the first line
+WORKDIR     sets the directory later instructions and CMD run in
+COPY        copies a file from the laptop into the image
+RUN         runs a command at BUILD time, keeps the result (pip install, mkdir, useradd)
+CMD         names the command docker run starts — PID 1; container stops when it exits
+ENV         sets an environment variable every container gets
+EXPOSE      records the port the app listens on — opens nothing
+USER        the user the start command runs as, instead of root
+```
+RUN runs at build time, CMD runs when the container starts — the build output lists one step per instruction and none for CMD.
+
+**Exec form vs shell form** — CMD/RUN/ENTRYPOINT take their arguments one of two ways:
+```bash
+RUN pip install -r requirements.txt                      # shell form, through /bin/sh -c
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]    # exec form, a list
+```
+In exec form the program itself is PID 1 and gets `docker stop`'s signal directly; in shell form `sh` is PID 1 and swallows it, so Docker waits 10s then kills the container (exit 137). Use exec form for CMD.
+
+**Base images and tags:** `python:3.12-slim` = image + tag. slim carries the language and little else (no `top`/`ps`); full carries a whole distribution (1.12GB vs 145MB); alpine is smallest but some packages fail to compile on it. Pin the version — `latest` moves.
+
+**Build and run the drill app:**
+```bash
+docker build -t hello:v1 .                 # -t names image:tag; . is the build context
+docker images
+docker run -d -p 127.0.0.1:8000:8080 --name hello hello:v1
+docker ps
+curl localhost:8000
+docker logs hello
+docker stop hello                          # stops, doesn't remove
+docker start hello                         # same container again, about a second
+docker rm -f hello                         # stop + remove in one command
+docker rmi hello:v1                        # refuses while any container uses the image
+```
+A file written inside a running container (`docker exec -it hello sh` then `touch x`) is gone once the container is removed — an image is immutable, a new one from it starts clean.
+
+**Layers and the cache:** each instruction that changes files saves a layer; a rebuild reuses every layer up to the first one whose input changed, then rebuilds everything after it. That's why `COPY requirements.txt .` + `RUN pip install` come before `COPY app.py .` — a code change shouldn't repeat the package install. Measured on the investment app: 0.3s vs 8.2s per rebuild.
+
+**Logs:** no log file, no agent — the app writes to stdout/stderr and Docker keeps both.
+```bash
+docker logs hello
+docker logs -f hello     # follow, as new lines arrive
+```
+
+**Ports:** containers bind a high port (8080, since a non-root process can't always bind <1024); `-p 127.0.0.1:8000:8080` maps the laptop's port to it. `EXPOSE` is documentation only — it opens nothing.
+
+**.dockerignore** keeps `.git/`, `.terraform/`, `*.env` out of the build context, same idea as `.gitignore` — `COPY . .` can only copy what reaches the context.
+
+**Five things to check before building any Dockerfile** — Claude writes them well, but it still has to be read:
+```
+base image pinned to a version, not latest
+non-root USER, created with RUN useradd first
+dependencies copied (and installed) before source
+no secret copied into the image — passed in at run time instead
+CMD in exec form
+```
+
+**The investment app**, built from Claude's Dockerfile:
+```dockerfile
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1                 # each log line written at once
+WORKDIR /app
+RUN useradd --system investment-app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+USER investment-app
+EXPOSE 8080
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:8080", "app:app"]
+```
+Built and run with `--env-file investment-app.env`, it exits (3) — `investment-app.env` says `DB_HOST=db`, and no Postgres container named `db` exists yet. Adding that second container is next.

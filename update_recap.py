@@ -23,9 +23,13 @@ DEFAULT_STATE = {"recap": 0, "notes": 0, "quiz": 0}
 # next "Lesson N" for the output files themselves by counting existing headers,
 # so tracks can freely differ in numbering from each other and from the Lesson
 # numbers already written into recap.md / lesson1.md / quiz.html.
+#
+# "deck" is the main lesson file inside each session folder. The containers part
+# has no deck.html: its lesson lives in notes.html (plus after-class.html).
 SOURCES = [
-    {"key": "foundations", "dir": DECKS_DIR},
-    {"key": "scale", "dir": os.path.join(DECKS_DIR, "scale")},
+    {"key": "foundations", "dir": DECKS_DIR, "deck": "deck.html"},
+    {"key": "scale", "dir": os.path.join(DECKS_DIR, "scale"), "deck": "deck.html"},
+    {"key": "containers", "dir": os.path.join(DECKS_DIR, "containers"), "deck": "notes.html"},
 ]
 
 
@@ -52,9 +56,9 @@ def session_number(path):
     return int(os.path.basename(path.rstrip("/")).split("-")[-1])
 
 
-def list_sessions(source_dir):
+def list_sessions(source_dir, deck_file):
     folders = glob.glob(os.path.join(source_dir, "session-*"))
-    folders = [f for f in folders if os.path.isfile(os.path.join(f, "deck.html"))]
+    folders = [f for f in folders if os.path.isfile(os.path.join(f, deck_file))]
     return sorted(folders, key=session_number)
 
 
@@ -76,52 +80,54 @@ def pending_sessions(sessions, last_done):
 # study.db recording helpers
 # ---------------------------------------------------------------------------
 
-def extract_section(text, pattern, n):
+def extract_last_section(text, pattern, stop=None):
     """
-    Finds the chunk of `text` belonging to lesson/session number `n`, using
-    `pattern` to locate headers. Returns (title, body) or ("", "") if not found.
+    Finds the newest lesson in `text` (the highest "Lesson N" number), which is
+    the section the AI just appended. Returns (number, title, body), or None.
+
+    Session numbers restart at 1 in every track (scale/session-1, containers/session-1),
+    but the output files number lessons globally (Lesson 1 ... Lesson 48 ...). So the
+    lesson to record must be found by its global number, never by the session number.
     """
     matches = list(re.finditer(pattern, text))
-    for i, m in enumerate(matches):
-        if int(m.group(1)) == n:
-            title = m.group(2).strip() if m.lastindex and m.lastindex >= 2 else ""
-            start = m.start()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-            return title, text[start:end].strip()
-    return "", ""
+    if not matches:
+        return None
+    i = max(range(len(matches)), key=lambda k: int(matches[k].group(1)))
+    m = matches[i]
+    title = m.group(2).strip() if m.lastindex and m.lastindex >= 2 else ""
+    end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+    body = text[m.start():end]
+    if stop and stop in body:            # e.g. quiz.html: stop at the end of the questions array
+        body = body.split(stop)[0]
+    return int(m.group(1)), title, body.strip()
 
 
-def record_recap(n):
-    path = os.path.join(BASE, "recap.md")
+def record_latest(file_name, file_type, pattern, stop=None):
+    path = os.path.join(BASE, file_name)
     if not os.path.exists(path):
         return
     text = open(path, encoding="utf-8").read()
-    title, body = extract_section(text, r"#+\s*Lesson\s+(\d+)[:\-]?\s*(.*)", n)
-    if body:
-        insert_session(n, "recap", body, title=title)
-        print(f"[recap] session-{n} recorded in study.db")
+    found = extract_last_section(text, pattern, stop)
+    if found:
+        lesson, title, body = found
+        insert_session(lesson, file_type, body, title=title)
+        print(f"[{file_type}] Lesson {lesson} recorded in study.db")
 
 
-def record_notes(n):
-    path = os.path.join(BASE, "lesson1.md")
-    if not os.path.exists(path):
-        return
-    text = open(path, encoding="utf-8").read()
-    title, body = extract_section(text, r"#+\s*Lesson\s+(\d+)[:\-]?\s*(.*)", n)
-    if body:
-        insert_session(n, "notes", body, title=title)
-        print(f"[notes] session-{n} recorded in study.db")
+LESSON_HEADER = r"#+\s*Lesson\s+(\d+)[:\-]?\s*(.*)"
+QUIZ_HEADER = r"//\s*──\s*Lesson\s+(\d+):\s*(.*?)\s*──"
 
 
-def record_quiz(n):
-    path = os.path.join(BASE, "quiz.html")
-    if not os.path.exists(path):
-        return
-    text = open(path, encoding="utf-8").read()
-    title, body = extract_section(text, r"//\s*──\s*Lesson\s+(\d+):\s*(.*?)\s*──", n)
-    if body:
-        insert_session(n, "quiz", body, title=title)
-        print(f"[quiz] session-{n} recorded in study.db")
+def record_recap():
+    record_latest("recap.md", "recap", LESSON_HEADER)
+
+
+def record_notes():
+    record_latest("lesson1.md", "notes", LESSON_HEADER)
+
+
+def record_quiz():
+    record_latest("quiz.html", "quiz", QUIZ_HEADER, stop="\n];")
 
 
 DB_RECORDERS = {
@@ -131,12 +137,12 @@ DB_RECORDERS = {
 }
 
 
-def process_target(track_key, name, sessions, state, build_prompt):
+def process_target(track_key, name, sessions, state, build_prompt, deck_file):
     track_state = state[track_key]
     for folder in pending_sessions(sessions, track_state[name]):
         n = session_number(folder)
         print(f"[{track_key}/{name}] processing session-{n} ...")
-        if not run_claude(build_prompt(folder, n)):
+        if not run_claude(build_prompt(folder, n, deck_file)):
             print(f"[{track_key}/{name}] FAILED on session-{n} — stopping this target, will retry next run")
             return
         track_state[name] = n
@@ -144,12 +150,12 @@ def process_target(track_key, name, sessions, state, build_prompt):
         print(f"[{track_key}/{name}] session-{n} done")
 
         # Record the newly written section into study.db
-        DB_RECORDERS[name](n)
+        DB_RECORDERS[name]()
 
 
-def recap_prompt(folder, n):
+def recap_prompt(folder, n, deck_file):
     return (
-        f"Read {folder}/deck.html. Write a short, travel-friendly recap of this lesson "
+        f"Read {folder}/{deck_file}. Write a short, travel-friendly recap of this lesson "
         f"in the exact same style as the existing entries in recap.md (short prose + "
         f"key commands in fenced code blocks, no fluff). "
         f"Append it to the end of recap.md as a new '## Lesson <N>: <Title>' section "
@@ -159,9 +165,9 @@ def recap_prompt(folder, n):
     )
 
 
-def notes_prompt(folder, n):
+def notes_prompt(folder, n, deck_file):
     return (
-        f"Read {folder}/deck.html and {folder}/after-class.html if it exists. "
+        f"Read {folder}/{deck_file} and {folder}/after-class.html if it exists. "
         f"Write a detailed lesson section in the exact style of lesson1.md's existing entries "
         f"(##/### headers, tables, fenced code blocks). Append it as a new "
         f"'# Lesson <N>: <Title>' section preceded by '---' "
@@ -173,9 +179,9 @@ def notes_prompt(folder, n):
     )
 
 
-def quiz_prompt(folder, n):
+def quiz_prompt(folder, n, deck_file):
     return (
-        f"Read {folder}/deck.html. Write 2-3 multiple-choice quiz questions about it, in the exact "
+        f"Read {folder}/{deck_file}. Write 2-3 multiple-choice quiz questions about it, in the exact "
         f"JS object format already used in quiz.html's ALL_QUESTIONS array "
         f"(fields: lesson, q, answers, correct, explain). Use lesson: \"Lesson <N>\" "
         f"(pick <N> by finding the highest existing lesson number in ALL_QUESTIONS and adding 1). "
@@ -198,15 +204,15 @@ def main():
     found_any = False
 
     for src in SOURCES:
-        sessions = list_sessions(src["dir"])
+        sessions = list_sessions(src["dir"], src["deck"])
         if not sessions:
             print(f"[{src['key']}] no session folders found under {src['dir']} — skipping.")
             continue
         found_any = True
 
-        process_target(src["key"], "recap", sessions, state, recap_prompt)
-        process_target(src["key"], "notes", sessions, state, notes_prompt)
-        process_target(src["key"], "quiz", sessions, state, quiz_prompt)
+        process_target(src["key"], "recap", sessions, state, recap_prompt, src["deck"])
+        process_target(src["key"], "notes", sessions, state, notes_prompt, src["deck"])
+        process_target(src["key"], "quiz", sessions, state, quiz_prompt, src["deck"])
 
     if not found_any:
         print("No session folders found in any source — check the SOURCES paths.")

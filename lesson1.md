@@ -8077,4 +8077,433 @@ Nothing from this unit is running in your account, so there is nothing to destro
 
 Between events, nothing of yours is running, and the environment the last run used is gone. Everything else in this unit came from that.
 
+---
+
+# Lesson 50 — Why Containers, and the First Container
+
+## Where We Left Off
+
+Last session closed the serverless unit on a sentence left deliberately open: three ways to run code — instances you own, a function AWS runs, and a container, sitting on the line Fargate already occupies. Tonight opens that third way: why most companies run their microservices as containers at all, the five words that carry you from application code to a running container, and the first container, run by hand, with nothing in it but a public image and a shell.
+
+## Three Ways to Build an Application
+
+| Shape | What it is |
+|---|---|
+| **Monolith** | One application whose features share one codebase and are deployed together. Simpler at the start; every change means deploying the whole thing. |
+| **Microservices** | The application split into small services, each with one job, its own repository and its own deploys, and one team owning it. Calls travel over the network between them. |
+| **Serverless** | You give AWS only the code, and AWS runs the servers. There are still servers; you never manage them. Lambda, from last unit, is serverless. |
+
+## Stash: One Company, Running Both Shapes at Once
+
+Stash is an investing app, and it runs both shapes side by side.
+
+| Service | What it does |
+|---|---|
+| **Onboarding** | The sign-up flow for a new user: address, phone number, tax ID, income. |
+| **Bank services** | The checking account and the debit card. |
+| **Money Coach** | The AI that advises on a portfolio. |
+| **Transfers** | Moves money between Stash and a user's bank. |
+
+These run as microservices on EKS, Amazon's managed Kubernetes — what this stage teaches. If the onboarding team moves a question from the first page to the last, they deploy onboarding alone; bank services and transfers are never touched.
+
+Stash's original monolith, from 2015, still runs too — on ECS, another AWS service for running containers. Splitting it would cost more engineering time than it would return, so new features are built as new services and the monolith is left as it is. Sometimes a company builds a replacement next to the old system and moves the traffic to it once it works — a **blue-green deployment**.
+
+**Microservices are almost always run as containers.** That's why this stage starts with the container, and why most companies you'll interview with run Kubernetes.
+
+## An Image Solves "It Works on My Machine"
+
+Before containers, an application was installed separately on each machine — the developer's laptop, the test server, production — and each machine had its own versions of Python and of the libraries. Code that ran on one machine could fail on the next, and the developer's answer was always the same: it works on my machine.
+
+An **image** carries the application together with the Python and the libraries it needs. Any machine with Docker and a Linux kernel runs it with the same result.
+
+## The Words: Docker, Dockerfile, Image, Repository, Container
+
+| Term | What it is |
+|---|---|
+| **Docker** | The tool that builds images and runs containers. `docker` is the command you type; a background program, the Docker daemon, does the work. |
+| **Dockerfile** | A text file of build instructions. `docker build` runs them once and produces an image. |
+| **Image** | A packaged filesystem — your code, its dependencies, the runtime such as Python, and a few settings, including which command to start. Nothing is running in it. |
+| **Image repository** | Where images are stored between build and run. Docker Hub is the public one; companies use private ones, and on AWS that's ECR, which this unit uses. |
+| **Container** | What `docker run` starts from an image — one main process, with its own view of the filesystem, the network and the process list, on the kernel the machine already has. One image can start many containers. |
+
+The order is: application code and its libraries, then Docker, then a Dockerfile, then an image, then a container.
+
+## An Image Is Like an AMI, and It's Smaller
+
+| | AMI | Image |
+|---|---|---|
+| **Carries** | A whole operating system, with a kernel. | No kernel at all. |
+| **Launch time** | Minutes, to boot an EC2 instance. | About a second, to start a container. |
+
+## Process, Kernel, PID 1
+
+A **process** is a running program. The **kernel** is the core of the operating system: it runs processes and controls their access to the hardware. A **Linux distribution** is a kernel plus one set of programs and libraries — Amazon Linux and Debian are two distributions, using the same kind of kernel and different package managers, `dnf` and `apt`.
+
+**PID** is the number Linux gives a process. **PID 1** is the first one, and a container stops when its PID 1 exits. On a Mac, PID 1 is `launchd`; in `top` on a Mac, `kernel_task` is PID 0. Debian as a distribution uses systemd, like Amazon Linux — but the slim Python image is built from Debian's files without systemd, so inside a container, PID 1 is whatever command the container was started with: `bash` in the first run below, `sleep 300` in the second.
+
+## Docker Has to Be Running
+
+On a Mac, Docker runs as the Docker Desktop application. When it isn't running, every `docker` command answers:
+
+```text
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?
+```
+
+Start Docker Desktop and run the command again — `docker ps` answering, even with an empty list, means Docker is working. Docker Desktop installs everything Docker needs, so there's no separate engine to install with `brew`, and signing in isn't needed yet. Containers run on Windows too: Docker Desktop there runs Linux containers inside a Linux virtual machine, WSL 2.
+
+## The First Container: a Shell Inside a Public Image
+
+`python:3.12-slim` is an image someone else built, on Docker Hub. The first run downloads it; `bash` at the end replaces the image's own start command, so you get a shell inside the container.
+
+```bash
+docker run -it --rm python:3.12-slim bash
+# inside the container: the prompt changes
+cat /etc/os-release      # Debian
+uname -r                 # the kernel version
+exit
+```
+
+`-it` gives you an interactive terminal inside the container. `--rm` deletes the container when `bash` exits.
+
+## From a Second Terminal, Looking In
+
+While the container above is running, a second terminal on the laptop sees it from outside:
+
+```bash
+docker ps                      # running containers: id, image, command, status, a random name
+docker top <container-id>      # the container's processes
+uname -r                       # the laptop's own kernel
+docker run --rm python:3.12-slim uname -r
+```
+
+There's no `docker` inside the container, which is why the second terminal is needed.
+
+## More Commands: Listing, Running Detached, and Cleaning Up
+
+```bash
+docker ps -a                                 # every container, stopped ones too
+docker images                                # the images on this laptop, with their size
+docker run -d python:3.12-slim sleep 300     # in the background; prints the container id
+docker exec -it <container-id> bash          # a shell inside a running container
+docker stop <container-id>                   # stop it
+docker rm <container-id>                     # delete it
+```
+
+- `-d` means detached: the container runs in the background and the terminal stays free.
+- `sleep 300` is PID 1 in that container, so it stops by itself after 300 seconds.
+- `top` and `ps` aren't in the slim image, so they answer `command not found` inside it; `cat` is there.
+- Without `--rm`, a stopped container stays in `docker ps -a` until `docker rm` deletes it, and `docker rm` refuses a running container — stop it first.
+
+## On a Mac, Every Container Shares One Linux Kernel
+
+Containers on a Mac don't use the macOS kernel. Docker Desktop runs one Linux virtual machine, and every container uses that machine's Linux kernel — which is why `uname -r` gives the same answer in two different containers, and a different one on the Mac itself, whose kernel is Darwin.
+
+On a Linux laptop there's no virtual machine at all: `uname -r` inside the container equals `uname -r` outside, one kernel. `/etc/os-release` says Debian inside and something else outside.
+
+## A Container Is Not a Small Machine
+
+A machine boots a kernel. The container you ran didn't boot anything — it's one process, on the kernel the machine already had, with Debian's files around it. That's why it started in about a second, and why an EC2 instance from an AMI takes minutes.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Run a public image of your own choice** — pick any image on Docker Hub, official images are marked on the site, run it, and look inside it with the commands above.
+- **Compare `uname -r` across two unrelated images** — run it in `python:3.12-slim` and in a second image from a different base, and confirm they match each other and differ from the Mac's own `uname -r`.
+- **Run one container detached, then find it two ways** — start it with `sleep 300`, then locate it once with `docker ps` and once with `docker ps -a` after it's stopped, and notice which one still shows it the moment it exits on its own.
+- **Finish the setup page** — Docker Desktop installed and signed in, confirmed working with `docker ps`.
+
+**What you know now:** a company builds its application as a **monolith** (one codebase, deployed together), as **microservices** (small, independently deployed services, almost always run as containers), or as **serverless** code AWS runs for it — and a real company like Stash runs more than one shape at once, its services on EKS and its original 2015 monolith still on ECS, because splitting the monolith would cost more engineering time than it would return. An **image** solves "it works on my machine" by carrying the code together with its runtime and dependencies, so any machine with Docker and a Linux kernel runs it identically. **Docker** builds images from a **Dockerfile** and stores them in an **image repository** — Docker Hub, or ECR on AWS — and `docker run` starts a **container** from one: a single process with its own view of the filesystem, network and process list, on the kernel the machine already has. That's why an image is like an AMI only smaller — no kernel inside it, a container starting in about a second against an instance's minutes. A **process** is a running program, the **kernel** runs it, and **PID 1** is the first process in a container — the container stops the moment PID 1 exits, whether that's `bash` exiting or `sleep 300` running out. On a Mac, every container shares the one Linux kernel inside Docker Desktop's virtual machine, which is why `uname -r` matches between containers and differs from the Mac's own Darwin kernel. And a container was never a small machine: it booted nothing, it's one process with Debian's files around it, running on a kernel that was already there.
+
 **What you know now:** four concrete places rule a function out — longer than fifteen minutes, steady high traffic, a request that can't wait for a **cold start**, or moving to another cloud whose triggers and roles aren't AWS's — and each is backed by a real company, not a hypothetical. **Amazon Prime Video** paid Step Functions' per-transition billing at the volume of every stream and cut one internal tool's cost by over 90 percent by packing the steps into one process on ECS and EC2 — the case against steady high volume. **The LEGO Group**'s on-premises commerce back ends returned 503s under 2017's peak traffic and were rebuilt on Lambda, API Gateway, DynamoDB, SQS, SNS and Step Functions to absorb sales spikes up to 200 times normal — the case for a load that is idle most of the month and very large for one afternoon. **Coca-Cola**'s vending backend had a real break-even, about 80 million calls a month, above which six EC2 instances cost less than API Gateway and Lambda — proof that every job's break-even can be worked out before choosing. And **iRobot** runs its entire connected-robot backend — AWS IoT Core, over a hundred Lambda functions, DynamoDB for state — for about two million robots with fewer than ten people, the case for a company's main product running this way. Serverless itself is wider than Lambda: DynamoDB, Aurora Serverless, Fargate, S3 and SQS all share three traits — no instances to choose or count, billing by use, and scaling to zero — and every other cloud has its own name for the same idea, Azure Functions, Google Cloud Functions and Cloud Run, Cloudflare Workers. Everything built in Scale up to tonight is the first of three ways to run code — instances you own, behind a balancer; a function AWS runs, started fresh for one event and gone; and a container, a boxed package that runs unchanged on a laptop, EC2, Fargate or Kubernetes. Fargate itself already runs a container on a machine AWS owns, and the container is the next stage.
+
+---
+
+# Lesson 51: The Dockerfile, the Cache & the Drill App
+
+## Where We Left Off
+
+Last session ran the first container, but it held nothing of your own — a shell inside a public image, downloaded and discarded. Tonight writes the file that builds an image from your own code: what a Dockerfile's instructions do, a drill app built and run with every command from class, why the build gets faster the second time, and the Dockerfile Claude wrote for the investment app, read line by line against the file's boot script from the servers unit.
+
+## The Dockerfile: Instructions, Read Top to Bottom
+
+A Dockerfile is a text file, like application code or Terraform code. Each line is an **instruction**: a word in capitals, then its arguments. `docker build` reads the file from top to bottom and runs the instructions one by one. The result is an image. This unit uses eight instructions, and five of them are in every Dockerfile you will read.
+
+| Instruction | What it does |
+|---|---|
+| `FROM` | Names the image to start from, the **base image**. Always the first line. |
+| `WORKDIR` | Sets the directory inside the image that the following instructions and the start command run in. `COPY requirements.txt .` then puts the file in that directory, so the path is written once. |
+| `COPY` | Copies a file from the laptop into the image. |
+| `RUN` | Runs a command during the build and keeps its result in the image: `pip install`, `mkdir`, `useradd`, any Linux command. |
+| `CMD` | Names the command `docker run` starts. It is PID 1 of the container; when it exits, the container stops. |
+| `ENV` | Sets an environment variable in the image. Every container started from the image has it. |
+| `EXPOSE` | Records the port the application listens on. It opens nothing; the container works the same without it. |
+| `USER` | The user the start command runs as, instead of root. `RUN useradd` above it creates the user. |
+
+**`RUN` runs at build time. `CMD` runs when the container starts.** The build output lists one step per instruction and no step for `CMD`, because nothing starts during a build. Two more instructions exist that this course doesn't use: `ADD`, which is `COPY` with extra features most Dockerfiles don't need, and `ENTRYPOINT`, another way to name the start command that unit 2 covers alongside a Pod's `command` and `args`.
+
+`RUN`, `CMD` and `ENTRYPOINT` take their arguments in one of two forms:
+
+```text
+RUN pip install -r requirements.txt                       # shell form: one line, run through /bin/sh -c
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]      # exec form: a list in square brackets
+```
+
+Both run the same command. The difference matters for `CMD`: in exec form the program itself is PID 1; in shell form `sh` is PID 1 and the program is its child. The PID 1 section below says why that changes `docker stop`. Use exec form for `CMD`.
+
+## Base Images and Tags
+
+The base image comes from a **registry**. Docker Hub is the default one — it holds public images, which anyone can pull, and private ones, which only the paying account can. `python` is the official Python image, built by the Python project.
+
+```text
+python:3.12-slim
+└─┬──┘ └───┬────┘
+image      tag
+```
+
+A **tag** names one variant of an image. The `python` image has tags for each version, for Debian ("bookworm"), for Alpine, for Windows — each tag carries only what its purpose needs, so no single image has to carry everything.
+
+| Variant | What it carries |
+|---|---|
+| **slim** | The language and little else. `top` and `ps` aren't in `python:3.12-slim`, which is why they answered `command not found` in session 1. Smaller images download and start faster, with fewer tools for debugging inside the container. |
+| **Full** | A whole distribution with compilers and tools. `python:3.12` is 1.12 GB against 145 MB for `python:3.12-slim`. A plain `ubuntu` image is about 80 MB — a distribution's files without a kernel, not a machine. |
+| **Alpine** | The smallest, on a different C library. Some Python packages have to be compiled on it, which is slow and sometimes fails. |
+
+Choose by what the application needs — this course uses `python:3.12-slim` for a small Flask application.
+
+**Pin the version.** `latest` is the tag Docker uses when none is given, and it moves: today it may be 3.13, next year 3.14, and the application may not run on it. `python:3.12-slim` builds the same image in five years. A base image is reused the way a Terraform module is: someone built and published it, and you start from it instead of rebuilding it. An image is immutable; to change a base image you'd change its source and build your own.
+
+Anyone can publish an image under any name. An image named after a well-known product can carry malicious code that sends your data out while the application runs. Before using a public image, look for the **Docker Official Image** badge and at the download count — a billion pulls is a widely used image, a few thousand pulls under a borrowed name is not.
+
+## The Drill App: Build
+
+The drill app is a small Flask application: `app.py`, which answers "Hello from the drill app", and `requirements.txt`, which lists `flask` and `gunicorn`. Without those two packages installed, the application can't start.
+
+```text
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+```
+
+Dependencies are installed before the application is copied in — the reason is the cache, below.
+
+```bash
+cd 01-the-container/example/drill
+docker build -t hello:v1 .      # -t names the image and its tag; . is the build context, this folder
+docker images                   # the images on this laptop: name, tag, id, created, size
+```
+
+The build output has one step per instruction, five for this file, and no step for `CMD`. The image built in class was 161 MB.
+
+- **`-t hello:v1`** gives the image a name and a tag. Without a tag, Docker uses `latest`: an image built as `hello` is `hello:latest`, and `docker run hello:v1` then fails with `hello:v1 not found`. Give every image a tag.
+- **The build context** is the folder `docker build` is run in, `.`. The builder can see only the files in it — a file reaches the image only if an instruction copies it.
+- **The base image is downloaded on the first build.** When `python:3.12-slim` is already on the laptop, the `FROM` step takes no time; when it isn't, the build pulls the base image's layers from Docker Hub first. The pull took 1.6 seconds in class.
+
+Removing images and containers:
+
+```bash
+docker rmi hello                                           # fails: no image hello:latest; name the tag or use the id
+docker rmi hello:v1                                        # fails while a container, running or stopped, uses the image
+docker ps -a                                                # every container, stopped ones too
+for c in $(docker ps -aq); do docker rm -f "$c"; done       # remove every container on this laptop
+docker rmi hello:v1                                         # now it's removed
+docker rmi python:3.12-slim                                 # the base image too; the next build pulls it again
+```
+
+`docker rmi` removes an image. It refuses while any container, even a stopped one, was started from that image. `docker ps -aq` prints only the ids, so the loop removes every container, running or stopped.
+
+## The Drill App: Run
+
+```bash
+docker run -d -p 127.0.0.1:8000:8080 --name hello hello:v1
+docker ps                                   # running containers only
+curl localhost:8000                         # Hello from the drill app
+```
+
+Then open `http://127.0.0.1:8000` in the browser — the page is served by the container.
+
+- **`-d`**, detached: the container runs in the background and the terminal is free. Without it the terminal is held until the container stops.
+- **`-p 127.0.0.1:8000:8080`** maps laptop port 8000 to container port 8080, and only from this laptop — `127.0.0.1` is the laptop's own address. Gunicorn listens on port 8080 inside the container; a request to `localhost:8000` on the laptop reaches it.
+- **`--name hello`** names the container. Without it Docker picks a random name.
+- **The image name and tag come last.** Anything after them is passed to the container as its command.
+
+A page that keeps loading and never answers is a network problem: a port not mapped, a firewall, a slow connection. Here the container answered after a few seconds.
+
+```bash
+docker stop hello        # the container stops; it is not removed
+docker ps                # nothing running
+docker ps -a              # hello, Exited
+docker start hello        # the same container runs again, in about a second
+docker logs hello         # what gunicorn wrote
+```
+
+`docker stop` and `docker start` take about a second each. Starting an EC2 instance takes minutes. Kubernetes is the tool that starts and stops containers at this speed across many machines — it's unit 2 onward.
+
+## A File Written Inside a Container Doesn't Survive It
+
+```bash
+docker exec -it hello sh            # a shell inside the running container; the prompt is in /app, the WORKDIR
+ls                                   # app.py, requirements.txt
+touch created-here
+exit
+docker exec hello ls /app           # created-here is there
+docker rm -f hello                  # -f: stop and remove in one command
+docker run -d -p 127.0.0.1:8000:8080 --name hello hello:v1
+docker exec hello ls /app           # created-here is not there
+```
+
+An image is immutable. A file written inside a running container lives in that container only; when the container is removed, the file goes with it, and a new container from the same image starts from the image's files. On an EC2 instance a file written to the disk stays. Kubernetes has persistent storage for the data that must survive — it comes later in the stage.
+
+## Layers and the Cache
+
+The build runs one instruction at a time. After each instruction that changes files, Docker saves the result as a **layer**. The image is the layers in order: the base image, then `/app`, then `requirements.txt`, then the installed packages, then `app.py`. `CMD` and `ENV` change the image's settings and add no layer. A layer is never changed after it's saved — a secret copied in by one instruction and deleted by a later one is still in the image, in its layer.
+
+The **cache** is the layers saved by an earlier build. A second build goes down the Dockerfile and reuses each saved layer until it meets the first instruction whose input changed — from there every layer is rebuilt. The build output marks reused steps `CACHED`.
+
+- Change `app.py` and rebuild: four layers reused, one rebuilt. The package install is not repeated.
+- Change `requirements.txt` and rebuild: two layers reused, three rebuilt.
+- Put `COPY app.py .` second in the file and every code change rebuilds the package install too.
+
+That's why `COPY requirements.txt .` and `RUN pip install` come before `COPY app.py .`. Order the instructions from the ones that change least to the ones that change most. The difference on the investment app, measured: 0.3 seconds against 8.2 seconds per rebuild.
+
+## PID 1: Exec Form, Shell Form & `docker stop`
+
+`docker stop` sends the stop signal, `SIGTERM`, to PID 1 and waits ten seconds. If PID 1 is still running after that, Docker kills the container.
+
+- **Exec form**, `CMD ["gunicorn", ...]`: gunicorn is PID 1. It receives the signal and ends in a fraction of a second. Exit code 0.
+- **Shell form**, `CMD gunicorn ...`: Docker runs the line through `/bin/sh -c`, so `sh` is PID 1. `sh` doesn't pass the signal to gunicorn. After ten seconds Docker kills the container. Exit code 137.
+
+```bash
+docker exec hello cat /proc/1/cmdline     # what PID 1 is, seen from inside: gunicorn
+docker top hello                          # gunicorn and its child processes, seen from the laptop
+```
+
+## Logs: Standard Output, Not a File
+
+On the instance, the investment app wrote its trade log to a file, and the CloudWatch agent watched the file and shipped each new line to CloudWatch — that's how the logs were read without logging in to the machine.
+
+In a container, the application writes to **standard output** and **standard error**, the two streams a program has for its normal text and its error text. Docker keeps both. There's no log file and no agent.
+
+```bash
+docker logs hello          # everything the container's PID 1 wrote
+docker logs -f hello       # keep printing as new lines arrive
+```
+
+At scale, logs still leave the machine: on a Kubernetes cluster an agent, Datadog's or another vendor's, runs on every machine, collects what every container writes, and ships it to one place. The application doesn't change — it writes to standard output and something else collects it. The investment app's `app.py` changes one line for this: `logging.basicConfig` without `filename=`. Python's logging then writes to standard error.
+
+## Ports: the Container Binds High, `docker run` Maps It Down
+
+A machine has 65,536 ports. Ports below 1024 are reserved for root: 22 for SSH, 53 for DNS, 80 and 443 for the web. A container is a process, and whether a non-root process may bind port 80 depends on the runtime — so containers bind a port above 1024 and the machine maps one of its own ports to it. This course uses 8080 in every unit.
+
+| What it says | Where | What it does |
+|---|---|---|
+| `--bind 0.0.0.0:8080` | In the start command | Gunicorn listens on 8080 inside the container, on every interface. |
+| `EXPOSE 8080` | In the Dockerfile | Writes 8080 into the image's settings. Opens nothing. |
+| `-p 127.0.0.1:8000:8080` | In `docker run` | Laptop port 8000 reaches container port 8080. |
+
+The drill app's Dockerfile has no `EXPOSE` line and the container answered. `EXPOSE` is for the person reading the file: it says which port the application listens on. The mapping is done by `-p`.
+
+## The Build Context and `.dockerignore`
+
+```text
+COPY . .
+```
+
+copies every file in the build context into the image: the Dockerfile, notes, a `.git/` folder, a `.terraform/` folder, an `.env` file with a password. A repository root with `.terraform/` sends 823 MB to the builder.
+
+`.dockerignore`, a file in the build folder, lists what to keep out of the context — it works the way `.gitignore` does.
+
+```text
+*.env
+.terraform/
+.git/
+```
+
+With those three lines the same build sends less than 1 MB. A file kept out of the context can't be copied into the image, by `COPY . .` or by any other instruction.
+
+## Reviewing a Dockerfile: Five Things to Check
+
+Claude writes Dockerfiles well from a short prompt. The file still has to be read, because you'll change it when your case differs and explain it in an interview. Every Dockerfile in this course is read against these five before it's built:
+
+- **A base image named with its version.** `python:3.12-slim`, not `python:3` or `latest`.
+- **A non-root `USER`, created in the image first.** `RUN useradd` creates the user; `USER` alone doesn't.
+- **Dependencies copied before source.** A change to the code doesn't repeat the package install.
+- **No secret in the image.** A copied secret stays in a layer permanently. Secrets are passed in when the container starts.
+- **`CMD` in exec form.** The application is PID 1 and receives the stop signal.
+
+## Claude Writes the Investment App's Dockerfile
+
+The investment app is `app.py`, `requirements.txt` and the laptop environment file `investment-app.env`. The prompt is typed into Claude in that folder and says only what the folder doesn't show:
+
+```text
+Write a Dockerfile for the Flask app in this folder. Gunicorn serves it on port 8080 with two workers.
+Configuration comes from an environment file when the container starts, not from the image.
+```
+
+```text
+FROM python:3.12-slim                                                    # a base image, named with its version
+ENV PYTHONUNBUFFERED=1                                                   # Python writes each log line at once
+WORKDIR /app                                                             # the directory
+RUN useradd --system investment-app                                      # the user, created before USER
+COPY requirements.txt .                                                  # dependencies before source
+RUN pip install -r requirements.txt                                      # installed into the image
+COPY app.py .                                                            # the application
+USER investment-app                                                      # the start command runs as this user, not root
+EXPOSE 8080                                                              # the port, recorded; nothing opened
+CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:8080", "app:app"]   # exec form, so gunicorn is PID 1
+```
+
+- **`ENV PYTHONUNBUFFERED=1`**: when Python's standard output isn't a terminal, Python holds what it prints in a buffer and writes it out later, in batches. With this variable set, each line is written at once, so `docker logs` shows it when it happens.
+- **`RUN useradd --system investment-app`** creates the user; `USER investment-app` switches to it. Claude may add `--no-create-home` — the user gets no home directory, which a service user doesn't need.
+- **`--workers 2`**: gunicorn starts two child processes to answer requests. Gunicorn calls them workers; in this course, worker otherwise means a machine in the cluster.
+
+**Two runs of the same prompt can give two files.** In class one model's file had no `USER` line; another's had it. Read the file against the five items above. If one is missing, ask for it — "add a non-root user and run as it" — and read the file again.
+
+Each line is a boot-script step or a mechanism from this unit. Against the nine-step boot script that installed the investment app on an EC2 instance:
+
+| Boot-script step | In the container |
+|---|---|
+| Install Python, pip, the Postgres client, ncat, the CloudWatch agent | `FROM python:3.12-slim` provides Python and pip. The rest isn't needed. |
+| Read two secrets from Secrets Manager | Passed in when the container starts, with the environment file. Not in the image. |
+| Write the CloudWatch agent config and start the agent | Deleted. Logs go to standard error and `docker logs` reads them. |
+| Create the `investment-app` user and its directories | `RUN useradd`, `WORKDIR /app`. No log directory. |
+| Create a venv and install the packages | `COPY requirements.txt .` and `RUN pip install`. No venv — the image has its own Python. |
+| Write the application | `COPY app.py .` |
+| Write the environment file | A laptop file, passed to `docker run --env-file`. Not in the image. |
+| The systemd unit | `ExecStart=` is `CMD`, `User=` is `USER`, `WorkingDirectory=` is `WORKDIR`. `Restart=always` is unit 2. |
+| Wait for the health endpoint | Unit 3 does the same check another way. |
+
+## Built and Run, It Stops Because There's No Database
+
+```bash
+cd apps/investment-app
+docker build -t investment-app .
+# laptop port 8001: 8000 is still hello's
+docker run -d -p 127.0.0.1:8001:8080 --env-file investment-app.env --name app investment-app
+docker ps -a                 # app: Exited (3)
+docker logs app
+docker rm app
+```
+
+The last lines of the log:
+
+```text
+psycopg.OperationalError: [Errno -2] Name or service not known
+gunicorn.errors.HaltServer: <HaltServer 'Worker failed to boot.' 3>
+```
+
+`investment-app.env` says `DB_HOST=db`. There's no Postgres on the laptop and nothing called `db`. The application connects to its database when it starts, so it can't start, and the container stops. The next session adds the database as a second container.
+
+## After Class
+
+Optional practice and Q&A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:
+
+- **Build and run the investment app** — go to `apps/investment-app`, and run the prompt, the file read against the five items, the build, the run, and the log that shows why it stopped.
+- **Try a database container** — the investment app needs a second container running Postgres, reachable by the name `db`. Ask Claude how to start one and connect the two; the next session does it together.
+- **Build with and without `.dockerignore`** — in a folder with files the application doesn't need, build once without a `.dockerignore` and once with one, and compare what the build sends and what ends up in the image.
+- **Getting stuck is normal, and you don't need to wait for anyone** — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.
+
+**What you know now:** a Dockerfile is a text file of instructions read top to bottom by `docker build`, and five of its eight instructions — `FROM`, `WORKDIR`, `COPY`, `RUN`, `CMD` — are in every Dockerfile you'll read; `RUN` runs at build time, `CMD` runs when the container starts, and exec form, `CMD ["gunicorn", ...]`, makes the application PID 1 so it receives `docker stop`'s signal directly instead of through a shell that never forwards it. A **tag** names one variant of a base image — slim, full, or Alpine — and the tag should always be pinned, never `latest`, since that tag moves and an image is otherwise immutable. Each instruction that changes files becomes a **layer**, and the **cache** reuses every layer up to the first one whose input changed, which is why dependencies are copied and installed before the application code — a difference measured at 0.3 seconds against 8.2 seconds per rebuild. A container has no log file: it writes to standard output and standard error, and `docker logs` reads them. A container binds a port above 1024 and `-p` on `docker run` maps a laptop port down to it; `EXPOSE` only documents the port and opens nothing. The build context is every file in the folder `docker build` runs in, and `.dockerignore` keeps secrets, `.git/` and `.terraform/` out of it the way `.gitignore` keeps them out of a commit. And a Dockerfile Claude writes is read against five things before it's built — a versioned base image, a non-root `USER` created with `useradd`, dependencies before source, no secret copied in, and `CMD` in exec form — because two runs of the same prompt can produce two different files, and the file still has to be explained in an interview.
