@@ -2148,3 +2148,75 @@ EXPOSE 8080
 CMD ["gunicorn", "--workers", "2", "--bind", "0.0.0.0:8080", "app:app"]
 ```
 Built and run with `--env-file investment-app.env`, it exits (3) — `investment-app.env` says `DB_HOST=db`, and no Postgres container named `db` exists yet. Adding that second container is next.
+
+---
+
+## Lesson 51: The Database Container, the Processor & the Push to ECR
+
+**A second container for Postgres, on a network the app can find it by name:**
+```bash
+docker network create app-net
+docker run -d --name db --network app-net \
+  -e POSTGRES_USER=investment_app -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=investment_app \
+  postgres:16
+docker run -d --name app --network app-net -p 127.0.0.1:8001:8080 \
+  --env-file investment-app.env investment-app:v1
+curl localhost:8001/health
+```
+`docker network create` makes containers on it reachable by name — `DB_HOST=db` finds the container named `db`; containers off the network can't see it, the same idea as RDS in a private subnet. The postgres image reads `POSTGRES_USER`/`PASSWORD`/`DB` on its first start and creates them — Postgres itself is already in the image, same as it was already installed on RDS.
+
+**Two reasons it stopped, both found by pasting the log into Claude:** first, the app wasn't on `app-net` and `db` resolved to nothing (`Name or service not known`); second, gunicorn's two workers both imported `app.py` and both ran `CREATE TABLE` on a fresh database at once — one failed and gunicorn refused to boot. `--preload` makes gunicorn import the app once, before forking workers:
+```
+CMD ["gunicorn", "--workers", "2", "--preload", "--bind", "0.0.0.0:8080", "app:app"]
+```
+An image can't be changed after it's built — a Dockerfile fix needs a rebuild, then `docker rm -f app` and run again.
+
+**Architecture — a program is built for one kind of processor:**
+```bash
+uname -m   # arm64 on Apple Silicon; x86_64/amd64 on Intel and on the cluster
+```
+An image built on an Apple Silicon Mac holds arm64 programs the cluster's amd64 machines can't run (`exec format error`). Build for the cluster's processor and check before every push:
+```bash
+docker build --platform linux/amd64 -t investment-app:v1 .
+docker image inspect investment-app:v1 --format '{{.Os}}/{{.Architecture}}'   # linux/amd64
+```
+
+**Registry, repository, tag, digest:** a **registry** stores images (Docker Hub, or ECR — AWS's, used here); a **repository** inside it holds one application's versions (not a git repo, not S3). An image's full address has four parts:
+```
+123456789012.dkr.ecr.us-east-1.amazonaws.com/investment-app:v1
+└────┬─────┘        └───┬───┘                └─────┬──────┘ └┬┘
+  account             region                   repository   tag
+```
+A **tag** is a movable label — build with no tag and Docker uses `latest`, which moves to whatever was built last and means "no tag was given," not "newest." A **digest** (`sha256:…`) is a hash of the image's content — the same content always hashes the same, any change hashes differently, and unlike a tag it can't be moved. Use version tags (`v1`, `v2`), never `latest`.
+
+**Create the repository with Terraform, then push:**
+```hcl
+resource "aws_ecr_repository" "investment_app" {
+  name                 = "investment-app"
+  image_tag_mutability = "IMMUTABLE"   # refuses a second push of the same tag
+}
+```
+```bash
+terraform init && terraform plan && terraform apply
+REGISTRY=<account>.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $REGISTRY
+docker tag investment-app:v1 $REGISTRY/investment-app:v1
+docker push $REGISTRY/investment-app:v1
+```
+A name pushed with no registry address (`docker push investment-app`) fails with `denied` — that's a Docker Hub name. The console's "View push commands" button builds without `--platform` and tags `latest`; on an Apple Silicon Mac that's an arm64 image the cluster can't run, so check with `docker image inspect` and fix it.
+
+**Cross-account pull — a repository policy, since the cluster lives in the school's AWS account:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "AWS": "arn:aws:iam::834786370659:role/containers-26a-node" },
+    "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability"]
+  }]
+}
+```
+```bash
+aws ecr set-repository-policy --repository-name investment-app --policy-text file://repository-policy.json
+```
+Don't change the account ID — it names the school's cluster role, which already has its own role policy allowing the pull on its side. This resource policy is your side of the same handshake; without it the pull is refused.

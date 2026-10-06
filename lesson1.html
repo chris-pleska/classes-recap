@@ -88,6 +88,7 @@
 <li><a href="#lesson-49-where-serverless-doesnt-fit-and-the-third-way-to-run-code">Lesson 49 — Where Serverless Doesn't Fit, and the Third Way to Run Code</a></li>
 <li><a href="#lesson-50-why-containers-and-the-first-container">Lesson 50 — Why Containers, and the First Container</a></li>
 <li><a href="#lesson-51-the-dockerfile-the-cache-the-drill-app">Lesson 51: The Dockerfile, the Cache &amp; the Drill App</a></li>
+<li><a href="#lesson-52-the-database-the-processor-the-registry-the-push-to-your-account">Lesson 52: The Database, the Processor, the Registry &amp; the Push to Your Account</a></li>
   </ul>
 </nav>
 <main>
@@ -9965,6 +9966,167 @@ gunicorn.errors.HaltServer: &lt;HaltServer 'Worker failed to boot.' 3&gt;
 <li><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</li>
 </ul>
 <p><strong>What you know now:</strong> a Dockerfile is a text file of instructions read top to bottom by <code>docker build</code>, and five of its eight instructions — <code>FROM</code>, <code>WORKDIR</code>, <code>COPY</code>, <code>RUN</code>, <code>CMD</code> — are in every Dockerfile you'll read; <code>RUN</code> runs at build time, <code>CMD</code> runs when the container starts, and exec form, <code>CMD ["gunicorn", ...]</code>, makes the application PID 1 so it receives <code>docker stop</code>'s signal directly instead of through a shell that never forwards it. A <strong>tag</strong> names one variant of a base image — slim, full, or Alpine — and the tag should always be pinned, never <code>latest</code>, since that tag moves and an image is otherwise immutable. Each instruction that changes files becomes a <strong>layer</strong>, and the <strong>cache</strong> reuses every layer up to the first one whose input changed, which is why dependencies are copied and installed before the application code — a difference measured at 0.3 seconds against 8.2 seconds per rebuild. A container has no log file: it writes to standard output and standard error, and <code>docker logs</code> reads them. A container binds a port above 1024 and <code>-p</code> on <code>docker run</code> maps a laptop port down to it; <code>EXPOSE</code> only documents the port and opens nothing. The build context is every file in the folder <code>docker build</code> runs in, and <code>.dockerignore</code> keeps secrets, <code>.git/</code> and <code>.terraform/</code> out of it the way <code>.gitignore</code> keeps them out of a commit. And a Dockerfile Claude writes is read against five things before it's built — a versioned base image, a non-root <code>USER</code> created with <code>useradd</code>, dependencies before source, no secret copied in, and <code>CMD</code> in exec form — because two runs of the same prompt can produce two different files, and the file still has to be explained in an interview.</p>
+
+<h1 id="lesson-52-the-database-the-processor-the-registry-the-push-to-your-account">Lesson 52: The Database, the Processor, the Registry &amp; the Push to Your Account</h1>
+<h2 id="where-we-left-off_17">Where We Left Off</h2>
+<p>Last session built and ran the investment app's own image, and it stopped — no Postgres on the laptop, nothing called <code>db</code>. Tonight gives it a database, a second container on the same network, and finds two separate reasons it still refused to start. From there: the processor an image is built for, arm64 against amd64, and what a registry, a repository, a tag and a digest actually are. The session ends with the image pushed to a repository in your own AWS account, and the policy the school's cluster needs to pull it from there.</p>
+<h2 id="the-database-container-on-a-network-of-its-own">The Database Container, on a Network of Its Own</h2>
+<p>The app needs Postgres when it starts. In AWS, RDS sits in a private subnet the laptop can't reach. On the laptop, the database is a second container, started from the official <code>postgres</code> image on Docker Hub.</p>
+<pre><code>cd apps/investment-app
+docker build -t investment-app:v1 .
+docker network create app-net
+docker run -d --name db --network app-net \
+  -e POSTGRES_USER=investment_app \
+  -e POSTGRES_PASSWORD=&lt;the DB_PASSWORD value from investment-app.env&gt; \
+  -e POSTGRES_DB=investment_app \
+  postgres:16
+docker logs db               # wait for: database system is ready to accept connections
+docker run -d --name app --network app-net -p 127.0.0.1:8001:8080 \
+  --env-file investment-app.env investment-app:v1
+curl localhost:8001/health   # {"server":"…","status":"ok"}
+</code></pre>
+<ul>
+<li><strong><code>docker network create app-net</code></strong> creates a network on the laptop. Containers on it reach each other by name, so <code>DB_HOST=db</code> in the environment file finds the container named <code>db</code>. Containers not on it can't. It's the same idea as keeping RDS in a private subnet that only the application's machines can reach.</li>
+<li><strong><code>-e POSTGRES_USER=…</code></strong> sets an environment variable in the database container. The postgres image reads these three the first time it starts and creates that user, that password and that database. The image's Docker Hub page lists the variables it reads. Postgres is already installed in the image, the same way you installed nothing on RDS.</li>
+<li>The postgres image is about 400 MB, so its first pull is slower than the slim Python image's.</li>
+</ul>
+<h2 id="why-the-app-stopped-twice">Why the App Stopped Twice</h2>
+<p><strong>First: the app wasn't on <code>app-net</code>.</strong> The first run had no <code>--network app-net</code>, so it started on Docker's default network, where the name <code>db</code> doesn't exist. The log showed the same error as the session before, <code>Name or service not known</code>. Both containers need <code>--network app-net</code>.</p>
+<p><strong>Second: two workers created the table at the same time.</strong> <code>app.py</code> creates its <code>trades</code> table when it's imported. Gunicorn with <code>--workers 2</code> imports the application once per worker. Against a new database, both workers ran <code>CREATE TABLE</code> at the same moment, one failed, and gunicorn stopped with <code>Worker failed to boot</code>. <code>--preload</code> makes gunicorn import the application once, before it starts the workers:</p>
+<pre><code>CMD ["gunicorn", "--workers", "2", "--preload", "--bind", "0.0.0.0:8080", "app:app"]
+</code></pre>
+<p>A Dockerfile change needs a new build — an image can't be changed after it's built. Build again, remove the old container with <code>docker rm -f app</code>, and run it again.</p>
+<p><strong>Both causes were found by pasting the log into Claude.</strong> That's the normal way to work, but read what it changes before you accept it: its first answer also changed the port mapping, which wasn't the problem. The fix was the original command with <code>--network app-net</code> added.</p>
+<p>A second copy answers in seconds, on a different port:</p>
+<pre><code>docker run -d --name app2 --network app-net -p 127.0.0.1:8002:8080 \
+  --env-file investment-app.env investment-app:v1
+</code></pre>
+<p>Setting up the Dockerfile takes time once; after that, starting the application is one command, and the image runs the same way on any Linux machine with the same processor type. Docker Desktop shows the same images and containers as <code>docker images</code> and <code>docker ps -a</code>, with buttons to stop and delete them, and it scans each image for packages with known security problems — but at work, the command line is what you'll use most.</p>
+<h2 id="the-processor-arm64-amd64-platform">The Processor: arm64, amd64 &amp; <code>--platform</code></h2>
+<p>A program is built for one kind of processor, called the <strong>architecture</strong>.</p>
+<pre><code>uname -m      # arm64 on a Mac with Apple Silicon; x86_64, also written amd64, on Intel and on the cluster's machines
+</code></pre>
+<p>An image built on an Apple Silicon Mac holds arm64 programs. The school's cluster machines are amd64 and can't run them — the container stops with <code>exec format error</code>. The difference is the processor, not macOS against Linux: the images in this course are Linux images on both machines.</p>
+<pre><code>docker build --platform linux/amd64 -t investment-app:v1 .
+docker image inspect investment-app:v1 --format '{{.Os}}/{{.Architecture}}'    # linux/amd64
+</code></pre>
+<p><code>--platform linux/amd64</code> builds amd64 programs on the Mac. The build is slower, because the Mac emulates the other processor. Check with <code>docker image inspect</code> before every push.</p>
+<h2 id="registry-repository-the-address-of-an-image">Registry, Repository &amp; the Address of an Image</h2>
+<ul>
+<li>A <strong>registry</strong> is a service that stores images. Docker Hub is one. Amazon Elastic Container Registry, <strong>ECR</strong>, is the one this course uses.</li>
+<li>A <strong>repository</strong> is inside a registry and holds the versions of one application's image. You create one repository per application, <code>investment-app</code>, in your own AWS account. It's not a git repository and not an S3 bucket — it only stores images.</li>
+</ul>
+<p>The address of one image has four parts:</p>
+<pre><code>123456789012.dkr.ecr.us-east-1.amazonaws.com/investment-app:v1
+└────┬─────┘        └───┬───┘                └─────┬──────┘ └┬┘
+  account             region                   repository   tag
+</code></pre>
+<p><code>docker push</code>, <code>docker pull</code> and the cluster all use this whole address. ECR is regional: a repository created in <code>us-east-1</code> isn't listed in another region.</p>
+<h3 id="two-kinds-of-tag-in-the-console">Two kinds of tag in the console</h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Image tag</strong></td>
+<td>Such as <code>v1</code> — names one image in the repository. Docker uses it.</td>
+</tr>
+<tr>
+<td><strong>Repository tag</strong></td>
+<td>An AWS resource tag on the repository, like the tags on an EC2 instance: a key and a value, such as <code>owner = devops</code> or a cost code. Docker never sees it; a finance team uses resource tags to see which team each part of the AWS bill belongs to.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lifecycle-policy-and-price">Lifecycle policy and price</h3>
+<p>A <strong>lifecycle policy</strong> deletes images by a rule — every image older than a year, for example. ECR charges $0.10 per GB per month for stored images. A push costs nothing, and so does a pull by machines in the same region. The school's cluster is in <code>us-east-1</code>.</p>
+<h2 id="tag-and-digest">Tag and Digest</h2>
+<ul>
+<li>A <strong>tag</strong> is a label on an image, and it can move. Build without a tag and Docker uses <code>latest</code>. Build again without a tag and <code>latest</code> moves to the new image — the old image has no tag now. In class, <code>docker images</code> showed the image ID under <code>latest</code> change after one <code>ENV</code> line was added. <code>latest</code> doesn't mean newest; it means "no tag was given."</li>
+<li>A <strong>digest</strong> is a hash of the image's content, written <code>sha256:…</code>. A hash is computed from the bytes — it's not encryption, and nothing can be read back from it. The same content always gives the same digest; change anything in the content and the digest is different. A build that reuses every layer from the cache produces the same image, with the same ID.</li>
+</ul>
+<p>Use a version tag, <code>v1</code>, <code>v2</code>, never <code>latest</code>. A tag can be moved by a person; a digest always names the same image.</p>
+<h2 id="the-repository-from-terraform-then-the-image">The Repository From Terraform, Then the Image</h2>
+<pre><code>aws sts get-caller-identity     # the account the next commands act in: yours
+</code></pre>
+<p>In a folder of its own, two files:</p>
+<pre><code># providers.tf
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~&gt; 6.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+</code></pre>
+<pre><code># ecr.tf
+resource "aws_ecr_repository" "investment_app" {
+  name                 = "investment-app"
+  image_tag_mutability = "IMMUTABLE"
+}
+</code></pre>
+<pre><code>terraform init
+terraform plan
+terraform apply
+</code></pre>
+<p>If Claude's <code>ecr.tf</code> also has a <code>provider "aws"</code> block, delete it there — Terraform refuses two provider blocks for the same provider, and that stopped <code>terraform init</code> in class.</p>
+<p>Then log Docker in to the repository, tag the image with its full address, and push:</p>
+<pre><code>REGISTRY=&lt;your account&gt;.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin $REGISTRY
+docker tag investment-app:v1 $REGISTRY/investment-app:v1
+docker push $REGISTRY/investment-app:v1
+</code></pre>
+<ul>
+<li>The login is valid for twelve hours.</li>
+<li><code>docker push investment-app</code> with no address fails with <code>denied</code>: a name without an address is a Docker Hub name.</li>
+<li><strong><code>IMMUTABLE</code></strong> makes the repository refuse a second push of the same tag. In the after-class, pushing <code>v1</code> again failed with <code>tag invalid … already exists</code> because <code>v1</code> had already been pushed; pushing a new tag, <code>v2</code>, worked. A tag in an immutable repository can't be moved.</li>
+<li>If the push stops part way with a network error, run it again — layers already sent aren't sent twice.</li>
+</ul>
+<p><strong>The console's "View push commands" button gives the same four commands, with two differences.</strong> Its build has no <code>--platform</code>, and its tag is <code>latest</code>. In class the push was done from these commands, and on an Apple Silicon Mac that pushes an arm64 image the cluster can't run. Check yours with <code>docker image inspect</code>. If it says <code>linux/arm64</code>, build again with <code>--platform linux/amd64</code> and push it as <code>v1</code>.</p>
+<h2 id="cross-account-the-repository-policy">Cross-Account: the Repository Policy</h2>
+<p>Your repository is in your account. The school's cluster is in the school's account, <code>834786370659</code>. A <strong>cluster</strong> is a group of Linux machines that run containers together — unit 2 explains it. Those machines have an IAM role, and the role must be allowed to pull your image. A pull from another account needs two permissions:</p>
+<ul>
+<li><strong>On the school's side</strong>, a role policy on the cluster machines' role allows the pull actions. The school has set it up.</li>
+<li><strong>On your side</strong>, a resource policy on your repository names that role. You write this one — without it, the pull is refused.</li>
+</ul>
+<pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "AWS": "arn:aws:iam::834786370659:role/containers-26a-node" },
+    "Action": [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchCheckLayerAvailability"
+    ]
+  }]
+}
+</code></pre>
+<p><strong>Don't change the account ID.</strong> <code>834786370659</code> is the school's account, and the policy names the school's role. Apply it from the command line:</p>
+<pre><code>aws sts get-caller-identity
+aws ecr set-repository-policy --repository-name investment-app --policy-text file://repository-policy.json
+</code></pre>
+<p>or in the console: your repository, <strong>Permissions</strong>, <strong>Edit policy JSON</strong>, paste the policy, <strong>Save</strong>. <strong>View JSON</strong> on the same tab shows the policy as saved.</p>
+<p>The three actions are the ones a pull uses: check which layers exist, get their download addresses, and get the image. <code>ecr:GetAuthorizationToken</code> isn't in this file — it can only be in a role policy, on the school's side.</p>
+<h2 id="after-class_27">After Class</h2>
+<p>Optional practice and Q&amp;A held after the main lecture — less structured, students stay to ask questions and work through exercises with the instructor:</p>
+<ul>
+<li><strong>Create the repository from Terraform</strong> — in your own account, <code>aws_ecr_repository</code> with <code>image_tag_mutability = "IMMUTABLE"</code>, then <code>terraform init</code>, <code>plan</code>, <code>apply</code>.</li>
+<li><strong>Build, tag and push</strong> — build with <code>--platform linux/amd64</code>, tag it <code>v1</code>, and push it to your repository. Check the architecture with <code>docker image inspect</code> before pushing.</li>
+<li><strong>Add the repository policy</strong> — the JSON above, with the school's account ID unchanged, applied with <code>aws ecr set-repository-policy</code> or pasted into the console's <strong>Edit policy JSON</strong>.</li>
+<li><strong>Push a second tag</strong> — push <code>v1</code> again and read the <code>tag invalid … already exists</code> error from the immutable repository, then push <code>v2</code> and watch it succeed.</li>
+<li><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</li>
+</ul>
+<p><strong>What you know now:</strong> a database container joins the application container on a Docker network created with <code>docker network create</code>, and containers on that network reach each other by name — the same shape as RDS in a private subnet. Two separate causes can stop one container: a missing <code>--network</code> flag, and two gunicorn workers racing to create the same table, fixed with <code>--preload</code> so the application is imported once before the workers start. An image is built for one processor <strong>architecture</strong> — arm64 on Apple Silicon, amd64 on the cluster — and <code>--platform linux/amd64</code> builds the right one from a Mac; <code>docker image inspect</code> confirms it before every push. A <strong>registry</strong> stores images, a <strong>repository</strong> inside it holds one application's versions, and an image's address is account, region, repository and tag together. A <strong>tag</strong> is a movable label — <code>latest</code> means only "no tag was given" — while a <strong>digest</strong> is a content hash that always names the same bytes; a version tag like <code>v1</code> or <code>v2</code> is the one to use. The repository itself comes from Terraform, in your own account, with <code>image_tag_mutability = "IMMUTABLE"</code> so a tag, once pushed, can't be overwritten. And a cross-account pull needs a resource policy on your repository naming the school's cluster role by ARN — the account ID <code>834786370659</code> is never changed — granting exactly the three actions a pull uses: checking layers, getting their download URLs, and getting the image.</p>
 
 
 </main>
