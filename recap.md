@@ -2220,3 +2220,264 @@ A name pushed with no registry address (`docker push investment-app`) fails with
 aws ecr set-repository-policy --repository-name investment-app --policy-text file://repository-policy.json
 ```
 Don't change the account ID — it names the school's cluster role, which already has its own role policy allowing the pull on its side. This resource policy is your side of the same handshake; without it the pull is refused.
+
+---
+
+## Lesson 52: The Cluster, the Pod, the Namespace & the Context
+`docker run` gives one container on one machine — if it exits or the machine goes, nothing brings it back. An **orchestrator** fixes that the way the Auto Scaling group did for instances: you write down how many copies should run, it replaces the ones that stop. **Kubernetes** (open source from Google, now CNCF) is the one in job postings; managed versions are EKS (AWS), GKE (Google), AKS (Azure). ECS is AWS-only with its own words (*task*, *service*).
+
+**A cluster = control plane + nodes.** Nodes are EC2 instances that run containers; the control plane (run by AWS on EKS) decides what runs where:
+- **API server** — receives every `kubectl` command, the only way in
+- **etcd** — the cluster's database of every object (not your app's data)
+- **scheduler** — picks a node for each new pod
+- **controllers** — compare what you asked for with what's running, fix the difference
+
+```bash
+kubectl get nodes   # one line per node: Ready, AGE, VERSION
+```
+
+**Pod** = one or more containers on one node, one IP — in practice, one container: yours. Not an EC2 instance (the node is), not on your laptop, not replaced on its own — a bare pod that's deleted stays gone. Replacing pods is a controller's job (the Deployment, next).
+
+**Namespace** = your own set of names inside the shared cluster: your pods, quota (8 pods) and permissions. No permissions in anyone else's, or in `default`.
+```bash
+kubectl get namespaces
+kubectl get pods -n <your-namespace>   # -n names the namespace for one command
+```
+
+**Context** = a cluster + an identity + a namespace, stored in `~/.kube/config`. One is current; every command uses it.
+```bash
+aws sso login --profile 312-cluster        # lasts one day: every class day
+aws sts get-caller-identity --profile 312-cluster
+aws eks update-kubeconfig --name containers-26a --region us-east-1 --profile 312-cluster --alias containers-26a   # once per laptop
+kubectl config current-context
+kubectl config get-contexts                # * = current; NAMESPACE column empty at first
+kubectl config set-context --current --namespace=<your-namespace>   # saved until changed
+```
+A bare `kubectl get pods` fails with `Forbidden ... in the namespace "default"` — the account isn't broken, the context just has no namespace. Read the error as four facts: who, what, where, answer.
+
+**Before any apply, delete or scale:** run `aws sts get-caller-identity` and `kubectl config get-contexts`. A team once ran a dev destroy script against a context pointing at production.
+
+**Manifest** = a YAML file saying what should exist (not steps — line order doesn't matter, unlike a Dockerfile). Four top-level keys: `apiVersion`, `kind`, `metadata`, `spec`.
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.14.2
+      ports:
+        - containerPort: 80
+```
+YAML rules: indentation nests, spaces never tabs, `key: value` (colon + space), a dash makes a list item.
+```bash
+kubectl apply -f pod.yaml        # send the file to the API server
+kubectl get pods                 # ContainerCreating, then Running
+kubectl describe pod nginx       # Events: Scheduled, Pulling, Pulled, Created, Started
+kubectl delete pod nginx         # gone, and nothing creates it again
+```
+Before the next class: `kubectl get pods` must print `No resources found` in your namespace, and the pushed image must be amd64:
+```bash
+docker image inspect <your-image> --format '{{.Architecture}}'   # must print amd64
+```
+
+---
+
+## Lesson 53: The First Pod, the Controller & the Deployment
+A pod applied on its own is read, then deleted — and nothing replaces it, because nothing in `pod.yaml` says how many there should be. A **controller** is a control-plane program that compares the desired state (what the stored object says) with what's running, fixes the difference, and repeats — the Auto Scaling group's job, for pods. `apply` writes the object and returns; the controller does the rest.
+
+**Start of every class day:**
+```bash
+aws sso login --profile 312-cluster
+kubectl config use-context containers-26a
+kubectl config set-context --current --namespace=<your-namespace>
+kubectl get pods                   # No resources found = working, namespace empty
+```
+`Forbidden` = the context has no namespace (or the wrong one); run `set-context` again. Optional: `alias k=kubectl`.
+
+**Apply, read, delete a bare pod:**
+```bash
+kubectl apply -f pod.yaml          # pod/drill created
+kubectl get pods -o wide           # adds pod IP + the NODE (an EC2 instance)
+kubectl logs drill                 # what the process printed
+kubectl describe pod drill         # Events: Scheduled, Pulled, Created, Started
+kubectl delete pod drill           # gone, and stays gone
+```
+- `READY` = containers ready / containers in the pod (`1/2` = one failing)
+- `Pending` = no node yet (AWS may add one, a minute or more) · `ContainerCreating` = node is pulling the image
+- `RESTARTS` = times the container was restarted in this pod
+- `curl <pod-ip>:8080` from the laptop times out — the pod IP is on the cluster's network; the laptop only reaches the cluster through the API server
+
+**Deployment** = a count plus the Pod to run that many of:
+```yaml
+apiVersion: apps/v1          # Pod is v1, Deployment is apps/v1
+kind: Deployment
+metadata:
+  name: drill
+spec:
+  replicas: 2                # the count (desired capacity)
+  selector:                  # which pods are mine
+    matchLabels:
+      app: drill
+  template:                  # the Pod to create, written out in full
+    metadata:
+      labels:
+        app: drill           # stamped on each pod
+    spec:
+      containers:
+        - name: drill
+          image: IMAGE_URI
+          ports:
+            - containerPort: 8080
+```
+```bash
+kubectl apply -f deployment-drill.yaml   # deployment.apps/drill created
+kubectl get deployments                  # READY 2/2
+kubectl get pods                         # drill-<rs hash>-<id>, twice
+```
+Pod names are generated: Deployment name + ReplicaSet hash + ID. The file is on your laptop; `apply` copies it into the cluster, nothing copies back.
+
+**The label is written twice** (`selector` and `template`). If they differ, the API server refuses the file (`selector does not match template labels`) and nothing is created. `unchanged` = stored object already matches the file.
+
+**Deployment → ReplicaSet → pods.** The Deployment creates a **ReplicaSet** to hold the count and own the pods; you never write one.
+```bash
+kubectl get deploy,rs,pods -l app=drill   # all three levels; -l selects by label
+kubectl get rs                            # DESIRED, CURRENT, READY
+```
+
+**Delete one pod — the count is kept:**
+```bash
+kubectl get pods -w                         # second terminal: prints every change
+kubectl delete pod drill-<rs hash>-<id>     # first terminal: a new pod appears, new name
+kubectl scale deploy/drill --replicas=3     # stored count becomes 3
+kubectl apply -f deployment-drill.yaml      # file still says 2 → back to two, no warning
+```
+`scale` changes the cluster, not the file; applying the file after it silently resets the count — last write wins. Real work edits `replicas` in the file and applies it.
+
+**Three distinctions:**
+- The **kubelet** (agent on every node) restarts a container in the same pod (`RESTARTS` goes up); the ReplicaSet's controller creates a new pod when a pod is deleted or its node is gone.
+- A Deployment keeps a count of pods — it doesn't receive traffic. A **Service** (unit 3) gives pods one address and spreads requests.
+- A cluster lives in one region, across several availability zones. Another region = a second cluster.
+
+**Clean up before next class** (namespace allows 8 pods):
+```bash
+kubectl delete -f deployment-drill.yaml -f pod.yaml --ignore-not-found
+```
+
+---
+
+## Lesson 54: Restarts, port-forward, Rolling Updates & Pods That Won't Start
+**`-o yaml`** prints any object as the cluster stores it — use it when there's no file on your laptop, or to check what the cluster holds vs. what your file says.
+```bash
+kubectl get rs -o yaml
+kubectl get pod <pod-name> -o yaml    # which image it really runs, and its status
+```
+
+**Two things restart things:** the **kubelet** restarts a container in the same pod (same name, same IP, `RESTARTS` +1 — like `Restart=always` in systemd). The **ReplicaSet** replaces a pod that's gone (new name, new IP — like an Auto Scaling group). The IP belongs to the pod, not the container.
+
+**`port-forward` — a tunnel from your laptop to one pod, through the API server** (a laptop has no route to a pod IP):
+```bash
+kubectl port-forward deploy/drill 8000:8080   # laptop port : containerPort; stays in foreground
+curl localhost:8000                           # second terminal
+```
+Ctrl+C closes it. Engineer's check only — users never reach a pod this way (unit 3: Services).
+
+**Rolling update + undo** — any change under `template` (image, env, command, label) makes a second ReplicaSet: start one new pod, stop one old, repeat. Changing `replicas` doesn't.
+```bash
+kubectl set image deployment/drill drill=<registry>/drill:v2
+kubectl rollout status deploy/drill
+kubectl get rs                        # old RS at 0 pods, new at 2
+kubectl rollout undo deploy/drill     # back to the old ReplicaSet
+```
+Restart `port-forward` after a rollout — the old tunnel pointed at a pod that's gone.
+
+**The stop signal:** `kubectl delete` sends SIGTERM to PID 1, then waits the **grace period** (30s), then SIGKILL.
+```
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]   # exec form: gunicorn is PID 1 → stops in ~3s
+CMD gunicorn --bind 0.0.0.0:8080 app:app                # shell form: sh is PID 1, never passes the signal → ~32s
+```
+Shell form makes every rollout and scale-down wait 30s per pod, then kills the app with no chance to finish requests.
+
+**Pod not Running — `get`, then `describe`, then `logs`:** `get` shows the status word, `describe` shows Events (what the cluster did), `logs` shows what the process printed — nothing, if it never started.
+- **`ImagePullBackOff`** — image couldn't be fetched (tag doesn't exist, or `forbidden` without the repo policy). `describe` shows it; `logs` is empty. Check the exact name with `kubectl get pod <name> -o yaml`.
+- **`exec format error`** (shows as `CrashLoopBackOff`) — image built for the wrong CPU (Apple Silicon = arm64, nodes = amd64). Only `logs` says so:
+```bash
+docker build --platform linux/amd64 -t <image> .
+```
+- **`CrashLoopBackOff`** — process started and exited (e.g. `KeyError: 'DB_HOST'`, env var not set). `logs` has the reason; kubelet retries with growing waits up to 5 min.
+
+**`command` and `args`** replace the image's `ENTRYPOINT` (the program) and `CMD` (its default arguments) — no new image needed. `args` alone keeps the ENTRYPOINT: `ENTRYPOINT ["echo","hello"]` + `args: ["Mo"]` → `hello Mo`. `restartPolicy: Never` → pod shows `Completed`, not `CrashLoopBackOff`.
+
+**Clean up** (namespace allows 8 pods):
+```bash
+kubectl delete -f . -f broken/ --ignore-not-found
+```
+
+---
+
+## Lesson 55: The Service, Endpoints, DNS & the Three Types
+A pod's IP dies with the pod — a replaced pod gets a new one, so a caller holding the IP breaks. A **Service** is a fixed name and address in front of changing pods (like the load balancer + target group in Scale). It's an object stored in your namespace, not a program on a node — `kubectl get pods` won't list it.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: drill           # the name callers use
+spec:
+  type: ClusterIP       # the default
+  selector:
+    app: drill          # must equal the pods' label exactly
+  ports:
+    - port: 80          # port callers dial
+      targetPort: 8080  # port the app listens on
+```
+```bash
+kubectl apply -f service-drill.yaml
+kubectl get svc drill                        # CLUSTER-IP 172.20.x.x, 80/TCP
+kubectl exec client -- curl -s http://drill  # test from inside the cluster
+```
+
+**Selector** — matches pod labels exactly. `app: dril` selects nothing, with no error and no warning.
+
+**EndpointSlices** — the pod IPs the selector found, updated as pods start and stop. Service answers nothing? Read this first: empty = no pod matches.
+```bash
+kubectl get endpointslices -l kubernetes.io/service-name=drill
+```
+
+**ClusterIP** — the default type *and* the Service's address; it works only inside the cluster. No machine owns it: **kube-proxy** on every node writes a rule sending `172.20.x.x:80` to a random endpoint `10.20.x.x:8080`. Pods that aren't ready get nothing.
+
+**Port numbers:** `port` = what callers dial. `targetPort` = must equal the port the process listens on (gunicorn's `--bind`). A wrong `targetPort` is accepted silently → `Connection refused`. `containerPort` and `EXPOSE` are documentation only.
+
+**DNS** — every Service gets `<service>.<namespace>.svc.cluster.local`. Same namespace: `drill`. Other namespace: `drill.<namespace>`. CoreDNS answers cluster names only.
+```bash
+kubectl exec client -- nslookup drill
+kubectl exec client -- cat /etc/resolv.conf   # search line + nameserver
+```
+
+**Declarative vs imperative:** `kubectl apply -f` a manifest (stays in the repo — how teams work) vs a direct command like `kubectl run test --image=nicolaka/netshoot:v0.16 -- sleep 3600` (quick test, useful in CKA/CKAD, nothing left to read).
+
+**The three types — each adds a way in:**
+- **ClusterIP** — pods inside the cluster only.
+- **NodePort** — also opens a port 30000–32767 on every node. For tests and demos; unused here (private subnets, quota 0).
+- **LoadBalancer** — also makes AWS create a **Network Load Balancer** whose target group holds the pod IPs. This is how users reach an app on EKS.
+```yaml
+metadata:
+  annotations:   # without it: internal only
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+spec:
+  type: LoadBalancer
+```
+`kubectl get svc` shows the NLB's DNS name under `EXTERNAL-IP` (a few minutes to activate). HTTP only — HTTPS comes with the Ingress. A short name = Route 53 CNAME to the NLB. Billed hourly, so the namespace quota refuses it (`exceeded quota`).
+
+**`port-forward` to a Service** — engineer's tunnel, laptop only; pins to one pod and dies with `lost connection to pod` when it's replaced, while `http://drill` from the client pod keeps answering:
+```bash
+kubectl port-forward svc/drill 8000:80
+curl localhost:8000
+```
+
+**Clean up** (quota: 8 pods, 5 Services):
+```bash
+kubectl delete -f . --ignore-not-found
+```
+Next: readiness/liveness probes, then the Ingress and the shared load balancer.
