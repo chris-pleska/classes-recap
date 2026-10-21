@@ -93,6 +93,9 @@
 <li><a href="#lesson-54-the-pod-typed-the-controller-the-deployment">Lesson 54: The Pod Typed, the Controller &amp; the Deployment</a></li>
 <li><a href="#lesson-55-restarts-the-tunnel-the-rolling-update-a-pod-that-does-not-start">Lesson 55: Restarts, the Tunnel, the Rolling Update &amp; a Pod That Does Not Start</a></li>
 <li><a href="#lesson-56-the-service-its-endpoints-the-clusterip-dns-the-three-types">Lesson 56: The Service, Its Endpoints, the ClusterIP, DNS &amp; the Three Types</a></li>
+<li><a href="#lesson-57-probes-the-ingress-the-shared-load-balancer-ready-alive-reachable">Lesson 57: Probes, the Ingress &amp; the Shared Load Balancer — Ready, Alive, Reachable</a></li>
+<li><a href="#lesson-58-config-secrets-identity-settings-outside-the-image">Lesson 58: Config, Secrets &amp; Identity — Settings Outside the Image</a></li>
+<li><a href="#lesson-59-who-may-read-the-password-two-checks-rbac-a-read-only-claude-code">Lesson 59: Who May Read the Password — Two Checks, RBAC &amp; a Read-Only Claude Code</a></li>
   </ul>
 </nav>
 <main>
@@ -10774,6 +10777,718 @@ kubectl get pods,svc                     # No resources found
 <p>Before Wednesday, read what a readiness probe, a liveness probe and an Ingress are. Wednesday covers the readiness and liveness checks, then the Ingress and the shared load balancer.</p>
 <p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
 <p><strong>What you know now:</strong> a replaced pod has a new IP, so a caller can't keep a pod's address. A <strong>Service</strong> is an object with a fixed name and address; its <code>selector</code> picks the pods by label, and the label must match exactly or the Service selects nothing, with no error. The <strong>EndpointSlices</strong> list the matching pod addresses and are the first thing to read when a Service answers nothing. The <strong>ClusterIP</strong> works only inside the cluster: kube-proxy on every node turns a packet sent to it into one sent to a random endpoint. <code>port</code> is what callers dial, and <code>targetPort</code> must equal the port the process listens on; <code>containerPort</code> and <code>EXPOSE</code> are documentation only. The cluster's DNS, CoreDNS, turns <code>&lt;service&gt;.&lt;namespace&gt;.svc.cluster.local</code> into the ClusterIP, and a short name works in the same namespace. The three types each add a way in: ClusterIP for pods, NodePort for anything that reaches the nodes, LoadBalancer for a cloud load balancer, which on AWS is a Network Load Balancer sending connections straight to the pods. <code>port-forward svc/drill</code> is an engineer's tunnel to one pod, and it stops when that pod is replaced.</p>
+
+<h1 id="lesson-57-probes-the-ingress-the-shared-load-balancer-ready-alive-reachable">Lesson 57: Probes, the Ingress &amp; the Shared Load Balancer — Ready, Alive, Reachable</h1>
+<h2 id="where-we-left-off_22">Where We Left Off</h2>
+<p>Session 56 gave the drill pods a Service: a fixed name and ClusterIP in front of changing pods, found by a selector, with EndpointSlices listing the addresses. Tonight finishes unit 3. First the three probes the kubelet runs against a container and what each one does when it fails. Then the Ingress: one rule per application on one Application Load Balancer the whole class shares, HTTPS at that load balancer, and the drill app on your own hostname.</p>
+<h2 id="before-you-start-the-files-and-what-should-exist">Before You Start: the Files and What Should Exist</h2>
+<p>In <code>03-reaching-the-application/</code> in the containers repository, put <code>834786370659.dkr.ecr.us-east-1.amazonaws.com/drill:v1</code> in place of <code>IMAGE_URI</code> in every file you apply. The whole URI is needed: a URI with a missing character gives <code>InvalidImageName</code>, and the rollout stops at the first new pod. Then, in that folder:</p>
+<pre><code class="language-bash">kubectl apply -f deployment-drill.yaml -f service-drill.yaml -f pod-client.yaml
+kubectl get pods,svc                       # two drill pods, client, and the drill Service
+</code></pre>
+<h2 id="probes-health-checks-the-kubelet-runs">Probes: Health Checks the Kubelet Runs</h2>
+<p>In Scale, a target group checked each instance and sent traffic only to healthy ones, and an Auto Scaling group replaced an instance that failed its check. Kubernetes has the same two actions for containers. A <strong>probe</strong> is a check the kubelet on the pod's node runs against one container, every few seconds, for as long as the container runs. A pod in <code>Running</code> does not mean the application in it can answer, which is why the checks exist.</p>
+<table>
+<thead>
+<tr>
+<th>Probe</th>
+<th>The question</th>
+<th>When it fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Readiness</strong></td>
+<td>Is this container ready for requests?</td>
+<td>Traffic to the pod stops.</td>
+</tr>
+<tr>
+<td><strong>Liveness</strong></td>
+<td>Is this container still working?</td>
+<td>The container is restarted.</td>
+</tr>
+<tr>
+<td><strong>Startup</strong></td>
+<td>Has this container finished starting?</td>
+<td>The other two wait until it passes; if it never passes, the container is restarted.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="readiness-is-this-pod-ready-for-requests">Readiness: Is This Pod Ready for Requests?</h2>
+<pre><code class="language-yaml">readinessProbe:           # under the container, in the Deployment&#x27;s template
+  httpGet:
+    path: /               # a URL the app answers
+    port: 8080
+  periodSeconds: 5        # the interval
+  failureThreshold: 3     # failures in a row before the pod is not ready
+</code></pre>
+<p>The kubelet sends <code>GET /</code> to port 8080 every 5 seconds. A status from 200 to 399 passes; anything else, or no answer, fails. After 3 failures in a row the pod is not ready: it gets no traffic, the container keeps running, and the kubelet keeps checking. When the check passes again, the pod is ready and gets traffic again. The Deployment does nothing about a pod that is not ready: it counts pods, and the count is still right.</p>
+<p><code>path</code> is a URL path the application answers over HTTP, like the address in a browser. It is not a folder inside the container. The drill app has a route for <code>/</code> only, so <code>/health</code> answers 404. Your own application's routes are in its code.</p>
+<h2 id="probe-settings-and-check-types">Probe Settings and Check Types</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>initialDelaySeconds</code></td>
+<td>Seconds to wait after the container starts before the first check.</td>
+</tr>
+<tr>
+<td><code>periodSeconds</code></td>
+<td>Seconds between checks. 10 if not set.</td>
+</tr>
+<tr>
+<td><code>timeoutSeconds</code></td>
+<td>Seconds one check waits for an answer. 1 if not set.</td>
+</tr>
+<tr>
+<td><code>failureThreshold</code></td>
+<td>Failures in a row before the probe counts as failed. 3 if not set.</td>
+</tr>
+<tr>
+<td><code>successThreshold</code></td>
+<td>Passes in a row before a not-ready pod is ready again. 1 if not set.</td>
+</tr>
+</tbody>
+</table>
+<p>Each threshold controls one direction, so the two do not conflict. Instead of <code>httpGet</code>, a check can be <code>tcpSocket</code> (the port accepts a connection), <code>exec</code> (a command run in the container exits with 0) or <code>grpc</code>. <code>httpGet</code> is the most common.</p>
+<h2 id="a-failing-readiness-check-stops-a-bad-rollout">A Failing Readiness Check Stops a Bad Rollout</h2>
+<pre><code class="language-bash">kubectl apply -f deployment-drill-readiness.yaml              # the right path, /
+kubectl apply -f deployment-drill-readiness-wrong-path.yaml   # checks /health, which answers 404
+kubectl get pods -l app=drill -w                              # the new pod: Running, READY 0/1
+kubectl rollout status deploy/drill                           # waits: 1 out of 2 new replicas
+kubectl describe pod &lt;the-new-pod&gt;                            # Readiness probe failed: ... statuscode: 404
+</code></pre>
+<p>With 2 pods and the default settings, Kubernetes stops an old pod only after a new pod is ready. The new pod never becomes ready, so the old pods keep serving and users never reach the broken version. Kubernetes does not undo the rollout. After 10 minutes <code>rollout status</code> reports that the Deployment exceeded its progress deadline, and the old pods are still serving.</p>
+<h3 id="the-not-ready-pod-is-still-on-the-list-marked-ready-false">The Not-Ready Pod Is Still on the List, Marked <code>Ready: false</code></h3>
+<pre><code class="language-bash">kubectl get endpointslices -l kubernetes.io/service-name=drill        # three addresses
+kubectl describe endpointslices -l kubernetes.io/service-name=drill | grep -E &#x27;Addresses|Ready&#x27;
+kubectl exec client -- curl -s http://drill                           # answers from a ready pod
+</code></pre>
+<p><code>get</code> lists every address, including the pod that is not ready. <code>describe</code> shows <code>Ready: false</code> for it, and traffic goes only to the addresses marked ready. Fix the rollout by applying the file with the right path:</p>
+<pre><code class="language-bash">kubectl apply -f deployment-drill-readiness.yaml
+kubectl get rs -l app=drill        # the wrong-path ReplicaSet is scaled to 0
+</code></pre>
+<p>Each change to the pod template makes a new ReplicaSet. Applying the right file scales the wrong-path ReplicaSet to 0, which removes its pod.</p>
+<h2 id="liveness-is-this-container-still-working">Liveness: Is This Container Still Working?</h2>
+<pre><code class="language-bash">kubectl apply -f pod-drill-liveness.yaml   # a pod whose liveness probe checks /health
+kubectl get pod drill-liveness -w          # RESTARTS goes up; STATUS turns to CrashLoopBackOff
+kubectl describe pod drill-liveness        # Liveness probe failed ... will be restarted
+</code></pre>
+<p>The same kind of check, with a different action. When it fails <code>failureThreshold</code> times in a row, the kubelet restarts the container. The pod stays: same name, same IP, and <code>RESTARTS</code> goes up by one. If the container keeps failing, Kubernetes waits longer between restarts: 10 seconds, then 20, then 40, up to 5 minutes. While it waits, the pod shows <code>CrashLoopBackOff</code>.</p>
+<p>Readiness controls traffic; liveness controls restarts. Keep the liveness check simple: check the application itself, not its database, so a slow database does not restart every pod at once. A container that uses more and more memory is stopped by a memory limit, which is unit 5. Liveness is for a container that is still running but has stopped answering.</p>
+<p>Most fields of a running pod cannot be changed, and the probes are among them. Applying a changed probe to <code>drill-liveness</code> returns <code>Forbidden</code>, so the pod has to be deleted and created again, and nothing answers in between. A Deployment makes the same change by starting new pods and stopping old ones, which is one reason pods are run through Deployments.</p>
+<h2 id="startup-has-the-app-finished-starting">Startup: Has the App Finished Starting?</h2>
+<p>A startup probe is for an application that starts slowly, for example one that loads data for 2 minutes. Liveness and readiness do not run until the startup probe passes. If it never passes, the kubelet restarts the container. Most applications start in seconds and do not need one; a start that takes minutes often points to a problem in the image.</p>
+<p>All three can be set on one container. Use the ones the application needs, with settings that fit how it starts and how it fails.</p>
+<h2 id="unit-3s-four-questions-answered-with-the-page-closed">Unit 3's Four Questions, Answered with the Page Closed</h2>
+<p>Answer each one yourself before you read its answer.</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A drill pod is replaced. What changes in the EndpointSlice, and what stays the same in the Service?</td>
+<td>The EndpointSlice loses the old pod's address and gets the new pod's address; a controller in the control plane updates it. The Service keeps its name, its ClusterIP and its selector, so callers see no change.</td>
+</tr>
+<tr>
+<td>The client sends to <code>172.20.x.x:80</code>. Where is the destination changed to a pod's address, and which program wrote that rule?</td>
+<td>On the client's own node, before the packet leaves it. kube-proxy, a program on every node, wrote the rule there, and it changes the destination to one pod, <code>10.20.x.x:8080</code>. CoreDNS has a different job: it answers the name <code>drill</code> with the ClusterIP.</td>
+</tr>
+<tr>
+<td><code>port</code>, <code>targetPort</code>, <code>containerPort</code>: which one must equal where the app listens, and what does a wrong one look like?</td>
+<td><code>targetPort</code>, which must equal the port in the Dockerfile's <code>--bind 0.0.0.0:8080</code>. A wrong <code>targetPort</code> is accepted with no error and the endpoints are still listed, but every call fails with <code>Connection refused</code>. <code>containerPort</code> is documentation only.</td>
+</tr>
+<tr>
+<td>What does a LoadBalancer Service add to a ClusterIP Service, and where does the Network Load Balancer send each connection?</td>
+<td>It keeps the ClusterIP and the node port and adds a Network Load Balancer that AWS creates. AWS keeps the load balancer's targets equal to the Service's endpoints, so it sends each connection straight to a pod's address.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-ingress-one-load-balancer-for-many-applications">The Ingress: One Load Balancer for Many Applications</h2>
+<p>A Service of type <code>LoadBalancer</code> makes AWS create one load balancer per Service, and each is billed by the hour. In Scale, one Application Load Balancer served many applications with listener rules: this host and path go to this target group. In Kubernetes, you write that rule as an <strong>Ingress</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Ingress</strong></td>
+<td>A rule: this hostname and path go to this Service. Requests do not pass through it.</td>
+</tr>
+<tr>
+<td><strong>IngressClass</strong></td>
+<td>Says which program reads your Ingress, and points to settings shared by every Ingress of that class. On this cluster it is <code>alb</code> (<code>kubectl get ingressclass</code>).</td>
+</tr>
+<tr>
+<td><strong>Controller</strong></td>
+<td>The program that reads your Ingress and adds its rule to an AWS Application Load Balancer. On this cluster EKS Auto Mode runs it, so there is no pod for it. On a cluster without Auto Mode, the team installs one first, for example the AWS Load Balancer Controller.</td>
+</tr>
+</tbody>
+</table>
+<p>Older tutorials use <code>ingress-nginx</code>, a controller that ran as pods inside the cluster and received the traffic itself. Its maintenance ended in March 2026, and this cluster does not use it. The Ingress object is still current. The Gateway API is a newer API for the same job.</p>
+<h2 id="the-shared-load-balancer-one-rule-per-student">The Shared Load Balancer: One Rule per Student</h2>
+<p>The class's IngressClass settings put every Ingress of class <code>alb</code> in one group, <code>containers-26a</code>, and one group gets one load balancer. Each student's Ingress adds one rule to its HTTPS listener. An Application Load Balancer allows 100 rules by default, a limit AWS can raise on request.</p>
+<p>The load balancer sends each request straight to a pod. The controller copies the IP addresses of the Service's ready pods into the rule's target group ahead of time and updates them when pods change. Neither the Service's ClusterIP nor the controller is on the request path. A pod that is not ready is not in the target group, so a broken version gets no traffic from the internet either.</p>
+<h2 id="https-the-certificate-is-on-the-load-balancer">HTTPS: the Certificate Is on the Load Balancer</h2>
+<p>The browser talks HTTPS to the load balancer, and the load balancer talks plain HTTP to the pod. HTTPS ends at the load balancer because everything after it is inside the VPC. Your Ingress does not mention a certificate.</p>
+<p>The certificate for <code>*.k8s.312school.com</code> was created in AWS Certificate Manager (ACM) with Terraform, with the same <code>aws_acm_certificate</code> resource as in Scale's <code>dns.tf</code>; it is in <code>cluster/permanent/certificate.tf</code> in the containers repository. ACM issued it for free once a DNS record proved the school owns the domain. <code>312school.com</code> is on Cloudflare, not Route 53, so that record was added in Cloudflare by hand. ACM renews the certificate by itself. <code>cluster/platform/apply.sh</code> writes the certificate's ARN into the IngressClass settings, and the controller attaches it to the load balancer.</p>
+<pre><code class="language-bash">kubectl get ingressclassparams alb -o yaml    # certificateARNs, group: containers-26a, scheme: internet-facing
+</code></pre>
+<h2 id="your-ingress-the-drill-app-on-your-own-hostname">Your Ingress: the Drill App on Your Own Hostname</h2>
+<pre><code class="language-yaml">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: drill
+spec:
+  ingressClassName: alb                   # the shared load balancer
+  rules:
+    - host: &lt;namespace&gt;.k8s.312school.com # your namespace; no other host is accepted
+      http:
+        paths:
+          - path: /
+            pathType: Prefix              # / and every path under it
+            backend:
+              service:
+                name: drill
+                port:
+                  number: 80              # the Service&#x27;s port
+</code></pre>
+<pre><code class="language-bash">kubectl apply -f ingress-drill.yaml
+kubectl get ingress drill                      # ADDRESS shows the load balancer after about a minute
+curl https://&lt;namespace&gt;.k8s.312school.com     # hello from the drill app
+</code></pre>
+<p>A wildcard DNS record, <code>*.k8s.312school.com</code>, already points at the load balancer, so you create no DNS record. Keep <code>number: 80</code>: with a port the Service does not have, the controller stops updating the shared load balancer for every Ingress in the class until the file is fixed, and the cluster's checks cannot catch it.</p>
+<h2 id="the-hostname-rule-one-host-one-path-one-service">The Hostname Rule: One Host, One Path, One Service</h2>
+<p>The cluster checks every Ingress you apply with an admission policy and refuses one that does not follow these rules:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The host is <code>&lt;your namespace&gt;.k8s.312school.com</code>.</td>
+<td>Nobody can take a classmate's hostname.</td>
+</tr>
+<tr>
+<td>The class is <code>alb</code>.</td>
+<td>Every Ingress joins the one shared load balancer.</td>
+</tr>
+<tr>
+<td>There is one rule, with one path, to one Service.</td>
+<td>The load balancer stays under its rule limit.</td>
+</tr>
+</tbody>
+</table>
+<p>A hostname with no rule gets a 404 from the load balancer itself, with <code>server: awselb/2.0</code> and an empty body. A 404 page from your application means the rule worked and the request reached your pod.</p>
+<p>On a cluster without this policy, one Ingress can route several hosts, or several paths of one host, to different Services:</p>
+<pre><code class="language-yaml">rules:
+  - host: shop.example.com
+    http:
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: { service: { name: api, port: { number: 80 } } }
+        - path: /
+          pathType: Prefix
+          backend: { service: { name: web, port: { number: 80 } } }
+</code></pre>
+<h2 id="the-request-from-the-browser-to-the-pod">The Request: From the Browser to the Pod</h2>
+<ol>
+<li>The browser asks DNS for <code>&lt;namespace&gt;.k8s.312school.com</code>; the wildcard record points at the shared load balancer.</li>
+<li>HTTPS reaches the listener on port 443, where the certificate is and HTTPS ends. Port 80 redirects to 443.</li>
+<li>The listener's rules are checked in order; the rule for your host and path <code>/</code> matches. No match gives the 404 from the load balancer.</li>
+<li>The rule's target group holds the addresses of the ready drill pods.</li>
+<li>The load balancer sends plain HTTP to one pod, at <code>10.20.x.x:8080</code>.</li>
+</ol>
+<p>NodePort, by comparison, opens a port on every node, and a user would need a node's IP address and a port above 30000. Nodes are replaced, so those addresses change. The Ingress gives users one hostname that keeps working while nodes and pods are replaced.</p>
+<h2 id="next-practice-then-unit-4">Next: Practice, Then Unit 4</h2>
+<p>Run scenarios 5 and 9 of the <code>03-reaching-the-application/</code> README in your namespace: the readiness and liveness probes, and the drill app on your own hostname. Your namespace allows 8 pods, 5 Services and 1 Ingress. Deleting your Ingress removes only your rule; the shared load balancer stays. Clean up when you finish:</p>
+<pre><code class="language-bash">kubectl delete -f . --ignore-not-found
+kubectl get pods,svc,ingress             # No resources found
+</code></pre>
+<p>Unit 4 is configuration, secrets and identity: how an application gets its settings and passwords without putting them in the image.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> a <strong>probe</strong> is a check the kubelet runs against a container. <strong>Readiness</strong> failing stops traffic to the pod, which stays running and on the EndpointSlice list marked <code>Ready: false</code>, and it holds a bad rollout back because old pods stop only after new ones are ready. <strong>Liveness</strong> failing restarts the container, with growing waits and <code>CrashLoopBackOff</code>; keep it simple and never check the database. <strong>Startup</strong> holds the other two back for a slow start. An <strong>Ingress</strong> is a rule, this host and path to this Service; the <strong>IngressClass</strong> <code>alb</code> says who reads it, and the <strong>controller</strong>, run by EKS Auto Mode, adds the rule to one shared Application Load Balancer, which sends each request straight to a ready pod. HTTPS ends at the load balancer, whose ACM certificate for <code>*.k8s.312school.com</code> renews by itself. Your hostname is <code>&lt;namespace&gt;.k8s.312school.com</code>, with one host, one path and one Service per Ingress, and a 404 with <code>server: awselb/2.0</code> means no rule matched.</p>
+
+<h1 id="lesson-58-config-secrets-identity-settings-outside-the-image">Lesson 58: Config, Secrets &amp; Identity — Settings Outside the Image</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Session 57 finished unit 3: probes, and the drill app on your own hostname through the shared Application Load Balancer. Tonight starts unit 4. The investment app's settings and its database password move out of its YAML, the ordinary settings into a ConfigMap and the password and API key into a Secret. Then Postgres and the app start with both, and two failures show what goes wrong: a pod that names a ConfigMap that does not exist, and a ConfigMap edited while the app runs. The class started with the cluster's DNS, from unit 3.</p>
+<h2 id="before-you-start-the-files-and-what-should-exist">Before You Start: the Files and What Should Exist</h2>
+<p>The files are in <code>04-config-secrets-identity/</code> in the containers repository. In <code>deployment-investment-app.yaml</code> and <code>deployment-investment-app-missing-configmap.yaml</code>, put the URI of your own investment-app image in place of <code>IMAGE_URI</code>: the one you pushed to ECR in your AWS account in unit 1. It must be built with <code>--platform linux/amd64</code>, because the nodes are amd64; an arm64 image fails with <code>exec format error</code>. Your unit 2 investment app and Postgres can still be running, because these files replace them.</p>
+<pre><code class="language-bash">kubectl apply -f configmap-investment-app.yaml
+kubectl apply -f secret-investment-app.yaml
+kubectl apply -f postgres.yaml
+kubectl apply -f deployment-investment-app.yaml
+</code></pre>
+<h2 id="the-clusters-dns-a-services-name-from-any-namespace">The Cluster's DNS: a Service's Name from Any Namespace</h2>
+<p>Every Service gets the name <code>&lt;service&gt;.&lt;namespace&gt;.svc.cluster.local</code>, and the cluster's DNS server answers it with the Service's ClusterIP. A pod's <code>/etc/resolv.conf</code> sets this up:</p>
+<pre><code class="language-bash">kubectl exec client -- cat /etc/resolv.conf
+search &lt;your-namespace&gt;.svc.cluster.local svc.cluster.local cluster.local ec2.internal
+nameserver 172.20.0.10
+options ndots:5
+</code></pre>
+<p>The <code>search</code> line adds your namespace to a short name, so <code>curl drill</code> works from a pod in the same namespace. From another namespace the name must include the namespace: <code>curl drill.&lt;namespace&gt;</code>. The full name works from anywhere in the cluster. The <code>nameserver</code> is CoreDNS and answers cluster names only. On EKS Auto Mode AWS runs it on each node, so <code>kube-system</code> has no CoreDNS pod; on a standard cluster it is a Deployment in <code>kube-system</code>. In <code>nslookup</code> output, <code>;; Got recursion not available</code> is a notice and can be ignored: the answer is the <code>Name</code> and <code>Address</code> lines.</p>
+<h2 id="why-your-password-is-in-a-file-on-github">Why: Your Password Is in a File on GitHub</h2>
+<p>In unit 2 the investment app's Deployment had all seven settings typed into its <code>env:</code> list, <code>DB_PASSWORD</code> and <code>FINNHUB_KEY</code> included. That file is in your repository, so anyone who can read the repository can read the password and sign in to the database.</p>
+<p>The image is the same on your laptop, in testing and in production; only the settings differ, so they stay outside the image. In Scale they were one file on each instance, <code>/etc/investment-app.env</code>. In Kubernetes that file becomes two objects:</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Holds</th>
+<th>Keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ConfigMap</strong></td>
+<td>The ordinary settings</td>
+<td><code>DB_HOST</code>, <code>DB_PORT</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>TICKER</code></td>
+</tr>
+<tr>
+<td><strong>Secret</strong></td>
+<td>The password and the API key</td>
+<td><code>DB_PASSWORD</code>, <code>FINNHUB_KEY</code></td>
+</tr>
+</tbody>
+</table>
+<p>The app's code does not change, because it still reads seven environment variables.</p>
+<h2 id="the-configmap-settings-stored-in-the-cluster">The ConfigMap: Settings Stored in the Cluster</h2>
+<p>A <strong>ConfigMap</strong> holds settings as keys and values. It belongs to your namespace, and the API server stores it in etcd, the cluster's record of every object, on the control plane. It is not on a node and not inside a pod. Creating one starts nothing and changes no pod, and deleting a pod does not delete it.</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: investment-app-config
+data:                     # the settings: key, then value
+  DB_HOST: db
+  DB_PORT: &quot;5432&quot;         # in quotes: every value is text
+  DB_NAME: investment_app
+  DB_USER: investment_app
+  TICKER: AAPL
+</code></pre>
+<p>Every value under <code>data:</code> is text, so a number needs quotes. Without them, <code>kubectl apply</code> refuses the file.</p>
+<pre><code class="language-bash">kubectl apply -f configmap-investment-app.yaml
+kubectl get configmap                              # short form: kubectl get cm; DATA is the number of keys
+kubectl describe configmap investment-app-config   # every key and its value, in plain text
+</code></pre>
+<p>To change a ConfigMap, edit the file and run <code>kubectl apply -f</code> again, or change the live object with <code>kubectl edit configmap investment-app-config</code>. With <code>immutable: true</code> at the top level, the API server refuses any change, and the only way to change a value is to delete the ConfigMap and create it again.</p>
+<h2 id="the-secret-the-same-idea-for-passwords-and-keys">The Secret: the Same Idea, for Passwords and Keys</h2>
+<p>A <strong>Secret</strong> is an object like a ConfigMap, for values that must be protected. It is stored in etcd the same way, belongs to your namespace the same way, and a pod uses it the same way. It is a separate kind of object so that a rule can let someone read ConfigMaps and not Secrets.</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: Secret
+metadata:
+  name: investment-app-secret
+type: Opaque              # keys and values you choose
+stringData:               # the values as you type them
+  DB_PASSWORD: change-me-class-password
+  FINNHUB_KEY: replace-with-your-finnhub-key
+</code></pre>
+<p><code>type: Opaque</code> means the keys are yours and Kubernetes does not check what is in them. It does not mean the values are hidden. The other types are for data Kubernetes checks the shape of:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Opaque</code></td>
+<td>Keys and values you choose</td>
+</tr>
+<tr>
+<td><code>kubernetes.io/tls</code></td>
+<td>A certificate and its key</td>
+</tr>
+<tr>
+<td><code>kubernetes.io/dockerconfigjson</code></td>
+<td>Registry credentials</td>
+</tr>
+<tr>
+<td><code>kubernetes.io/ssh-auth</code></td>
+<td>An SSH key</td>
+</tr>
+</tbody>
+</table>
+<p>You write the values under <code>stringData:</code> as plain text, and the cluster stores them under <code>data:</code> in base64.</p>
+<pre><code class="language-bash">kubectl apply -f secret-investment-app.yaml
+kubectl get secret investment-app-secret        # TYPE Opaque, DATA 2
+kubectl describe secret investment-app-secret   # the keys and their sizes, not the values
+</code></pre>
+<h2 id="base64-a-secret-is-not-encrypted">base64: a Secret Is Not Encrypted</h2>
+<p><code>describe</code> hides the values. <code>get -o yaml</code> shows them in base64, and one command turns them back:</p>
+<pre><code class="language-bash">kubectl get secret investment-app-secret -o yaml          # data: DB_PASSWORD: Y2hhbmdl...
+kubectl get secret investment-app-secret \
+  -o jsonpath=&#x27;{.data.DB_PASSWORD}&#x27; | base64 -d           # change-me-class-password
+</code></pre>
+<p><strong>base64</strong> writes any data as ordinary text characters. It is a fixed mapping: the same input always gives the same output, and anyone can reverse it with <code>base64 -d</code>. It is not encryption and hides nothing. Secrets use it because a Secret can hold binary data, such as a certificate or a key file, and the API's YAML and JSON carry only text.</p>
+<p>On EKS, everything the API server stores in etcd is encrypted on disk with a key in AWS KMS (on by default from Kubernetes 1.28; this cluster runs 1.34). That protects the disk. The API server decrypts a Secret before it returns it, so anyone allowed to read the Secret gets the plain value. What protects a Secret is who is allowed to read it. You can read every Secret in your namespace. Later in this unit, Claude Code gets its own sign-in that can read your pods and ConfigMaps and cannot read Secrets.</p>
+<p><code>secret-investment-app.yaml</code> has the password in plain text, so do not commit it with a real password.</p>
+<h2 id="external-secrets-the-password-from-aws-secrets-manager">External Secrets: the Password from AWS Secrets Manager</h2>
+<p>In production nobody writes a Secret file. The password is kept in AWS Secrets Manager (or a tool such as HashiCorp Vault), and <strong>External Secrets</strong>, a controller running in the cluster, reads it and creates the Kubernetes Secret. You write an <code>ExternalSecret</code> object that names the value in Secrets Manager. The controller creates the Secret from it and checks Secrets Manager again on an interval you set, so a changed value reaches the Secret without anyone editing YAML. The repository holds only the reference. This is the last part of unit 4.</p>
+<h2 id="how-a-pod-gets-the-values-copied-once-when-the-container-starts">How a Pod Gets the Values: Copied Once, When the Container Starts</h2>
+<p>When a container starts, the kubelet on its node asks the API server for the ConfigMaps and Secrets the pod template names, and sets each key as an environment variable of the app's process. From then on, the values are a copy in the process's memory, until the container stops. The app reads only its environment variables, as in Scale. It never reads the ConfigMap or the Secret itself.</p>
+<pre><code class="language-yaml">envFrom:                          # every key of the ConfigMap, each as a variable
+  - configMapRef:
+      name: investment-app-config
+env:                              # one variable at a time
+  - name: DB_PASSWORD             # the variable the app reads
+    valueFrom:
+      secretKeyRef:
+        name: investment-app-secret
+        key: DB_PASSWORD          # the key it is read from
+  - name: FINNHUB_KEY
+    valueFrom:
+      secretKeyRef:
+        name: investment-app-secret
+        key: FINNHUB_KEY
+</code></pre>
+<p>Under <code>env:</code>, <code>name</code> is the variable inside the container and <code>key</code> is the key in the object, and the two can differ. <code>configMapKeyRef</code> does the same for one key of a ConfigMap. Both objects are separate from the pods, so any number of pods can read the same ConfigMap and Secret.</p>
+<h2 id="postgres-the-same-two-objects-one-key-at-a-time">Postgres: the Same Two Objects, One Key at a Time</h2>
+<p>The official <code>postgres</code> image reads <code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code> and <code>POSTGRES_DB</code> when it starts with no data. It creates that user as the database's superuser, with that password, and creates that database. The app then signs in as the same user, so <code>postgres.yaml</code> takes the values from the keys the app reads:</p>
+<pre><code class="language-yaml">env:
+  - name: POSTGRES_USER
+    valueFrom: { configMapKeyRef: { name: investment-app-config, key: DB_USER } }
+  - name: POSTGRES_DB
+    valueFrom: { configMapKeyRef: { name: investment-app-config, key: DB_NAME } }
+  - name: POSTGRES_PASSWORD
+    valueFrom: { secretKeyRef: { name: investment-app-secret, key: DB_PASSWORD } }
+</code></pre>
+<p><code>postgres.yaml</code> also creates the Service <code>db</code>, which is the <code>DB_HOST</code> the app connects to. The app connects as it starts, so Postgres goes first. If the app starts and no <code>db</code> Service exists, it cannot resolve <code>db</code>, exits, and its pod goes into <code>CrashLoopBackOff</code>. <code>postgres.yaml</code> has no volume, so every row is lost when its pod is replaced. Unit 6 adds storage.</p>
+<h2 id="checking-from-outside-and-from-inside-the-container">Checking: From Outside and from Inside the Container</h2>
+<pre><code class="language-bash">kubectl rollout status deploy/investment-app
+kubectl describe pod -l app=investment-app
+</code></pre>
+<p><code>describe</code> shows where each value comes from, not the value. <code>Environment Variables from:</code> lists the ConfigMap, and each Secret variable reads <code>&lt;set to the key 'DB_PASSWORD' in secret 'investment-app-secret'&gt;</code>. To see the values the app has, run a command inside the container:</p>
+<pre><code class="language-bash">kubectl exec deploy/investment-app -- env                  # every variable the app sees
+kubectl exec deploy/investment-app -- printenv TICKER      # one variable
+</code></pre>
+<p>Everything after <code>--</code> is the command to run in the container, not an option for <code>kubectl</code>. The <code>env</code> output is longer than the app's seven variables: <code>PATH</code>, <code>HOSTNAME</code> and <code>DB_SERVICE_HOST</code> are added by the image and by Kubernetes.</p>
+<h2 id="failure-1-a-pod-names-a-configmap-that-does-not-exist">Failure 1: a Pod Names a ConfigMap That Does Not Exist</h2>
+<p><code>deployment-investment-app-missing-configmap.yaml</code> names <code>investment-app-configs</code>, with an extra <code>s</code>. Kubernetes accepts the file and creates the pod, but the container never starts:</p>
+<pre><code class="language-bash">kubectl apply -f deployment-investment-app-missing-configmap.yaml
+kubectl get pods -l app=investment-app-broken    # STATUS CreateContainerConfigError
+kubectl logs deploy/investment-app-broken        # ... is waiting to start: CreateContainerConfigError
+kubectl describe pod -l app=investment-app-broken
+#   Warning  Failed  kubelet  Error: configmap &quot;investment-app-configs&quot; not found
+</code></pre>
+<p>There are no logs because the app never ran. Logs exist only once a container has started. The reason is in <code>describe</code>, in the events at the bottom. <code>kubectl get events</code> lists the same events for your whole namespace. <code>CreateContainerConfigError</code> means the kubelet could not build the container's settings, so check the names of the ConfigMaps and Secrets the pod refers to. It is not a crash.</p>
+<p>If you fix the name in this file and apply it again, the container starts and then crashes, because this file gives the app no Secret and so no password. Now <code>kubectl logs</code> has output, and it is the app's error. A container that never starts and an app that starts and fails are different problems, found in different places. Your working app is a different Deployment and keeps running. Remove the broken one:</p>
+<pre><code class="language-bash">kubectl delete -f deployment-investment-app-missing-configmap.yaml
+</code></pre>
+<h2 id="failure-2-you-edit-the-configmap-and-the-running-app-does-not-change">Failure 2: You Edit the ConfigMap, and the Running App Does Not Change</h2>
+<p>Change <code>TICKER</code> from <code>AAPL</code> to <code>MSFT</code> in the ConfigMap. The ConfigMap changes. The running app does not:</p>
+<pre><code class="language-bash">kubectl edit configmap investment-app-config            # TICKER: MSFT, then save and close
+kubectl describe configmap investment-app-config        # TICKER  MSFT
+kubectl exec deploy/investment-app -- printenv TICKER   # AAPL, still
+</code></pre>
+<p>The kubelet copies the values only when a container starts, and nothing copies them again while it runs. To get the new value, the app needs new containers, which means new pods. Deleting the pods works, but fewer pods serve while they are replaced, and none if you delete them all at once. <code>kubectl rollout restart</code> replaces the Deployment's pods one by one, as a rolling update does, and each new container starts with the values the ConfigMap has now:</p>
+<pre><code class="language-bash">kubectl get pods --watch                                # in a second terminal
+kubectl rollout restart deploy/investment-app
+kubectl rollout status deploy/investment-app
+kubectl exec deploy/investment-app -- printenv TICKER   # MSFT
+</code></pre>
+<p>After you change a ConfigMap or a Secret, replace the pods that use it.</p>
+<h2 id="next-practice-then-night-2">Next: Practice, Then Night 2</h2>
+<p>Run the files in <code>04-config-secrets-identity/</code> in your namespace in the order at the top. Check the values from outside with <code>describe</code> and from inside with <code>exec -- env</code>. Then break the ConfigMap's name, and change <code>TICKER</code>. Clean up when you finish:</p>
+<pre><code class="language-bash">kubectl delete -f . --ignore-not-found
+kubectl get pods,cm,secret               # kube-root-ca.crt is in every namespace and stays
+</code></pre>
+<p>Night 2 is who may read a Secret, and where the password comes from instead of a file. AWS says who you are and Kubernetes says what you may do, a Role and a binding, <code>kubectl auth can-i</code>, Claude Code with an identity that can read and cannot change, and External Secrets with the password in Secrets Manager.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> a <strong>ConfigMap</strong> holds the ordinary settings and a <strong>Secret</strong> holds the password and the API key, both stored in etcd in your namespace and kept out of the image and out of the Deployment's YAML. A Secret is base64, not encryption: what protects it is who may read it. A pod gets the values as environment variables, copied once when the container starts, through <code>envFrom</code> or <code>valueFrom</code> with <code>configMapKeyRef</code> and <code>secretKeyRef</code>. <strong><code>CreateContainerConfigError</code></strong> means a named ConfigMap or Secret is missing, and the reason is in <code>describe</code>, not in the logs. After a ConfigMap or Secret changes, <code>kubectl rollout restart</code> replaces the pods so the new containers start with the new values. In production, <strong>External Secrets</strong> creates the Secret from AWS Secrets Manager.</p>
+<h1 id="lesson-59-who-may-read-the-password-two-checks-rbac-a-read-only-claude-code">Lesson 59: Who May Read the Password — Two Checks, RBAC &amp; a Read-Only Claude Code</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Session 58 started unit 4: the investment app's settings moved into a ConfigMap and its password into a Secret. We saw that base64 hides nothing, so the password is safe only if the cluster lets the right users read Secrets and nobody else. Tonight is Part 3: who may read the password, and how the cluster decides. Every <code>kubectl</code> command is checked twice, first by AWS and then by Kubernetes. Kubernetes's own rules are Roles and RoleBindings, a program in a pod gets its own user, and Claude Code gets a sign-in that can read the cluster and cannot change it. Part 4, the password kept in AWS Secrets Manager, is next class.</p>
+<h2 id="before-you-start-night-1-s-objects">Before You Start: Night 1's Objects</h2>
+<p>The commands below need night 1's ConfigMap, Secret, Postgres and app in your namespace. To create them again, in <code>04-config-secrets-identity/</code>:</p>
+<pre><code class="language-bash">kubectl apply -f configmap-investment-app.yaml -f secret-investment-app.yaml \
+  -f postgres.yaml -f deployment-investment-app.yaml
+</code></pre>
+<p>For the Claude Code part you also need the read-only profile <code>312-cluster-readonly</code> from the setup page.</p>
+<h2 id="why-anyone-who-may-read-secrets-can-read-the-password">Why: Anyone Who May Read Secrets Can Read the Password</h2>
+<pre><code class="language-bash">kubectl get secret investment-app-secret -o jsonpath=&#x27;{.data.DB_PASSWORD}&#x27; | base64 -d
+# change-me-class-password
+</code></pre>
+<p>base64 hides nothing, so the password is safe only if the cluster lets the right users read Secrets and nobody else. Three questions follow:</p>
+<ol>
+<li>What may you do, and how do you find out?</li>
+<li>What may Claude Code do, since it runs commands for you?</li>
+<li>Where should the password live, if not in a file in Git?</li>
+</ol>
+<p>This class answers the first two.</p>
+<h2 id="two-checks-aws-says-who-you-are-kubernetes-says-what-you-may-do">Two Checks: AWS Says Who You Are, Kubernetes Says What You May Do</h2>
+<p>Kubernetes has no user accounts of its own. Each platform brings its own sign-in, and on EKS it is your AWS sign-in, the profile <code>312-cluster</code>. Every <code>kubectl</code> command passes two checks, in this order.</p>
+<p><strong>The AWS check.</strong> <code>kubectl</code> signs a token with your AWS credentials. EKS reads which IAM role signed it and looks the role up in the cluster's <strong>access entries</strong>, a table that maps an IAM role to a Kubernetes user. The whole class signs in through one role, <code>Containers26a</code>, and the access entry turns it into the user <code>student:</code> plus your sign-in name, which is also your namespace. Your sign-in name is at the end of the <code>Arn</code> that <code>aws sts get-caller-identity</code> prints. A role with no access entry fails here, even an AWS administrator's.</p>
+<p>The role's own IAM permissions, <code>eks:DescribeCluster</code> and <code>eks:ListClusters</code>, are not this check. They let <code>aws eks update-kubeconfig</code> read the cluster's address and write your kubeconfig. The access entry is what lets the role into the cluster. In the IAM console the role is named <code>AWSReservedSSO_Containers26a_…</code>, because IAM Identity Center created it.</p>
+<p><strong>The Kubernetes check.</strong> The cluster now knows your Kubernetes user and asks its own rules, RBAC, whether that user may do this action on this kind of object in this namespace.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Asked by</th>
+<th>Question</th>
+<th>Failure</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. AWS</td>
+<td>EKS access entries</td>
+<td>Which IAM role signed this, and is it let in?</td>
+<td><code>Unauthorized</code></td>
+</tr>
+<tr>
+<td>2. Kubernetes</td>
+<td>RBAC</td>
+<td>May this user do this action on this object here?</td>
+<td><code>Forbidden</code></td>
+</tr>
+</tbody>
+</table>
+<p>The error tells you which check failed:</p>
+<pre><code class="language-bash">error: You must be logged in to the server (Unauthorized)
+# the AWS check failed: the cluster does not know who you are
+
+Error from server (Forbidden): pods is forbidden: User &quot;student:&lt;you&gt;&quot; cannot list ...
+# the Kubernetes check failed: the cluster knows you, and no rule allows this
+</code></pre>
+<h2 id="whoami-the-user-the-cluster-made-from-your-sign-in">whoami: the User the Cluster Made From Your Sign-In</h2>
+<pre><code class="language-bash">kubectl auth whoami
+# ATTRIBUTE   VALUE
+# Username    student:&lt;namespace&gt;
+# Groups      [students system:authenticated]
+</code></pre>
+<p><code>students</code> is a group the whole class shares. <code>system:authenticated</code> means only that you signed in.</p>
+<h2 id="rbac-a-role-says-what-a-rolebinding-says-who">RBAC: a Role Says What, a RoleBinding Says Who</h2>
+<p><strong>RBAC</strong>, role-based access control, is made of two kinds of object:</p>
+<ul>
+<li>A <strong>Role</strong> lists what is allowed: which actions (verbs) on which kinds of object.</li>
+<li>A <strong>RoleBinding</strong> gives a Role to a user, in one namespace.</li>
+</ul>
+<p>A Role on its own gives nothing to anyone. A Role has only allow rules, and there is no deny: if no RoleBinding allows an action, Kubernetes refuses it.</p>
+<p>The idea is the same as IAM, with one word that means something different. A Kubernetes <strong>Role</strong> is like an IAM <strong>policy</strong>: a list of what is allowed. A RoleBinding is like attaching that policy to an IAM role. An IAM policy can say Allow or Deny; a Kubernetes Role can only allow.</p>
+<pre><code class="language-yaml">apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: &lt;namespace&gt;
+rules:
+- apiGroups: [&quot;&quot;]               # &quot;&quot; is the core group: pods, ConfigMaps, Secrets, Services
+  resources: [&quot;pods&quot;]           # [&quot;*&quot;] would mean every kind in the group
+  verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Verb</th>
+<th>Does</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get</code></td>
+<td>Reads one object when you know its name</td>
+<td><code>kubectl get pod web-1</code></td>
+</tr>
+<tr>
+<td><code>list</code></td>
+<td>Reads all of them</td>
+<td><code>kubectl get pods</code></td>
+</tr>
+<tr>
+<td><code>watch</code></td>
+<td>Waits for changes</td>
+<td><code>kubectl get pods --watch</code></td>
+</tr>
+</tbody>
+</table>
+<p>A Role with only <code>get</code> lets you read <code>pod/web-1</code> by name and refuses <code>kubectl get pods</code>. You do not need to remember the YAML. The Kubernetes documentation page "Using RBAC Authorization" has an example of each object.</p>
+<h2 id="clusterrole-four-objects-in-all">ClusterRole: Four Objects in All</h2>
+<p>A <strong>ClusterRole</strong> is a list of rules written once for the whole cluster. The binding that uses it decides where it applies:</p>
+<table>
+<thead>
+<tr>
+<th>Binding</th>
+<th>Points to</th>
+<th>Applies in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RoleBinding</strong></td>
+<td><strong>Role</strong></td>
+<td>One namespace</td>
+</tr>
+<tr>
+<td><strong>RoleBinding</strong></td>
+<td><strong>ClusterRole</strong></td>
+<td>The RoleBinding's namespace only</td>
+</tr>
+<tr>
+<td><strong>ClusterRoleBinding</strong></td>
+<td><strong>ClusterRole</strong></td>
+<td>Every namespace</td>
+</tr>
+</tbody>
+</table>
+<p>So there are four objects: a Role and a ClusterRole list rules; a RoleBinding and a ClusterRoleBinding give them to a user. A ClusterRoleBinding can point only to a ClusterRole, never to a Role. In one namespace, a Role and a ClusterRole with the same rules give the same rights. A ClusterRole exists so that one list of rules can be written once and used in many namespaces, or in all of them.</p>
+<p>The IAM role <code>Containers26a</code> and the ClusterRole <code>edit</code> are different things. The IAM role is how you sign in to AWS and pass the AWS check. <code>edit</code> lists what you may do in Kubernetes, and your RoleBinding gives it to you.</p>
+<p>Kubernetes comes with the ClusterRoles <code>view</code>, <code>edit</code> and <code>admin</code>. Your own access is the middle case: a RoleBinding <code>student-edit</code> in your namespace that points to the ClusterRole <code>edit</code>. One <code>edit</code> serves every student, each in their own namespace, so you can do everything <code>edit</code> allows in your namespace and nothing in a classmate's.</p>
+<pre><code class="language-yaml">kind: RoleBinding
+metadata:
+  name: student-edit
+  namespace: &lt;namespace&gt;   # applies only here
+roleRef:                   # what
+  kind: ClusterRole
+  name: edit
+subjects:                  # who
+- kind: User
+  name: student:&lt;namespace&gt;
+</code></pre>
+<p><code>edit</code> does not include reading Roles or RoleBindings, so you cannot print this one yourself. The Role is usually created before the binding that names it. A RoleBinding that names a Role that does not exist gives nothing until the Role is created.</p>
+<h2 id="serviceaccount-a-user-for-a-program">ServiceAccount: a User for a Program</h2>
+<p>A program in a pod has no AWS sign-in. Kubernetes knows it by its <strong>ServiceAccount</strong>, a user account made for a program. The pod's YAML names it with <code>serviceAccountName:</code>, Kubernetes gives the pod a token for it, and the program's requests arrive as <code>system:serviceaccount:&lt;namespace&gt;:&lt;name&gt;</code>.</p>
+<p>A pod that names no ServiceAccount runs as <code>default</code>:</p>
+<pre><code class="language-bash">kubectl describe pod -l app=investment-app | grep &#x27;Service Account&#x27;
+# Service Account:  default
+</code></pre>
+<p>The <code>default</code> ServiceAccount has no rights of its own. A Role bound to it would reach every pod in the namespace that names no ServiceAccount, so each program that needs rights gets its own ServiceAccount and its own small Role. A RoleBinding gives a ServiceAccount its rights the same way it does for a person.</p>
+<h2 id="report-bot-give-a-program-only-what-it-needs">report-bot: Give a Program Only What It Needs</h2>
+<p><code>report-bot</code> is a small program that reads the app's settings. It needs to read ConfigMaps and nothing else. Three objects:</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: report-bot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-reader
+rules:
+- apiGroups: [&quot;&quot;]
+  resources: [&quot;configmaps&quot;]
+  verbs: [&quot;get&quot;, &quot;list&quot;, &quot;watch&quot;]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: report-bot-reads-configmaps
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: configmap-reader
+subjects:
+- kind: ServiceAccount
+  name: report-bot
+</code></pre>
+<p><code>kubectl auth can-i</code> asks the cluster whether a user may do something and prints <code>yes</code> or <code>no</code>. It changes nothing. With <code>--as</code> it asks for another user. This was run in the <code>instructor</code> namespace, because students cannot create Roles or use <code>--as</code>:</p>
+<pre><code class="language-bash">BOT=system:serviceaccount:instructor:report-bot
+kubectl apply -f serviceaccount-report-bot.yaml -f role-configmap-reader.yaml
+kubectl auth can-i get configmaps --as $BOT      # no: a Role alone gives nothing
+kubectl apply -f rolebinding-report-bot.yaml
+kubectl auth can-i get configmaps --as $BOT      # yes
+kubectl auth can-i get secrets --as $BOT         # no
+kubectl auth can-i delete configmaps --as $BOT   # no
+</code></pre>
+<p>The RoleBinding gave <code>report-bot</code> one thing: reading ConfigMaps. This is <strong>least privilege</strong>: a user or a program gets only the permissions its job needs.</p>
+<h2 id="can-i-what-you-may-do-and-a-forbidden-message">can-i: What You May Do, and a Forbidden Message</h2>
+<pre><code class="language-bash">kubectl auth can-i get secrets                   # yes
+kubectl auth can-i delete pods                   # yes
+kubectl auth can-i get secrets -n &lt;classmate&gt;    # no
+kubectl get secrets -n &lt;classmate&gt;
+# Error from server (Forbidden): secrets is forbidden: User &quot;student:&lt;you&gt;&quot; cannot list
+# resource &quot;secrets&quot; in API group &quot;&quot; in the namespace &quot;&lt;classmate&gt;&quot;
+</code></pre>
+<p>The Forbidden message answers three questions:</p>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>Part of the message</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who asked</td>
+<td><code>User "student:&lt;you&gt;"</code></td>
+</tr>
+<tr>
+<td>What they tried</td>
+<td><code>cannot list resource "secrets"</code> (<code>API group ""</code> is the core group)</td>
+</tr>
+<tr>
+<td>Where</td>
+<td><code>in the namespace "&lt;classmate&gt;"</code></td>
+</tr>
+</tbody>
+</table>
+<p>No RoleBinding in your classmate's namespace names you, and that is what protects their password. <code>can-i</code> and Forbidden are about objects that exist in the cluster. A YAML file on your laptop is not in the cluster until you apply it.</p>
+<h2 id="claude-code-a-sign-in-that-can-read-and-cannot-change">Claude Code: a Sign-In That Can Read and Cannot Change</h2>
+<p>You can read every Secret in your namespace and delete anything in it. Claude Code runs <code>kubectl</code> for you, so with your sign-in it could do the same, including by mistake. To debug, it only needs to read. So it gets its own sign-in: the profile <code>312-cluster-readonly</code>, through the role <code>Containers26aReadOnly</code>. The access entry turns it into the user <code>readonly:&lt;namespace&gt;</code>, bound to the built-in <code>view</code> in your namespace.</p>
+<table>
+<thead>
+<tr>
+<th>In your namespace</th>
+<th>You (<code>edit</code>)</th>
+<th>Claude Code (<code>view</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read pods, logs, events, ConfigMaps</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Read Secrets</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Run commands in a pod (<code>exec</code>)</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Read Roles and RoleBindings</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Create, change, delete</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p>The setup page has the steps: the profile block in <code>~/.aws/config</code>, <code>aws sso login --profile 312-cluster-readonly</code>, and a separate kubeconfig file, <code>~/.kube/readonly</code>, so your own <code>~/.kube/config</code> does not change. Then check it and start Claude Code with it:</p>
+<pre><code class="language-bash">KUBECONFIG=~/.kube/readonly kubectl auth whoami            # readonly:&lt;namespace&gt;
+KUBECONFIG=~/.kube/readonly kubectl auth can-i get secrets # no
+KUBECONFIG=~/.kube/readonly AWS_PROFILE=312-cluster-readonly claude
+</code></pre>
+<p>In that session, asking Claude Code to create a pod ends in <code>pods is forbidden: User "readonly:&lt;namespace&gt;" cannot create resource "pods"</code>. Asking it to list pods works. Asked which Role a ServiceAccount uses, it can list the ServiceAccounts and cannot list Roles or RoleBindings, and it says so. Claude Code finds the problem, and you apply the fix yourself, in your own terminal, with your own profile.</p>
+<h2 id="next-practice-then-part-4">Next: Practice, Then Part 4</h2>
+<p>Run <code>kubectl auth whoami</code> and the <code>can-i</code> checks above with your own profile, then set up the read-only profile and run the same checks with it. Start Claude Code with the read-only kubeconfig and ask it what is running in your namespace and why a pod is not ready.</p>
+<p>Next class finishes unit 4 with Part 4: the External Secrets Operator copies the password from AWS Secrets Manager into a normal Secret, so no file in Git holds it.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> every <code>kubectl</code> command passes two checks. The <strong>AWS check</strong> maps your IAM role to a Kubernetes user through an access entry and fails with <code>Unauthorized</code>; the <strong>Kubernetes check</strong> is <strong>RBAC</strong> and fails with <code>Forbidden</code>. A <strong>Role</strong> lists what is allowed, with allow rules only and no deny, and a <strong>RoleBinding</strong> gives it to a user in one namespace; a <strong>ClusterRole</strong> is a rule list written once, and the binding decides where it applies. A <strong>ServiceAccount</strong> is the user for a program in a pod, and each program gets its own small Role, which is <strong>least privilege</strong>. <code>kubectl auth can-i</code> asks what a user may do, and the Forbidden message names who, what and where. Claude Code runs with the <code>312-cluster-readonly</code> profile, the user <code>readonly:&lt;namespace&gt;</code> bound to <code>view</code>, so it can read the cluster and cannot read Secrets or change anything.</p>
 
 </main>
 </body>

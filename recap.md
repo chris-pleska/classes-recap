@@ -2481,3 +2481,212 @@ curl localhost:8000
 kubectl delete -f . --ignore-not-found
 ```
 Next: readiness/liveness probes, then the Ingress and the shared load balancer.
+
+---
+
+## Lesson 56: Probes & the Ingress on the Shared Load Balancer
+Setup: put the full ECR URI (`834786370659.dkr.ecr.us-east-1.amazonaws.com/drill:v1`) in place of `IMAGE_URI` in every file — one missing character gives `InvalidImageName`.
+
+**A probe** = a check the kubelet runs against one container every few seconds. `Running` doesn't mean the app can answer.
+- **Readiness** — ready for requests? Failure → no traffic; container keeps running.
+- **Liveness** — still working? Failure → container restarts.
+- **Startup** — finished starting? Liveness and readiness wait until it passes. Only for slow starters.
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /              # a URL the app answers, not a folder
+    port: 8080
+  periodSeconds: 5
+  failureThreshold: 3    # failures in a row before not-ready
+```
+200–399 passes; anything else (or no answer) fails. Other settings: `initialDelaySeconds`, `timeoutSeconds` (1), `successThreshold` (1). Instead of `httpGet`: `tcpSocket`, `exec`, `grpc`.
+
+**A failing check stops a bad rollout** — the new pod never gets ready, so old pods keep serving. Kubernetes doesn't undo it; after 10 min `rollout status` reports the progress deadline exceeded.
+```bash
+kubectl apply -f deployment-drill-readiness-wrong-path.yaml   # checks /health → 404
+kubectl get pods -l app=drill -w                              # READY 0/1
+kubectl describe pod <the-new-pod>                            # Readiness probe failed ... 404
+kubectl describe endpointslices -l kubernetes.io/service-name=drill | grep -E 'Addresses|Ready'   # Ready: false
+kubectl apply -f deployment-drill-readiness.yaml              # fix: wrong ReplicaSet scales to 0
+```
+
+**Liveness** — same check, different action: restart the container (same pod, same IP, `RESTARTS` +1). Keeps failing → backoff 10s, 20s, 40s … 5 min, shown as `CrashLoopBackOff`. Check the app itself, not its database. Probes can't be edited on a running pod (`Forbidden`) — delete and recreate, or use a Deployment.
+```bash
+kubectl apply -f pod-drill-liveness.yaml
+kubectl get pod drill-liveness -w
+```
+
+**The Ingress** — a Service of type LoadBalancer = one billed load balancer per Service. An **Ingress** is a rule (host + path → Service) added to one shared Application Load Balancer, like Scale's listener rules.
+- **Ingress** — the rule; requests don't pass through it.
+- **IngressClass** (`alb`) — which program reads it, plus shared settings.
+- **Controller** — adds the rule to the ALB (EKS Auto Mode runs it here). ingress-nginx is retired (Mar 2026); Gateway API is the newer API.
+
+All class Ingresses share group `containers-26a` → one ALB, one rule each. The ALB sends traffic straight to ready pod IPs. **HTTPS ends at the ALB** — the `*.k8s.312school.com` ACM certificate is attached there; the ALB talks plain HTTP to the pod. Your Ingress mentions no certificate, and a wildcard DNS record means no DNS to create.
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: drill
+spec:
+  ingressClassName: alb
+  rules:
+    - host: <namespace>.k8s.312school.com   # only your own namespace allowed
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: drill
+                port:
+                  number: 80                # the Service's port — a wrong one breaks the shared ALB for everyone
+```
+```bash
+kubectl apply -f ingress-drill.yaml
+kubectl get ingress drill                      # ADDRESS appears after ~1 min
+curl https://<namespace>.k8s.312school.com
+kubectl get ingressclassparams alb -o yaml     # certificate ARN, group, scheme
+```
+An admission policy refuses an Ingress unless: host = `<namespace>.k8s.312school.com`, class = `alb`, one rule, one path, one Service. A bare `404` with `server: awselb/2.0` and an empty body = no rule matched; a 404 page from your app = the rule worked.
+
+**Request path:** DNS (wildcard) → ALB :443 (cert, HTTPS ends) → rule matches host + path → target group of ready pod IPs → plain HTTP to pod `10.20.x.x:8080`.
+
+**Unit 3 recap questions:** pod replaced → EndpointSlice address changes, Service name/ClusterIP/selector don't · destination rewritten to a pod IP on the client's own node by kube-proxy · `targetPort` must match the app's port (wrong = `Connection refused`) · LoadBalancer = ClusterIP + AWS NLB sending straight to pod IPs.
+
+**Clean up** (quota: 8 pods, 5 Services, 1 Ingress — deleting yours removes only your rule):
+```bash
+kubectl delete -f . --ignore-not-found
+```
+Next: unit 4 — configuration, secrets and identity.
+
+---
+
+## Lesson 57: Config & Secrets — ConfigMap, Secret and Why Pods Don't Update
+Setup: files in `04-config-secrets-identity/`; put your ECR URI in place of `IMAGE_URI` in both deployment files (image built `--platform linux/amd64`, or `exec format error`).
+
+**Why:** the unit 2 Deployment had all seven settings, `DB_PASSWORD` and `FINNHUB_KEY` included, typed into `env:` — in a repo anyone can read. Settings stay outside the image: a **ConfigMap** for ordinary settings (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `TICKER`), a **Secret** for the password and API key. The app's code doesn't change — it still reads seven env vars.
+```bash
+kubectl apply -f configmap-investment-app.yaml
+kubectl apply -f secret-investment-app.yaml
+kubectl apply -f postgres.yaml                 # first — the app exits if Service db doesn't exist
+kubectl apply -f deployment-investment-app.yaml
+```
+
+**DNS:** `<service>.<namespace>.svc.cluster.local` → ClusterIP, answered by the cluster's CoreDNS (`nameserver` in `/etc/resolv.conf`). The `search` line lets `curl drill` work in the same namespace; from another one use `drill.<namespace>`.
+
+**ConfigMap** — keys and values stored in etcd (control plane, not a node or pod). Every value is text, so numbers need quotes (`DB_PORT: "5432"`). Creating or editing one changes no pod. `immutable: true` = the only change is delete and recreate.
+```bash
+kubectl get cm                                     # DATA = number of keys
+kubectl describe configmap investment-app-config   # keys and values in plain text
+kubectl edit configmap investment-app-config
+```
+
+**Secret** — same idea, separate kind so a rule can allow ConfigMaps and not Secrets. `type: Opaque` = your own keys, not hidden. Write values under `stringData:` (plain); the cluster stores them under `data:` in base64.
+```bash
+kubectl describe secret investment-app-secret      # keys and sizes, not values
+kubectl get secret investment-app-secret -o jsonpath='{.data.DB_PASSWORD}' | base64 -d   # plain password
+```
+**base64 is not encryption** — a fixed mapping anyone can reverse. EKS encrypts etcd on disk with KMS, but the API server decrypts before returning, so what protects a Secret is who may read it. Don't commit a real password in `secret-investment-app.yaml`. In production, **External Secrets** reads the value from AWS Secrets Manager and creates the Secret (end of unit 4).
+
+**How a pod gets values:** the kubelet copies them into env vars once, when the container starts. The app never reads the ConfigMap or Secret itself.
+```yaml
+envFrom:                          # every key of the ConfigMap
+  - configMapRef:
+      name: investment-app-config
+env:                              # one at a time
+  - name: DB_PASSWORD             # variable the app reads
+    valueFrom:
+      secretKeyRef:
+        name: investment-app-secret
+        key: DB_PASSWORD          # key in the Secret
+```
+Postgres takes `POSTGRES_USER`/`POSTGRES_DB` from the ConfigMap (`configMapKeyRef`) and `POSTGRES_PASSWORD` from the Secret. `postgres.yaml` has no volume — rows are lost when the pod is replaced (unit 6).
+
+**Check:** `describe` shows where each value comes from, not the value; `exec` shows what the app has.
+```bash
+kubectl describe pod -l app=investment-app
+kubectl exec deploy/investment-app -- env
+kubectl exec deploy/investment-app -- printenv TICKER
+```
+
+**Failure 1 — missing ConfigMap** (`investment-app-configs`, extra `s`): pod status `CreateContainerConfigError`. No logs — the app never ran. The reason is in the events at the bottom of `describe`. Fixing the name then crashes the app (no Secret = no password), and *that* shows in `logs`. Never starting ≠ starting and failing.
+```bash
+kubectl apply -f deployment-investment-app-missing-configmap.yaml
+kubectl get pods -l app=investment-app-broken
+kubectl describe pod -l app=investment-app-broken   # configmap "..." not found
+kubectl delete -f deployment-investment-app-missing-configmap.yaml
+```
+
+**Failure 2 — edited ConfigMap, running app unchanged:** values are copied only at container start. `rollout restart` replaces pods one by one so new ones pick up the current values.
+```bash
+kubectl edit configmap investment-app-config        # TICKER: MSFT
+kubectl exec deploy/investment-app -- printenv TICKER   # AAPL, still
+kubectl rollout restart deploy/investment-app
+kubectl rollout status deploy/investment-app
+kubectl exec deploy/investment-app -- printenv TICKER   # MSFT
+```
+After changing a ConfigMap or Secret, replace the pods that use it.
+
+**Clean up:**
+```bash
+kubectl delete -f . --ignore-not-found
+kubectl get pods,cm,secret                          # kube-root-ca.crt stays
+```
+Next: night 2 — who may read a Secret (Role, binding, `kubectl auth can-i`), Claude Code with a read-only identity, External Secrets with Secrets Manager.
+
+---
+
+## Lesson 58: Who May Read the Password — Two Checks, RBAC & a Read-Only Claude Code
+Setup: needs night 1's objects (`kubectl apply -f configmap-investment-app.yaml -f secret-investment-app.yaml -f postgres.yaml -f deployment-investment-app.yaml`) and the `312-cluster-readonly` profile from the setup page.
+
+**Why:** anyone who may read Secrets can read the password — base64 hides nothing.
+
+**Two checks on every `kubectl` command, in order:**
+- **AWS** — kubectl signs a token; EKS looks the IAM role (`Containers26a`) up in the cluster's **access entries**, which map it to the Kubernetes user `student:<you>`. No access entry = fails, even for an AWS admin.
+- **Kubernetes** — RBAC decides whether that user may do this action on this kind of object in this namespace.
+
+```bash
+error: You must be logged in to the server (Unauthorized)   # AWS check failed
+Error from server (Forbidden): pods is forbidden: User "student:<you>" cannot list ...   # RBAC check failed
+kubectl auth whoami                                  # Username student:<namespace>, Groups [students system:authenticated]
+```
+
+**RBAC** — a **Role** says what (verbs on resource kinds), a **RoleBinding** says who (in one namespace). Allow rules only, no deny; no binding = refused. Like an IAM policy + attaching it. `get` = one by name, `list` = all (`kubectl get pods` needs it), `watch` = changes.
+```yaml
+kind: Role
+rules:
+- apiGroups: [""]               # "" = core group: pods, ConfigMaps, Secrets, Services
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+```
+**Four objects:** Role + ClusterRole list rules; RoleBinding + ClusterRoleBinding hand them out. RoleBinding → ClusterRole applies only in the binding's namespace; ClusterRoleBinding → every namespace (and can only point to a ClusterRole). Built-ins: `view`, `edit`, `admin`. Your access = RoleBinding `student-edit` → ClusterRole `edit`, in your namespace. The IAM role `Containers26a` ≠ the ClusterRole `edit`.
+
+**ServiceAccount** — a user for a program in a pod (`serviceAccountName:`), seen as `system:serviceaccount:<ns>:<name>`. No name = `default`, which has no rights. Give each program its own ServiceAccount + small Role (least privilege).
+```bash
+kubectl describe pod -l app=investment-app | grep 'Service Account'   # default
+BOT=system:serviceaccount:instructor:report-bot       # run in instructor ns (students can't use --as)
+kubectl auth can-i get configmaps --as $BOT           # no: a Role alone gives nothing
+kubectl apply -f rolebinding-report-bot.yaml
+kubectl auth can-i get configmaps --as $BOT           # yes
+kubectl auth can-i get secrets --as $BOT              # no
+```
+
+**Your own rights, and a Forbidden message:**
+```bash
+kubectl auth can-i get secrets                        # yes
+kubectl auth can-i get secrets -n <classmate>         # no
+kubectl get secrets -n <classmate>                    # Forbidden: who, what, which namespace
+```
+Forbidden says who asked, what they tried (`API group ""` = core), and where. No RoleBinding in the classmate's namespace names you — that protects their password.
+
+**Read-only Claude Code** — it runs kubectl for you, so give it its own sign-in: profile `312-cluster-readonly`, role `Containers26aReadOnly`, user `readonly:<namespace>`, bound to `view`. Reads pods, logs, events, ConfigMaps; no Secrets, no `exec`, no Roles/RoleBindings, no create/change/delete. Separate kubeconfig `~/.kube/readonly` so yours is untouched.
+```bash
+aws sso login --profile 312-cluster-readonly
+KUBECONFIG=~/.kube/readonly kubectl auth whoami            # readonly:<namespace>
+KUBECONFIG=~/.kube/readonly kubectl auth can-i get secrets # no
+KUBECONFIG=~/.kube/readonly AWS_PROFILE=312-cluster-readonly claude
+```
+Claude Code finds the problem; you apply the fix yourself, in your own terminal, with your own profile.
+
+Next: Part 4 — External Secrets Operator copies the password from AWS Secrets Manager into a normal Secret, so no file in Git holds it.
