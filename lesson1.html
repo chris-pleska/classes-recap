@@ -96,6 +96,8 @@
 <li><a href="#lesson-57-probes-the-ingress-the-shared-load-balancer-ready-alive-reachable">Lesson 57: Probes, the Ingress &amp; the Shared Load Balancer — Ready, Alive, Reachable</a></li>
 <li><a href="#lesson-58-config-secrets-identity-settings-outside-the-image">Lesson 58: Config, Secrets &amp; Identity — Settings Outside the Image</a></li>
 <li><a href="#lesson-59-who-may-read-the-password-two-checks-rbac-a-read-only-claude-code">Lesson 59: Who May Read the Password — Two Checks, RBAC &amp; a Read-Only Claude Code</a></li>
+<li><a href="#lesson-60-the-password-out-of-git-and-what-a-pod-may-use-external-secrets-requests-limits">Lesson 60: The Password Out of Git, and What a Pod May Use — External Secrets, Requests &amp; Limits</a></li>
+<li><a href="#lesson-61-namespace-limits-the-hpa-what-more-pods-cannot-fix-limitrange-resourcequota-autoscaling">Lesson 61: Namespace Limits, the HPA &amp; What More Pods Cannot Fix — LimitRange, ResourceQuota &amp; Autoscaling</a></li>
   </ul>
 </nav>
 <main>
@@ -11489,6 +11491,503 @@ KUBECONFIG=~/.kube/readonly AWS_PROFILE=312-cluster-readonly claude
 <p>Next class finishes unit 4 with Part 4: the External Secrets Operator copies the password from AWS Secrets Manager into a normal Secret, so no file in Git holds it.</p>
 <p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
 <p><strong>What you know now:</strong> every <code>kubectl</code> command passes two checks. The <strong>AWS check</strong> maps your IAM role to a Kubernetes user through an access entry and fails with <code>Unauthorized</code>; the <strong>Kubernetes check</strong> is <strong>RBAC</strong> and fails with <code>Forbidden</code>. A <strong>Role</strong> lists what is allowed, with allow rules only and no deny, and a <strong>RoleBinding</strong> gives it to a user in one namespace; a <strong>ClusterRole</strong> is a rule list written once, and the binding decides where it applies. A <strong>ServiceAccount</strong> is the user for a program in a pod, and each program gets its own small Role, which is <strong>least privilege</strong>. <code>kubectl auth can-i</code> asks what a user may do, and the Forbidden message names who, what and where. Claude Code runs with the <code>312-cluster-readonly</code> profile, the user <code>readonly:&lt;namespace&gt;</code> bound to <code>view</code>, so it can read the cluster and cannot read Secrets or change anything.</p>
+<h1 id="lesson-60-the-password-out-of-git-and-what-a-pod-may-use-external-secrets-requests-limits">Lesson 60: The Password Out of Git, and What a Pod May Use — External Secrets, Requests &amp; Limits</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Session 59 was about who may read a Secret: AWS says who you are, RBAC says what you may do, and Claude Code runs with a read-only profile. One problem was left over: <code>secret-investment-app.yaml</code> still holds the password, and a file in Git is readable by everyone with the repository. Tonight finishes unit 4 by moving the password into AWS Secrets Manager, with the External Secrets Operator copying it into a normal Secret. Then unit 5 starts: each container declares how much CPU and memory it needs and how much it may use, and the cluster acts on both.</p>
+<h2 id="before-you-start-what-is-already-in-your-namespace">Before You Start: What Is Already in Your Namespace</h2>
+<p>These were created for you before class:</p>
+<ul>
+<li>the External Secrets Operator, in its own namespace <code>external-secrets</code></li>
+<li>in your namespace, the SecretStore <code>aws-secrets-manager</code> and the ServiceAccount <code>secrets-reader</code></li>
+<li>in AWS Secrets Manager, your secret <code>/26a/&lt;namespace&gt;/investment-app</code>, created by a script with a random <code>DB_PASSWORD</code> and a placeholder <code>FINNHUB_KEY</code></li>
+</ul>
+<p>You also need night 1's objects: the ConfigMap, the Secret you made by hand, Postgres and the app. In <code>04-config-secrets-identity/</code>:</p>
+<pre><code class="language-bash">kubectl apply -f configmap-investment-app.yaml -f secret-investment-app.yaml \
+  -f postgres.yaml -f deployment-investment-app.yaml
+kubectl get secretstore,serviceaccount
+</code></pre>
+<h2 id="why-a-secrets-file-in-git-is-the-password-in-git">Why: a Secret's File in Git Is the Password in Git</h2>
+<pre><code class="language-bash">kubectl get secret investment-app-secret -o jsonpath='{.data.DB_PASSWORD}' | base64 -d
+</code></pre>
+<p>A Secret's values are base64, and base64 is not encryption: one command turns them back into the password. So <code>secret-investment-app.yaml</code> cannot go into Git, where everyone with the repository would read it. A <code>.gitignore</code> keeps the file out of Git, but then nobody else on the team has the password. Secrets Manager keeps it where a teammate with permission can read it.</p>
+<h2 id="external-secrets-the-operator-copies-the-password-from-aws-into-a-normal-secret">External Secrets: the Operator Copies the Password From AWS Into a Normal Secret</h2>
+<p>The <strong>External Secrets Operator</strong> is a controller, like the Deployment controller: an open-source add-on, not part of Kubernetes, installed on this cluster with Helm. It works in this order:</p>
+<ol>
+<li>It reads your <strong>ExternalSecret</strong>, which says which AWS secret to copy and which Kubernetes Secret to write.</li>
+<li>The ExternalSecret names a <strong>SecretStore</strong>, <code>aws-secrets-manager</code>. The SecretStore holds the AWS region and the ServiceAccount to sign in as, <code>secrets-reader</code>.</li>
+<li><code>secrets-reader</code> is linked to an IAM role that may read only <code>/26a/&lt;namespace&gt;/</code>. The operator signs in to AWS as that role and reads your secret.</li>
+<li>It writes a normal Secret, <code>investment-app-secret</code>, into your namespace, and reads AWS again every hour.</li>
+<li>Your pod reads that Secret as in night 1: the values become environment variables when the container starts.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Lives in</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SecretStore</strong></td>
+<td>Your namespace</td>
+<td>The AWS region and the ServiceAccount to sign in as</td>
+</tr>
+<tr>
+<td><strong>ExternalSecret</strong></td>
+<td>Your namespace</td>
+<td>Which AWS secret to copy and which Secret to write</td>
+</tr>
+<tr>
+<td><strong>Secret</strong></td>
+<td>Your namespace</td>
+<td>The copied values, written by the operator</td>
+</tr>
+<tr>
+<td>AWS secret</td>
+<td>Secrets Manager</td>
+<td>The real password</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-externalsecret-the-one-file-you-write-and-it-can-go-into-git">The ExternalSecret: the One File You Write, and It Can Go Into Git</h2>
+<pre><code class="language-yaml">apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: investment-app-secret
+spec:
+  secretStoreRef:
+    name: aws-secrets-manager      # the SecretStore set up for you
+  refreshInterval: 1h              # read AWS again every hour
+  target:
+    name: investment-app-secret    # the Secret to write
+  dataFrom:
+    - extract:
+        key: /26a/&lt;namespace&gt;/investment-app   # the path in Secrets Manager
+</code></pre>
+<ul>
+<li><code>secretStoreRef</code>: the SecretStore set up for you.</li>
+<li><code>refreshInterval</code>: read AWS again every hour.</li>
+<li><code>target</code>: the Secret to write. It keeps night 1's name, so the Deployments do not change.</li>
+<li><code>key</code>: the path of your secret in Secrets Manager. Both of its values, <code>DB_PASSWORD</code> and <code>FINNHUB_KEY</code>, are copied.</li>
+</ul>
+<p>The file holds the path, not the password. Someone who reads it in Git still needs AWS permission on that path, or access to your namespace, to see the value.</p>
+<h2 id="hands-on-replace-the-hand-made-secret">Hands-On: Replace the Hand-Made Secret</h2>
+<p>In <code>externalsecret-investment-app.yaml</code>, replace <code>NAMESPACE</code> in the <code>key</code> with your namespace. Then delete the Secret you made by hand so the operator can write its own, apply the ExternalSecret, wait for it to be ready, and replace the pods so they read the new Secret:</p>
+<pre><code class="language-bash">kubectl delete secret investment-app-secret
+kubectl apply -f externalsecret-investment-app.yaml
+kubectl get externalsecret            # wait for STATUS SecretSynced, READY True
+kubectl get secret investment-app-secret
+kubectl rollout restart deploy/postgres deploy/investment-app
+</code></pre>
+<p>If a pod shows a restart afterwards, <code>kubectl logs &lt;pod&gt; --previous</code> prints the log of the container before it restarted. Git has no password now. Secrets Manager holds the real one, and the cluster holds a normal Secret copied from it.</p>
+<h2 id="rotation-a-running-pod-keeps-the-value-it-started-with">Rotation: a Running Pod Keeps the Value It Started With</h2>
+<p>When the value in Secrets Manager changes, the operator updates the Secret within the <code>refreshInterval</code>. The running containers do not notice: they read the Secret once, when they started. <code>kubectl rollout restart</code> replaces the pods, and the new containers read the new value.</p>
+<h2 id="failure-asking-for-another-students-password">Failure: Asking for Another Student's Password</h2>
+<p><code>externalsecret-other-path.yaml</code> asks for a classmate's path: replace <code>CLASSMATE</code> in its <code>key</code> with a classmate's namespace. Kubernetes accepts the object, and AWS refuses the read:</p>
+<pre><code class="language-bash">kubectl apply -f externalsecret-other-path.yaml
+kubectl get externalsecret other-path
+# other-path   SecretStore   aws-secrets-manager   1h   SecretSyncedError   False
+kubectl describe externalsecret other-path      # the Events at the end
+# AccessDeniedException: ... assumed-role/containers-26a-secrets-&lt;namespace&gt;/... is not authorized
+# to perform: secretsmanager:GetSecretValue on resource: /26a/&lt;classmate&gt;/investment-app
+</code></pre>
+<p>Read it as four facts:</p>
+<table>
+<thead>
+<tr>
+<th>Fact</th>
+<th>In this message</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Who</td>
+<td>The IAM role behind <code>secrets-reader</code></td>
+</tr>
+<tr>
+<td>What</td>
+<td><code>GetSecretValue</code></td>
+</tr>
+<tr>
+<td>Where</td>
+<td>The classmate's path</td>
+</tr>
+<tr>
+<td>The answer</td>
+<td>No policy allows it</td>
+</tr>
+</tbody>
+</table>
+<p><code>SecretSyncedError</code> always means the operator could not read the secret; the event says why, for example a wrong path or a refused permission. Delete the object when you are done: <code>kubectl delete externalsecret other-path</code>.</p>
+<h2 id="unit-5-request-actual-use-and-limit-are-three-different-numbers">Unit 5: Request, Actual Use and Limit Are Three Different Numbers</h2>
+<p>A pod runs on a node, an EC2 instance with a fixed amount of CPU and memory, and other pods share that node. With no limits, one busy pod can use the CPU and memory the others need. So each container declares two numbers, and a third is measured:</p>
+<table>
+<thead>
+<tr>
+<th>Number</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Request</strong></td>
+<td>The amount the scheduler uses to choose a node for the pod</td>
+</tr>
+<tr>
+<td><strong>Limit</strong></td>
+<td>The most the container may use while it runs</td>
+</tr>
+<tr>
+<td><strong>Actual use</strong></td>
+<td>What the running container uses right now. It can be below or above the request, never above the limit</td>
+</tr>
+</tbody>
+</table>
+<h2 id="units-cpu-in-millicores-memory-in-mebibytes">Units: CPU in Millicores, Memory in Mebibytes</h2>
+<ul>
+<li><code>1000m</code> = 1 CPU core. A request of <code>250m</code> is a quarter of a core, so four such pods fit on one core.</li>
+<li><code>1024Mi</code> = <code>1Gi</code>. A request of <code>512Mi</code> is half a GiB. <code>Mi</code> is mebibytes and <code>Gi</code> is gibibytes.</li>
+<li><code>m</code> is only for CPU, never for memory.</li>
+</ul>
+<h2 id="placement-a-pods-requests-must-fit-on-one-node">Placement: a Pod's Requests Must Fit on One Node</h2>
+<p>Each node offers its <strong>allocatable</strong> capacity: what is left after the node reserves CPU and memory for its own services. The scheduler adds up the requests of the pods already on a node and places a new pod only where its requests still fit. If node A and node B each have <code>400m</code> left, a pod that requests <code>600m</code> fits on neither: the scheduler cannot split one pod across two nodes.</p>
+<p>A request reserves room for scheduling. It does not use CPU, and it does not stop the container from using spare CPU above it.</p>
+<h2 id="at-the-limit-cpu-waits-memory-ends-the-container">At the Limit: CPU Waits, Memory Ends the Container</h2>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>When the container reaches it</th>
+<th>What you see</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CPU</strong></td>
+<td>The extra work waits. This is <strong>throttling</strong>: the container keeps running and answers slower</td>
+<td>Slower responses; a slow response alone does not prove throttling, the throttling measurements and the response times are the evidence</td>
+</tr>
+<tr>
+<td><strong>Memory</strong></td>
+<td>The container is killed: <strong>OOMKilled</strong>, out of memory</td>
+<td>The kubelet starts the container again in the same pod, and the pod is not replaced. <code>RESTARTS</code> counts each restart, and <code>kubectl describe pod</code> shows <code>Last State: Terminated, Reason: OOMKilled</code></td>
+</tr>
+</tbody>
+</table>
+<p>If the app needs that memory every time, it is killed again. Users of a Service with several pods see slower answers from a throttled pod, and errors only while every pod is restarting.</p>
+<h2 id="measure-before-you-choose-the-numbers">Measure Before You Choose the Numbers</h2>
+<pre><code class="language-bash">kubectl top pods -l app=investment-app
+kubectl describe pods -l app=investment-app
+</code></pre>
+<p><code>top</code> shows recent CPU and memory use for each pod; <code>-l app=investment-app</code> selects the app's pods by their label. <code>describe</code> shows the last termination reason and the events. One <code>top</code> result is a snapshot, so measure at startup, under normal traffic and at peaks. Then set the requests from what you measured, a CPU limit that keeps response times acceptable, and a memory limit above the highest use you saw. Check for throttling, OOM kills and Pending pods, and change the values when the load changes.</p>
+<h2 id="the-yaml-requests-and-limits-belong-to-each-container">The YAML: Requests and Limits Belong to Each Container</h2>
+<pre><code class="language-yaml">resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+</code></pre>
+<p>The <code>resources</code> field goes on the container, inside the Deployment's <code>spec.template.spec.containers</code>, so every replacement pod gets it. The scheduler checks the requests; the node enforces the limits. These values show the shape; your app's come from measuring it. To add resources to unit 4's app, in <code>05-health-and-capacity/</code> (two replicas, 200m CPU and 256Mi memory in total):</p>
+<pre><code class="language-bash">kubectl patch deployment investment-app --type=strategic \
+  --patch-file investment-app-resources.patch.yaml
+kubectl rollout status deployment/investment-app --timeout=120s
+</code></pre>
+<h2 id="pending-the-event-says-why-a-pod-has-no-node">Pending: the Event Says Why a Pod Has No Node</h2>
+<pre><code class="language-bash">kubectl describe pods -l app=investment-app
+</code></pre>
+<p><code>PodScheduled: False</code> and a <code>FailedScheduling</code> event mean no node was assigned. The event gives one of three reasons:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Not enough capacity</strong></td>
+<td>No node has enough free CPU or memory for the requests</td>
+</tr>
+<tr>
+<td><strong>Placement rule</strong></td>
+<td>No node matches the pod's node requirements</td>
+</tr>
+<tr>
+<td><strong>Node unavailable</strong></td>
+<td>A suitable node is not Ready yet, for example a new node that is still starting</td>
+</tr>
+</tbody>
+</table>
+<p>A pod can also be Pending after it has a node, while its image downloads.</p>
+<h2 id="next-practice-then-the-namespaces-own-rules">Next: Practice, Then the Namespace's Own Rules</h2>
+<p>Do the hands-on above in your own namespace, then the lab on CPU and memory requests and limits. Next class continues unit 5: a LimitRange that fills in requests nobody wrote, a ResourceQuota that caps the namespace's total, and the HorizontalPodAutoscaler that adds pods when CPU use rises.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> a Secret's file in Git is the password in Git, because base64 is not encryption. The <strong>External Secrets Operator</strong> reads an <strong>ExternalSecret</strong>, signs in to AWS through the <strong>SecretStore</strong>'s ServiceAccount, and writes a normal Secret every <code>refreshInterval</code>; the ExternalSecret holds a path, not the password, so it can go into Git. A running pod keeps the value it started with until <code>kubectl rollout restart</code>, and a read of another student's path ends in <code>SecretSyncedError</code> with an <code>AccessDeniedException</code> naming who, what and where. A container's <strong>request</strong> is what the scheduler uses to place the pod on one node, its <strong>limit</strong> is the most it may use, and actual use is measured with <code>kubectl top</code>. <code>1000m</code> is one CPU core and <code>1024Mi</code> is <code>1Gi</code>. At the CPU limit the container is throttled and keeps running; at the memory limit it is <strong>OOMKilled</strong> and restarted in the same pod. A Pending pod's <code>FailedScheduling</code> event says whether capacity, a placement rule or an unavailable node is the reason.</p>
+
+<h1 id="lesson-61-namespace-limits-the-hpa-what-more-pods-cannot-fix-limitrange-resourcequota-autoscaling">Lesson 61: Namespace Limits, the HPA &amp; What More Pods Cannot Fix — LimitRange, ResourceQuota &amp; Autoscaling</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Session 60 finished unit 4 and started unit 5: each container declares a <strong>request</strong>, the amount the scheduler uses to place the pod, and a <strong>limit</strong>, the most the container may use, and actual use is measured with <code>kubectl top</code>. Tonight finishes unit 5. The requests and limits go onto the running app with <code>kubectl patch</code>. Then the namespace gets two policies of its own: a LimitRange checks each container, and a ResourceQuota adds up the whole namespace. When traffic rises, the Horizontal Pod Autoscaler adds pods, and EKS Auto Mode adds nodes when pods do not fit. The last part is the case where more pods do not help at all: the database is down.</p>
+<h2 id="recap-request-actual-use-and-limit">Recap: Request, Actual Use and Limit</h2>
+<table>
+<thead>
+<tr>
+<th>Number</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Request</strong></td>
+<td>What the scheduler reserves for the container on a node. A pod's requests must fit on one node: two nodes with <code>400m</code> free each cannot hold a pod that requests <code>600m</code></td>
+</tr>
+<tr>
+<td><strong>Actual use</strong></td>
+<td>What the container uses now. <code>kubectl top pods -l app=investment-app</code> shows it, and one result is a snapshot, not a history</td>
+</tr>
+<tr>
+<td><strong>Limit</strong></td>
+<td>The most the container may use. Over the CPU limit, work waits (throttling). Over the memory limit, the container is killed (<code>OOMKilled</code>) and restarted in the same pod</td>
+</tr>
+</tbody>
+</table>
+<h2 id="patch-add-requests-and-limits-to-the-running-app">Patch: Add Requests and Limits to the Running App</h2>
+<p>In <code>05-health-and-capacity/</code>:</p>
+<pre><code class="language-bash">kubectl get deployment investment-app -o yaml   # resources: {} — nothing declared yet
+kubectl patch deployment investment-app --type=strategic \
+  --patch-file investment-app-resources.patch.yaml
+kubectl rollout status deployment/investment-app --timeout=120s
+kubectl get deployment investment-app -o yaml   # resources now has requests and limits
+</code></pre>
+<p>The patch file does not start with <code>apiVersion</code> and <code>kind</code>. It starts at the place it changes: <code>spec.template.spec.containers</code>, the container named <code>investment-app</code>, and its <code>resources</code>. Kubernetes follows that path in the live Deployment and adds the values: requests <code>100m</code> CPU and <code>128Mi</code> memory, limits <code>250m</code> CPU and <code>256Mi</code> memory. Changing the pod template starts a rollout: a new ReplicaSet, new pods, the old pods removed.</p>
+<p><code>kubectl patch</code> changes the Deployment stored in the cluster, not your YAML file. Add the same <code>resources</code> to the file in Git too, because a Deployment created again from the old file has no requests or limits. Editing the file and running <code>kubectl apply -f</code> gives the same result as the patch.</p>
+<h2 id="pending-three-reasons-a-pod-has-no-node">Pending: Three Reasons a Pod Has No Node</h2>
+<pre><code class="language-bash">kubectl describe pods -l app=investment-app
+</code></pre>
+<p><code>PodScheduled: False</code> and a <code>FailedScheduling</code> event mean no node was assigned. The event gives the reason:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Not enough capacity</strong></td>
+<td>No node has enough free CPU or memory for the requests</td>
+</tr>
+<tr>
+<td><strong>Placement rule</strong></td>
+<td>No node matches the pod's node requirements. One kind is a <strong>taint</strong>: a mark on a node that keeps away every pod without a matching <strong>toleration</strong>. Teams use it to keep ordinary pods off GPU nodes, or to give one application nodes of its own</td>
+</tr>
+<tr>
+<td><strong>Node unavailable</strong></td>
+<td>A suitable node is not Ready yet, for example a new node that is still starting</td>
+</tr>
+</tbody>
+</table>
+<p>A pod can also be Pending after it has a node, while its image downloads.</p>
+<h2 id="limitrange-defaults-and-a-maximum-for-each-container">LimitRange: Defaults and a Maximum for Each Container</h2>
+<p>A <strong>LimitRange</strong> is a policy on a namespace. When a container declares no requests or limits, it fills them in. When a container declares more than the maximum, the pod is rejected. Your namespace has one:</p>
+<pre><code class="language-bash">kubectl get limitrange -o yaml
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value in your namespace</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default requests, per container</td>
+<td><code>50m</code> CPU and <code>64Mi</code> memory</td>
+</tr>
+<tr>
+<td>Default limits, per container</td>
+<td><code>250m</code> CPU and <code>256Mi</code> memory</td>
+</tr>
+<tr>
+<td>Maximum, per container</td>
+<td><code>1</code> CPU and <code>1Gi</code>. <code>1</code> CPU is the same as <code>1000m</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>A value you write yourself is kept: a <code>100m</code> request stays <code>100m</code>.</li>
+<li>A <code>2</code> CPU limit is above the maximum, so the pod is not created. The maximum is not a default.</li>
+<li>A LimitRange is checked when a pod is created. Changing it does not change pods that are already running.</li>
+</ul>
+<h2 id="resourcequota-a-total-for-the-whole-namespace">ResourceQuota: A Total for the Whole Namespace</h2>
+<p>A <strong>ResourceQuota</strong> adds up what every pod in the namespace declares and refuses a new pod that would take the total over the cap. It counts declarations, not measured use. Your namespace allows:</p>
+<table>
+<thead>
+<tr>
+<th>Quota</th>
+<th>Cap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU requests</td>
+<td><code>500m</code></td>
+</tr>
+<tr>
+<td>Memory requests</td>
+<td><code>1Gi</code></td>
+</tr>
+<tr>
+<td>CPU limits</td>
+<td><code>2</code></td>
+</tr>
+<tr>
+<td>Memory limits</td>
+<td><code>2Gi</code></td>
+</tr>
+<tr>
+<td>Pods</td>
+<td>8, including the app and Postgres you already run</td>
+</tr>
+</tbody>
+</table>
+<p><code>deployment-quota-failure.yaml</code> asks for <code>600m</code> of CPU, more than the whole namespace may request:</p>
+<pre><code class="language-bash">kubectl apply -f deployment-quota-failure.yaml
+kubectl get pods -l app=unit5-quota             # no pod
+kubectl describe rs -l app=unit5-quota          # FailedCreate ... exceeded quota
+kubectl describe resourcequota                  # Used against Hard
+kubectl delete -f deployment-quota-failure.yaml
+</code></pre>
+<p>The Deployment is accepted, but its ReplicaSet cannot create the pod, so there is nothing to describe on the pod side. A bigger or extra node does not change this: the quota belongs to the namespace. In a company each team usually has its own namespace, and the quota keeps one team from using the whole cluster and its cost.</p>
+<h2 id="comparison-three-places-set-cpu-and-memory-numbers">Comparison: Three Places Set CPU and Memory Numbers</h2>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Covers</th>
+<th>Who writes it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Container <code>resources</code></td>
+<td>One container's request and limit</td>
+<td>You, in the Deployment</td>
+</tr>
+<tr>
+<td>LimitRange</td>
+<td>Each container in the namespace: fills missing values, rejects values above its maximum</td>
+<td>The cluster's administrators</td>
+</tr>
+<tr>
+<td>ResourceQuota</td>
+<td>The namespace's total requests, limits and pod count</td>
+<td>The cluster's administrators</td>
+</tr>
+</tbody>
+</table>
+<p>None of them is set on a node. A node only has its capacity, and the scheduler places pods by their requests.</p>
+<h2 id="diagnose-read-the-event-on-the-object-that-failed">Diagnose: Read the Event on the Object That Failed</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Where to look</th>
+<th>What it says</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pod Pending</strong></td>
+<td><code>kubectl describe pods</code>, then the Events at the end</td>
+<td><code>FailedScheduling: Insufficient cpu</code> means no node fits the CPU request</td>
+</tr>
+<tr>
+<td><strong>No new pod</strong></td>
+<td><code>kubectl describe rs</code></td>
+<td><code>FailedCreate: exceeded quota</code> means creation was refused</td>
+</tr>
+<tr>
+<td><strong>Container restarted</strong></td>
+<td><code>kubectl describe pod</code></td>
+<td><code>Last State: Terminated, Reason: OOMKilled</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>OOMKilled</code> alone does not prove the container's own limit caused it. When the pods on a node together use more memory than the node has, a container can be killed below its own limit.</p>
+<h2 id="the-hpa-more-traffic-more-pods">The HPA: More Traffic, More Pods</h2>
+<p>Traffic rises, each pod does more work, CPU use rises, and more replicas share the requests. The <strong>Horizontal Pod Autoscaler (HPA)</strong> does this: it is a controller that reads the pods' CPU use and changes the Deployment's replica count toward a target.</p>
+<p>It measures CPU utilization against the request:</p>
+<pre><code class="language-text">measured 200m ÷ requested 100m × 100 = 200% utilization
+</code></pre>
+<p>With a target of 60%, 200% asks for more pods. Changing the request changes this percentage even when the use does not change, which is why CPU scaling needs CPU requests.</p>
+<h2 id="hands-on-watch-the-hpa-scale-from-one-pod-to-two">Hands-On: Watch the HPA Scale From One Pod to Two</h2>
+<p>From <code>05-health-and-capacity/</code>. The demo Deployment's pod requests <code>50m</code> CPU, so the 60% target means <code>30m</code> per pod. <code>pod-load.yaml</code> is a client that sends requests for three minutes.</p>
+<pre><code class="language-bash">kubectl top pods                                   # metrics must work first
+kubectl apply -f deployment-cpu-demo.yaml
+kubectl rollout status deployment/unit5-cpu --timeout=120s
+kubectl apply -f hpa-cpu-demo.yaml
+kubectl apply -f pod-load.yaml
+kubectl get hpa unit5-cpu --watch                  # Ctrl-C after REPLICAS reaches 2
+kubectl top pods -l app=unit5-cpu
+kubectl describe hpa unit5-cpu                     # SuccessfulRescale in the Events
+</code></pre>
+<p>Without <code>pod-load.yaml</code> there is no traffic and the target stays near 2%. A first <code>&lt;unknown&gt;</code> target is normal while measurements arrive. When the load stops, the HPA returns to one pod. Clean up:</p>
+<pre><code class="language-bash">kubectl delete -f pod-load.yaml -f hpa-cpu-demo.yaml -f deployment-cpu-demo.yaml --ignore-not-found
+</code></pre>
+<h2 id="nodes-the-hpa-adds-pods-eks-auto-mode-adds-nodes">Nodes: The HPA Adds Pods, EKS Auto Mode Adds Nodes</h2>
+<p>The HPA raises the replica count, and the scheduler places the pods that fit. A pod that fits on no node stays Pending. In our cluster, EKS Auto Mode includes <strong>Karpenter</strong>, a node autoscaler managed by AWS: it sees pods that cannot fit and launches EC2 worker nodes, within its configured limits.</p>
+<table>
+<thead>
+<tr>
+<th>Piece</th>
+<th>What it changes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HPA</strong></td>
+<td>The number of pods</td>
+</tr>
+<tr>
+<td><strong>Karpenter</strong></td>
+<td>The number of machines (nodes)</td>
+</tr>
+<tr>
+<td><strong>ResourceQuota</strong></td>
+<td>Nothing it can grow: a new node does not fix a quota refusal</td>
+</tr>
+</tbody>
+</table>
+<h2 id="failure-example-the-database-is-down">Failure Example: The Database Is Down</h2>
+<p>When the shared database is down, every app replica loses it, so adding replicas or nodes does not restore the service.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>What a failing check does</th>
+<th>In a database outage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Readiness</strong></td>
+<td>Stops the Service sending requests to that pod while it cannot serve them</td>
+<td>Correct: the pod is taken out of rotation</td>
+</tr>
+<tr>
+<td><strong>Liveness</strong></td>
+<td>Restarts a stuck app container</td>
+<td>It should not fail: restarting every app container does not repair the database</td>
+</tr>
+</tbody>
+</table>
+<h2 id="next-practice-then-storage">Next: Practice, Then Storage</h2>
+<p>Run the patch, the quota refusal and the HPA hands-on in your own namespace. Lab 113, "CPU and memory, requests and limits", is in Phase-4 Labs on nextlabs. Next class starts unit 6, storage and jobs.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> <code>kubectl patch</code> with a patch file adds <code>resources</code> to the running Deployment and starts a rollout, and the same values belong in the YAML in Git. A Pending pod's <code>FailedScheduling</code> event says whether capacity, a placement rule (such as a taint) or an unavailable node is the reason. A <strong>LimitRange</strong> fills in defaults and rejects a container above its maximum, checked when a pod is created. A <strong>ResourceQuota</strong> adds up the declared requests, limits and pod count of the whole namespace, and a refusal shows as <code>FailedCreate: exceeded quota</code> on the ReplicaSet, with no pod. The <strong>HPA</strong> compares CPU use with the request, for example <code>200m ÷ 100m = 200%</code>, and changes the replica count toward its target; EKS Auto Mode's <strong>Karpenter</strong> adds nodes for pods that fit nowhere. <code>OOMKilled</code> can come from a node that is short of memory, not only from the container's own limit. When the database is down, more pods and nodes do not help: readiness takes pods out of rotation, and liveness should not restart the app for it.</p>
 
 </main>
 </body>

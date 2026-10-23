@@ -2690,3 +2690,148 @@ KUBECONFIG=~/.kube/readonly AWS_PROFILE=312-cluster-readonly claude
 Claude Code finds the problem; you apply the fix yourself, in your own terminal, with your own profile.
 
 Next: Part 4 — External Secrets Operator copies the password from AWS Secrets Manager into a normal Secret, so no file in Git holds it.
+
+---
+
+## Lesson 59: Password Out of Git, and Requests & Limits
+Setup: night 1's objects applied (`configmap`, `secret`, `postgres`, `deployment`); the External Secrets Operator, SecretStore `aws-secrets-manager`, ServiceAccount `secrets-reader` and your AWS secret `/26a/<namespace>/investment-app` already exist.
+
+**Why:** base64 isn't encryption — one command turns a Secret back into the password, so `secret-investment-app.yaml` can't go in Git.
+```bash
+kubectl get secret investment-app-secret -o jsonpath='{.data.DB_PASSWORD}' | base64 -d
+```
+
+**External Secrets Operator** — a controller (Helm add-on, not part of Kubernetes). Order: reads your **ExternalSecret** → it names a **SecretStore** (AWS region + ServiceAccount `secrets-reader`) → that ServiceAccount is linked to an IAM role allowed only `/26a/<namespace>/` → operator reads AWS, writes a normal Secret, re-reads every hour → pod reads it as in night 1 (env vars at container start).
+
+**ExternalSecret** — the one file you write; it holds the path, not the password, so it can go in Git:
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: investment-app-secret
+spec:
+  secretStoreRef:
+    name: aws-secrets-manager
+  refreshInterval: 1h
+  target:
+    name: investment-app-secret      # same name as night 1, Deployments unchanged
+  dataFrom:
+    - extract:
+        key: /26a/<namespace>/investment-app
+```
+
+**Replace the hand-made Secret** (put your namespace in `key` first):
+```bash
+kubectl delete secret investment-app-secret
+kubectl apply -f externalsecret-investment-app.yaml
+kubectl get externalsecret            # wait for SecretSynced, READY True
+kubectl rollout restart deploy/postgres deploy/investment-app
+kubectl logs <pod> --previous         # log of the container before a restart
+```
+
+**Rotation:** change the value in Secrets Manager → the Secret updates within `refreshInterval`, but running containers keep the old value. `rollout restart` to pick it up.
+
+**Failure — a classmate's path:** Kubernetes accepts the object, AWS refuses the read.
+```bash
+kubectl apply -f externalsecret-other-path.yaml
+kubectl get externalsecret other-path        # SecretSyncedError, False
+kubectl describe externalsecret other-path   # AccessDeniedException ... GetSecretValue on /26a/<classmate>/...
+kubectl delete externalsecret other-path
+```
+Four facts: who (IAM role behind `secrets-reader`), what (`GetSecretValue`), where (classmate's path), answer (no policy allows it). `SecretSyncedError` = operator couldn't read the secret; the event says why.
+
+**Unit 5 — Request, Limit, Actual use** are three different numbers:
+- **Request** — what the scheduler uses to pick a node
+- **Limit** — the most the container may use while running
+- **Actual use** — measured now; can be above or below the request, never above the limit
+
+**Units:** `1000m` = 1 CPU core (`250m` = a quarter). `1024Mi` = `1Gi`. `m` is CPU only, never memory.
+
+**Placement:** the scheduler places a pod only where its requests fit in a node's **allocatable** capacity (after the node's own reserve). One pod can't split across nodes — two nodes with `400m` free each can't take a `600m` pod. A request reserves room; it doesn't use CPU or block spare CPU above it.
+
+**At the limit:**
+- **CPU** → **throttling**: container keeps running, answers slower. Slow alone isn't proof — check throttling measurements.
+- **Memory** → **OOMKilled**: the kubelet restarts the container in the same pod (pod not replaced). `RESTARTS` counts it; `describe` shows `Last State: Terminated, Reason: OOMKilled`. Needs that memory every time → killed again.
+
+**Measure first** — one `top` is a snapshot; measure at startup, normal traffic and peaks. Requests from what you measured, memory limit above the highest use seen.
+```bash
+kubectl top pods -l app=investment-app
+kubectl describe pods -l app=investment-app
+```
+
+**In YAML** — on the container (`spec.template.spec.containers`), so every replacement pod gets it. Scheduler checks requests; node enforces limits:
+```yaml
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+```
+```bash
+# in 05-health-and-capacity/
+kubectl patch deployment investment-app --type=strategic \
+  --patch-file investment-app-resources.patch.yaml
+kubectl rollout status deployment/investment-app --timeout=120s
+```
+
+**Pending pod:** `describe` → `PodScheduled: False` + `FailedScheduling` event. Three reasons: not enough capacity, a placement rule no node matches, or a node not Ready yet. (Pending with a node = image still downloading.)
+
+Next: LimitRange (fills in requests nobody wrote), ResourceQuota (caps the namespace total), HorizontalPodAutoscaler (adds pods when CPU rises).
+
+---
+
+## Lesson 60: Namespace Limits, the HPA & What More Pods Cannot Fix
+Finishes unit 5. Requests and limits go on the running app, the namespace has two policies of its own, and the HPA adds pods when CPU rises.
+
+**Patch the running app** — the patch file starts at `spec.template.spec.containers`, not `apiVersion`/`kind`. Changing the pod template triggers a rollout:
+```bash
+# in 05-health-and-capacity/
+kubectl patch deployment investment-app --type=strategic \
+  --patch-file investment-app-resources.patch.yaml
+kubectl rollout status deployment/investment-app --timeout=120s
+kubectl get deployment investment-app -o yaml   # resources now set
+```
+`patch` changes the cluster, not your file — put the same `resources` in the YAML in Git too, or a re-created Deployment has none.
+
+**Two namespace policies:**
+- **LimitRange** — per container. Fills in missing values (defaults: requests `50m`/`64Mi`, limits `250m`/`256Mi`) and rejects anything over the max (`1` CPU, `1Gi`). Values you write are kept. Checked at pod creation only — running pods don't change.
+- **ResourceQuota** — whole namespace total. Counts declarations, not measured use; refuses a pod that would pass the cap (here `500m` CPU requests, `1Gi` memory requests, 8 pods). A bigger node doesn't help — the quota belongs to the namespace.
+
+```bash
+kubectl get limitrange -o yaml
+kubectl apply -f deployment-quota-failure.yaml   # asks 600m: Deployment accepted, no pod
+kubectl describe rs -l app=unit5-quota           # FailedCreate ... exceeded quota
+kubectl describe resourcequota                   # Used vs Hard
+```
+
+**Where numbers are set:** container `resources` (you) · LimitRange (admins, per container) · ResourceQuota (admins, namespace total). None is set on a node — the scheduler places by requests.
+
+**Pending: three reasons** — not enough capacity, a placement rule no node matches (e.g. a **taint** with no matching **toleration**), or a node not Ready yet.
+
+**Diagnose — read the event on the object that failed:**
+- Pod Pending → `kubectl describe pods` → `FailedScheduling: Insufficient cpu`
+- No new pod → `kubectl describe rs` → `FailedCreate: exceeded quota`
+- Container restarted → `kubectl describe pod` → `Last State: Terminated, Reason: OOMKilled` (a node short on memory can kill a container below its own limit)
+
+**HPA (Horizontal Pod Autoscaler)** — a controller that reads pod CPU and changes the Deployment's replica count toward a target. Utilization is measured against the **request**, so CPU scaling needs CPU requests:
+```
+measured 200m ÷ requested 100m × 100 = 200% utilization   # target 60% → add pods
+```
+```bash
+kubectl top pods                          # metrics must work first
+kubectl apply -f deployment-cpu-demo.yaml
+kubectl apply -f hpa-cpu-demo.yaml
+kubectl apply -f pod-load.yaml            # 3 minutes of traffic
+kubectl get hpa unit5-cpu --watch         # Ctrl-C once REPLICAS = 2
+kubectl describe hpa unit5-cpu            # SuccessfulRescale
+kubectl delete -f pod-load.yaml -f hpa-cpu-demo.yaml -f deployment-cpu-demo.yaml --ignore-not-found
+```
+A first `<unknown>` target is normal. Load stops → back to one pod.
+
+**Pods vs nodes:** HPA adds pods; **Karpenter** (inside EKS Auto Mode) adds EC2 nodes when pods can't fit. Neither fixes a quota refusal.
+
+**When the database is down,** more replicas or nodes don't help. **Readiness** failing stops traffic to that pod (right). **Liveness** should not fail on a DB outage — restarting every app container doesn't repair the database.
+
+Next: unit 6 — storage and jobs. Practice: Lab 113 (CPU and memory, requests and limits).
