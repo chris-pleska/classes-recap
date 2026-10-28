@@ -98,6 +98,7 @@
 <li><a href="#lesson-59-who-may-read-the-password-two-checks-rbac-a-read-only-claude-code">Lesson 59: Who May Read the Password — Two Checks, RBAC &amp; a Read-Only Claude Code</a></li>
 <li><a href="#lesson-60-the-password-out-of-git-and-what-a-pod-may-use-external-secrets-requests-limits">Lesson 60: The Password Out of Git, and What a Pod May Use — External Secrets, Requests &amp; Limits</a></li>
 <li><a href="#lesson-61-namespace-limits-the-hpa-what-more-pods-cannot-fix-limitrange-resourcequota-autoscaling">Lesson 61: Namespace Limits, the HPA &amp; What More Pods Cannot Fix — LimitRange, ResourceQuota &amp; Autoscaling</a></li>
+<li><a href="#lesson-62-storage-that-outlives-the-pod-and-jobs-that-run-to-completion-pvc-statefulset-job-cronjob">Lesson 62: Storage That Outlives the Pod, and Jobs That Run to Completion — PVC, StatefulSet, Job &amp; CronJob</a></li>
   </ul>
 </nav>
 <main>
@@ -11988,6 +11989,199 @@ kubectl describe hpa unit5-cpu                     # SuccessfulRescale in the Ev
 <p>Run the patch, the quota refusal and the HPA hands-on in your own namespace. Lab 113, "CPU and memory, requests and limits", is in Phase-4 Labs on nextlabs. Next class starts unit 6, storage and jobs.</p>
 <p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
 <p><strong>What you know now:</strong> <code>kubectl patch</code> with a patch file adds <code>resources</code> to the running Deployment and starts a rollout, and the same values belong in the YAML in Git. A Pending pod's <code>FailedScheduling</code> event says whether capacity, a placement rule (such as a taint) or an unavailable node is the reason. A <strong>LimitRange</strong> fills in defaults and rejects a container above its maximum, checked when a pod is created. A <strong>ResourceQuota</strong> adds up the declared requests, limits and pod count of the whole namespace, and a refusal shows as <code>FailedCreate: exceeded quota</code> on the ReplicaSet, with no pod. The <strong>HPA</strong> compares CPU use with the request, for example <code>200m ÷ 100m = 200%</code>, and changes the replica count toward its target; EKS Auto Mode's <strong>Karpenter</strong> adds nodes for pods that fit nowhere. <code>OOMKilled</code> can come from a node that is short of memory, not only from the container's own limit. When the database is down, more pods and nodes do not help: readiness takes pods out of rotation, and liveness should not restart the app for it.</p>
+
+<h1 id="lesson-62-storage-that-outlives-the-pod-and-jobs-that-run-to-completion-pvc-statefulset-job-cronjob">Lesson 62: Storage That Outlives the Pod, and Jobs That Run to Completion — PVC, StatefulSet, Job &amp; CronJob</h1>
+<h2 id="where-we-left-off">Where We Left Off</h2>
+<p>Session 61 finished unit 5: LimitRange and ResourceQuota set limits on the namespace, and the HPA adds pods when traffic rises. Tonight starts and finishes unit 6, the last unit of Containers. Everything so far has been <strong>stateless</strong>: the web app keeps its important data in the database, so replacing its pod loses nothing. The database itself is different. Tonight it gets a disk that stays when its pod is replaced, and the cluster gets a way to run a task once, to completion, and on a schedule.</p>
+<h2 id="ephemeral-files-inside-a-container-are-lost-with-the-pod">Ephemeral: Files Inside a Container Are Lost With the Pod</h2>
+<p>A container's own files, such as <code>/app</code> or <code>/tmp</code>, are stored on the node's disk. When a Deployment replaces the pod, the new container starts from the image again and those files are gone. That is fine for a stateless app. It is not fine for the database.</p>
+<h2 id="demo-replacing-postgres-loses-its-table">Demo: Replacing Postgres Loses Its Table</h2>
+<p>In <code>06-storage-and-jobs/</code>, with your own namespace in <code>$NAMESPACE</code>:</p>
+<pre><code class="language-bash">kubectl -n "$NAMESPACE" apply -f postgres-ephemeral.yaml
+kubectl -n "$NAMESPACE" rollout status deployment/unit6-postgres --timeout=300s
+kubectl -n "$NAMESPACE" exec -i deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' &lt; schema.sql
+kubectl -n "$NAMESPACE" delete pod -l app=unit6-postgres
+kubectl -n "$NAMESPACE" wait --for=condition=Ready pod -l app=unit6-postgres --timeout=300s
+kubectl -n "$NAMESPACE" exec deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT side, price FROM trades;"'
+</code></pre>
+<p>Expected: <code>relation "trades" does not exist</code>. The table was in the old container's files.</p>
+<h2 id="three-objects-claim-storageclass-and-persistentvolume">Three Objects: Claim, StorageClass and PersistentVolume</h2>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>What it is</th>
+<th>Belongs to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>PersistentVolumeClaim (PVC)</strong></td>
+<td>The request. It names a size, an access mode and a StorageClass</td>
+<td>Your namespace</td>
+</tr>
+<tr>
+<td><strong>StorageClass</strong></td>
+<td>The settings and the provisioner that creates the disk. The class here is <code>unit6-ebs</code>: EBS <code>gp3</code>, encrypted, reclaim policy <code>Delete</code></td>
+<td>The whole cluster, created once</td>
+</tr>
+<tr>
+<td><strong>PersistentVolume (PV)</strong></td>
+<td>Kubernetes's record of the disk. The files are on the EBS volume</td>
+<td>The cluster</td>
+</tr>
+</tbody>
+</table>
+<p>With a StorageClass, creating the claim is enough: Kubernetes creates the PV and the EBS volume. This is <strong>dynamic provisioning</strong>. A PV written by hand only records storage that already exists; it creates no disk. A claim is paired (<strong>bound</strong>) with one PV that matches its size, access mode and StorageClass: one claim, one PV.</p>
+<h2 id="pending-a-claim-waits-for-its-pod">Pending: A Claim Waits for Its Pod</h2>
+<pre><code class="language-bash">kubectl -n "$NAMESPACE" scale deployment/unit6-postgres --replicas=0
+kubectl -n "$NAMESPACE" apply -f pvc.yaml
+kubectl -n "$NAMESPACE" get pvc postgres-data-unit6   # STATUS Pending
+</code></pre>
+<p><code>unit6-ebs</code> uses <code>WaitForFirstConsumer</code>: the disk is created only when a pod uses the claim, so the disk and the pod end up in the same availability zone. Until then the claim is <code>Pending</code>, and that is normal. A claim that stays Pending after its pod exists has a problem; read the events with <code>kubectl describe pvc postgres-data-unit6</code>.</p>
+<h2 id="mount-connect-the-claim-to-a-container-directory">Mount: Connect the Claim to a Container Directory</h2>
+<p>In <code>postgres-persistent.yaml</code>:</p>
+<pre><code class="language-yaml">containers:
+  - name: postgres
+    volumeMounts:
+      - name: database-files
+        mountPath: /var/lib/postgresql/data
+volumes:
+  - name: database-files
+    persistentVolumeClaim:
+      claimName: postgres-data-unit6
+</code></pre>
+<p>The two <code>name</code> fields identify the same volume. <code>claimName</code> selects the claim. Postgres writes its database files under <code>/var/lib/postgresql/data</code>, which is now the EBS disk.</p>
+<h2 id="demo-the-table-survives-pod-replacement">Demo: The Table Survives Pod Replacement</h2>
+<pre><code class="language-bash">kubectl -n "$NAMESPACE" apply -f postgres-persistent.yaml
+kubectl -n "$NAMESPACE" rollout status deployment/unit6-postgres --timeout=300s
+kubectl -n "$NAMESPACE" get pvc,pv          # the claim is Bound to a new PV
+kubectl -n "$NAMESPACE" exec -i deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' &lt; schema.sql
+kubectl -n "$NAMESPACE" exec deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "INSERT INTO trades (side, price) VALUES ('\''buy'\'', 150.00);"'
+kubectl -n "$NAMESPACE" delete pod -l app=unit6-postgres
+kubectl -n "$NAMESPACE" wait --for=condition=Ready pod -l app=unit6-postgres --timeout=300s
+kubectl -n "$NAMESPACE" exec deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT side, price FROM trades;"'
+</code></pre>
+<p>Expected: the trade with side <code>buy</code> and price <code>150.00</code>. The replacement pod has a new name and mounts the same claim. The EBS volume is visible in the EC2 console under Volumes.</p>
+<h2 id="access-modes-who-may-read-and-write-the-disk">Access Modes: Who May Read and Write the Disk</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ReadWriteOnce</code></td>
+<td>One node reads and writes. Pods on that node can share it. The usual mode for EBS</td>
+</tr>
+<tr>
+<td><code>ReadOnlyMany</code></td>
+<td>Many nodes read; none write</td>
+</tr>
+<tr>
+<td><code>ReadWriteMany</code></td>
+<td>Many nodes read and write. Needs shared file storage such as Amazon EFS; an EBS disk attaches to one node at a time</td>
+</tr>
+<tr>
+<td><code>ReadWriteOncePod</code></td>
+<td>One pod in the whole cluster reads and writes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="reclaim-policy-what-happens-to-the-disk-when-the-claim-is-deleted">Reclaim Policy: What Happens to the Disk When the Claim Is Deleted</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Replace the pod</td>
+<td>The claim and the disk remain</td>
+</tr>
+<tr>
+<td>Delete the claim, policy <code>Delete</code></td>
+<td>The disk and its data are deleted</td>
+</tr>
+<tr>
+<td>Delete the claim, policy <code>Retain</code></td>
+<td>The disk and data remain until an administrator deletes the disk; storage charges continue</td>
+</tr>
+<tr>
+<td>Delete the namespace</td>
+<td>Its claims are deleted; their reclaim policies apply</td>
+</tr>
+</tbody>
+</table>
+<p>Production storage usually uses <code>Retain</code>. Development and test environments usually use <code>Delete</code>, so disks that are no longer needed are removed. With dynamic provisioning, check now and then for volumes nobody uses. Persistent storage is not a backup.</p>
+<h2 id="statefulset-stable-names-and-a-disk-for-each-replica">StatefulSet: Stable Names and a Disk for Each Replica</h2>
+<p>A Deployment with one replica and one claim works, as in the demo. With more replicas it does not: a <code>ReadWriteOnce</code> EBS claim cannot be attached by a replica on another node, and each database replica needs its own disk anyway.</p>
+<p>A <strong>StatefulSet</strong> gives its pods stable, ordered names (<code>postgres-0</code>, <code>postgres-1</code>) and creates one claim per pod from its <code>volumeClaimTemplates</code>. A replaced <code>postgres-0</code> gets the same name and the same claim. It adds or removes pods one at a time, in order.</p>
+<p>The app still reaches the database through a Service name, which does not change when pods are replaced. The stable pod names matter when a client must reach one specific replica.</p>
+<h2 id="a-disk-does-not-run-the-database-for-you">A Disk Does Not Run the Database for You</h2>
+<p>Backups, replication, failover, upgrades and availability zones are still your work. Most teams run production databases on a managed service such as Amazon RDS, separate from the cluster, so a misconfigured workload elsewhere in a shared cluster cannot affect them. The class Postgres pod is for learning the storage mechanism.</p>
+<h2 id="job-a-task-that-runs-until-it-succeeds">Job: A Task That Runs Until It Succeeds</h2>
+<p>A <strong>Job</strong> creates a pod to run a task and finishes when the task succeeds. Exit code <code>0</code> is success; any other code is a failure.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backoffLimit: 2</code></td>
+<td>Two retries are allowed after a failure, then the Job is marked failed</td>
+</tr>
+<tr>
+<td><code>restartPolicy: Never</code></td>
+<td>A new pod starts for each retry, so each failed pod's logs stay to read</td>
+</tr>
+<tr>
+<td>Pod template</td>
+<td>Says what to run, as in a Deployment</td>
+</tr>
+</tbody>
+</table>
+<h2 id="hands-on-a-job-creates-the-tables-before-the-app-starts">Hands-On: A Job Creates the Tables Before the App Starts</h2>
+<p>The revised app no longer creates its table at startup; a Job runs <code>schema.sql</code> instead. The Job reaches Postgres through the Service <code>unit6-db</code>, so check it first:</p>
+<pre><code class="language-bash">kubectl -n "$NAMESPACE" get svc unit6-db
+kubectl -n "$NAMESPACE" create configmap unit6-schema \
+  --from-file=schema.sql --dry-run=client -o yaml | \
+  kubectl -n "$NAMESPACE" apply -f -
+kubectl -n "$NAMESPACE" apply -f schema-job.yaml
+kubectl -n "$NAMESPACE" wait --for=condition=complete job/unit6-schema --timeout=180s
+kubectl -n "$NAMESPACE" logs job/unit6-schema
+</code></pre>
+<p>If <code>unit6-db</code> is missing, apply <code>postgres-persistent.yaml</code> again; it defines the Service. A Job that cannot reach it fails with <code>could not translate host name "unit6-db"</code>; delete the Job and apply it again after the Service exists.</p>
+<p>Then build the revised app from <code>app/</code>, push it to your ECR repository and deploy it: README section 3. Kubernetes does not make the Deployment wait for the Job; you deploy after the Job is <code>Complete</code>. If the image URI does not expand in your shell, put the variable in double quotes: <code>docker build -t "$REVISED_IMAGE" app/</code>.</p>
+<h2 id="cleanup-completed-jobs-and-their-logs">Cleanup: Completed Jobs and Their Logs</h2>
+<p>A completed Job and its pods stay until they are deleted. <code>ttlSecondsAfterFinished: 300</code> deletes them 300 seconds after the Job finishes. A pod's logs are deleted with the pod, so read them before cleanup.</p>
+<h2 id="cronjob-a-job-on-a-schedule">CronJob: A Job on a Schedule</h2>
+<p>A <strong>CronJob</strong> creates a new Job at each scheduled time, and the Job creates its pod.</p>
+<pre><code class="language-yaml">apiVersion: batch/v1
+kind: CronJob
+spec:
+  schedule: "0 2 * * *"      # every day at 02:00
+  timeZone: "Etc/UTC"
+  jobTemplate:
+    spec:                    # the Job specification goes here
+</code></pre>
+<p>The five fields are minute, hour, day of month, month and day of week. crontab.guru or an AI assistant writes and explains the expression. An example from work: a daily CronJob checks how many days a GitHub personal access token has before it expires, and sends a warning when two weeks are left.</p>
+<h2 id="next-practice">Next: Practice</h2>
+<p>Run the unit 6 README end to end in your own namespace: lose the table, keep it with a claim, run the schema Job, deploy the revised app. Lens, a free desktop app, shows the cluster's objects visually. This was the last class of Containers.</p>
+<p><strong>Getting stuck is normal, and you don't need to wait for anyone</strong> — read the error message, then Claude in your browser, then Claude in your terminal, then Slack.</p>
+<p><strong>What you know now:</strong> files inside a container are lost when its pod is replaced, which is fine for a stateless app and not for a database. A <strong>PersistentVolumeClaim</strong> requests storage, a <strong>StorageClass</strong> creates it (dynamic provisioning), and a <strong>PersistentVolume</strong> records the EBS disk; <code>WaitForFirstConsumer</code> keeps a claim <code>Pending</code> until a pod uses it. Mounting the claim at <code>/var/lib/postgresql/data</code> lets the table survive pod replacement. <code>ReadWriteOnce</code> is the usual EBS access mode, and the reclaim policy (<code>Delete</code> or <code>Retain</code>) decides what happens to the disk when the claim is deleted. A <strong>StatefulSet</strong> gives each replica a stable name and its own claim, and a disk still leaves backups and failover to you, which is why production databases often use RDS. A <strong>Job</strong> runs a task until it succeeds (<code>backoffLimit</code>, <code>restartPolicy: Never</code>, <code>ttlSecondsAfterFinished</code>) and was used to create the tables before the app starts, and a <strong>CronJob</strong> creates a Job on a schedule.</p>
 
 </main>
 </body>

@@ -2835,3 +2835,92 @@ A first `<unknown>` target is normal. Load stops → back to one pod.
 **When the database is down,** more replicas or nodes don't help. **Readiness** failing stops traffic to that pod (right). **Liveness** should not fail on a DB outage — restarting every app container doesn't repair the database.
 
 Next: unit 6 — storage and jobs. Practice: Lab 113 (CPU and memory, requests and limits).
+
+---
+
+## Lesson 61: Storage That Outlives the Pod, and Jobs That Run to Completion
+Finishes unit 6 and Containers. Files inside a container live on the node's disk and vanish when the pod is replaced — fine for a **stateless** web app, not for the database. A PersistentVolumeClaim gives the pod an EBS disk that stays.
+
+**Demo — replace Postgres, lose the table** (`postgres-ephemeral.yaml`):
+```bash
+kubectl -n "$NAMESPACE" apply -f postgres-ephemeral.yaml
+kubectl -n "$NAMESPACE" exec -i deployment/unit6-postgres -- sh -ec \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < schema.sql
+kubectl -n "$NAMESPACE" delete pod -l app=unit6-postgres
+# SELECT after the new pod is Ready → relation "trades" does not exist
+```
+
+**Three objects:**
+- **PVC** — the request (size, access mode, StorageClass); belongs to your namespace.
+- **StorageClass** — settings + provisioner that creates the disk (`unit6-ebs`: gp3, encrypted, reclaim `Delete`); once per cluster.
+- **PV** — Kubernetes's record of the disk; belongs to the cluster. The files are on the EBS volume.
+
+Creating the claim is enough — **dynamic provisioning** makes the PV and the EBS volume. A claim **binds** to exactly one PV.
+
+**Pending is normal at first** — `WaitForFirstConsumer` creates the disk only when a pod uses the claim, so disk and pod share an availability zone. Still Pending with a pod → read the events:
+```bash
+kubectl -n "$NAMESPACE" get pvc postgres-data-unit6
+kubectl -n "$NAMESPACE" describe pvc postgres-data-unit6
+```
+
+**Mount the claim** — the two `name` fields match; `claimName` picks the claim:
+```yaml
+containers:
+  - name: postgres
+    volumeMounts:
+      - name: database-files
+        mountPath: /var/lib/postgresql/data
+volumes:
+  - name: database-files
+    persistentVolumeClaim:
+      claimName: postgres-data-unit6
+```
+```bash
+kubectl -n "$NAMESPACE" apply -f postgres-persistent.yaml
+kubectl -n "$NAMESPACE" get pvc,pv          # Bound to a new PV
+# load schema, INSERT a trade, delete the pod → the row is still there
+```
+
+**Access modes:** `ReadWriteOnce` (one node; usual for EBS) · `ReadOnlyMany` · `ReadWriteMany` (needs shared storage like EFS) · `ReadWriteOncePod` (one pod in the cluster).
+
+**Reclaim policy — when the claim is deleted:**
+- Replace the pod → claim and disk stay.
+- Policy `Delete` → disk and data deleted (dev/test).
+- Policy `Retain` → disk stays and keeps costing until an admin deletes it (production).
+- Delete the namespace → its claims go; their policies apply.
+
+Persistent storage is **not a backup**.
+
+**StatefulSet** — for more than one replica. Stable ordered names (`postgres-0`, `postgres-1`), one claim per pod from `volumeClaimTemplates`; a replaced `postgres-0` gets the same name and claim. Scales one pod at a time. The app still uses a Service name. A disk doesn't run the database for you — backups, replication, failover are still yours; production usually uses managed RDS.
+
+**Job** — runs a pod until the task succeeds (exit `0`; anything else = failure).
+- `backoffLimit: 2` — two retries, then the Job is failed.
+- `restartPolicy: Never` — a new pod per retry, so failed pods' logs stay readable.
+
+**Demo — a Job creates the tables before the app starts:**
+```bash
+kubectl -n "$NAMESPACE" get svc unit6-db    # missing? re-apply postgres-persistent.yaml
+kubectl -n "$NAMESPACE" create configmap unit6-schema \
+  --from-file=schema.sql --dry-run=client -o yaml | \
+  kubectl -n "$NAMESPACE" apply -f -
+kubectl -n "$NAMESPACE" apply -f schema-job.yaml
+kubectl -n "$NAMESPACE" wait --for=condition=complete job/unit6-schema --timeout=180s
+kubectl -n "$NAMESPACE" logs job/unit6-schema
+```
+`could not translate host name "unit6-db"` → Service missing; delete the Job and re-apply after it exists. Kubernetes doesn't make the Deployment wait for the Job — deploy the revised app after the Job is `Complete`.
+
+**Cleanup:** `ttlSecondsAfterFinished: 300` deletes the finished Job and pods. Logs go with the pod — read them first.
+
+**CronJob** — creates a new Job at each scheduled time:
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+spec:
+  schedule: "0 2 * * *"    # every day at 02:00
+  timeZone: "Etc/UTC"
+  jobTemplate:
+    spec:                  # the Job specification goes here
+```
+Same five cron fields as Lesson 11 (crontab.guru explains them).
+
+Last class of Containers. Practice: run the unit 6 README end to end — lose the table, keep it with a claim, run the schema Job, deploy the revised app. Stuck? Error message → Claude in the browser → Claude in the terminal → Slack.
